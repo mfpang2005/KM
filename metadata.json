@@ -1,0 +1,9 @@
+
+{
+  "name": "Kim Long Smart Catering System",
+  "description": "A comprehensive restaurant management suite for admins, kitchen staff, and delivery drivers, featuring real-time order tracking, financial analytics, and smart kitchen alerts powered by Gemini.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
