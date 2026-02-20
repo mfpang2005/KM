@@ -1,22 +1,19 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# Kim-Long-CRM
 
-# Run and deploy your AI Studio app
+Smart Catering Management System for Kim Long.
 
-This contains everything you need to run your app locally.
+## Features
+- **Order Management**: Real-time order tracking and status updates across Admin, Kitchen, and Driver views.
+- **Departmental Linkage**: Automated workflow from order creation to delivery completion.
+- **Social Login**: Integrated Google and Facebook authentication via Supabase.
+- **Maps Integration**: One-click navigation for drivers and location checking for admins.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1lqte3pFkLNnNUgfdNE6L0NU3k8B5ung6
+## Tech Stack
+- Frontend: React + TypeScript + Vite
+- Backend: FastAPI (Python)
+- Database/Auth: Supabase
 
-## Run Locally
-
-**Prerequisites:**  Node.js
-
-
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
-# Kim-Long-CRM  
-# Kim-Long-CRM 
+## Setup
+1. Clone the repository.
+2. Install dependencies: `npm install`
+3. Start development server: `cmd /c npm run dev`
