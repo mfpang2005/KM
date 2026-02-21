@@ -1,0 +1,74 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kim Long Smart Catering</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Work+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#ec1313",
+                        "primary-dark": "#b90e0e",
+                        "background-light": "#f8f6f6",
+                        "background-dark": "#1a0808",
+                        "surface-dark": "#2d1515",
+                        "gold-accent": "#D4AF37",
+                    },
+                    fontFamily: {
+                        sans: ['Work Sans', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        body { background-color: #f8f6f6; }
+        .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+
+        /* Print Styles */
+        @media print {
+            body { background-color: white !important; padding: 0 !important; margin: 0 !important; }
+            .no-print { display: none !important; }
+            .print-only { display: block !important; }
+            .print-container { 
+                width: 100% !important; 
+                max-width: none !important; 
+                box-shadow: none !important; 
+                border: none !important; 
+                margin: 0 !important;
+                padding: 20px !important;
+            }
+            #root > div { background: white !important; }
+            .shadow-xl, .shadow-sm, .shadow-2xl { box-shadow: none !important; }
+            .bg-slate-50, .bg-background-light { background-color: white !important; }
+            .border { border-color: #eee !important; }
+        }
+        .print-only { display: none; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-router-dom": "https://esm.sh/react-router-dom@^7.13.0",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.41.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="bg-background-light text-slate-900 font-sans">
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
