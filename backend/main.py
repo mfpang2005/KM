@@ -1,7 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routers import orders, products, users
 from routers import super_admin
+from routers import walkie_talkie
+from routers import admin_users
+from routers import orders
+from routers import products
+from routers import users
 
 app = FastAPI(title="Kim Long Smart Catering System API")
 
@@ -24,7 +28,9 @@ app.add_middleware(
 app.include_router(orders.router)
 app.include_router(products.router)
 app.include_router(users.router)
+app.include_router(admin_users.router)
 app.include_router(super_admin.router)
+app.include_router(walkie_talkie.router)
 
 
 @app.get("/")

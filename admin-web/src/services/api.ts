@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { supabase } from '../lib/supabase';
-import type { Order, OrderStatus, User, StatsOverview, AuditLog, SystemConfig } from '../types';
+import type { Order, OrderStatus, OrderCreate, User, StatsOverview, AuditLog, SystemConfig, Product } from '../types';
 // 使用完整的后端地址避免跨域问题，如果配置了 CORS 的话。
 const API_URL = 'http://localhost:8000';
 
@@ -41,6 +41,18 @@ export const SuperAdminService = {
         return response.data;
     },
 
+    /** 管理员审核通过用户或拉黑等高级状态流转 */
+    updateUserStatus: async (userId: string, status: 'pending' | 'active' | 'deleted') => {
+        const response = await api.patch(`/admin/users/${userId}/status?status=${status}`);
+        return response.data;
+    },
+
+    /** 在内部系统新建用户 (分配 Kitchen / Driver) */
+    createInternalUser: async (data: { email: string; role: string; name?: string }) => {
+        const response = await api.post(`/admin/users/?email=${encodeURIComponent(data.email)}&role=${data.role}${data.name ? `&name=${encodeURIComponent(data.name)}` : ''}`);
+        return response.data;
+    },
+
     // ---- 系统配置 ----
     getConfig: async (): Promise<SystemConfig[]> => {
         const response = await api.get('/super-admin/config');
@@ -56,6 +68,16 @@ export const SuperAdminService = {
         const response = await api.get(`/super-admin/audit-logs?page=${page}&page_size=${pageSize}`);
         return response.data;
     },
+    /** 指派司机 */
+    assignDriver: async (id: string, driverId: string): Promise<Order> => {
+        const response = await api.post(`/orders/${id}/assign`, { driver_id: driverId });
+        return response.data;
+    },
+    /** 后台直接建单 */
+    create: async (order: OrderCreate): Promise<Order> => {
+        const response = await api.post('/orders', order);
+        return response.data;
+    }
 };
 
 // 后续扩展 Order 接口
@@ -64,8 +86,42 @@ export const AdminOrderService = {
         const response = await api.get('/orders');
         return response.data;
     },
+    getById: async (id: string): Promise<Order> => {
+        const response = await api.get(`/orders/${id}`);
+        return response.data;
+    },
+    /** 后台下单，创建新订单并同步到数据库 */
+    create: async (order: OrderCreate): Promise<Order> => {
+        const response = await api.post('/orders', order);
+        return response.data;
+    },
     updateStatus: async (id: string, status: OrderStatus): Promise<Order> => {
         const response = await api.post(`/orders/${id}/status?status=${status}`);
         return response.data;
     },
+    update: async (id: string, order: Partial<Order>): Promise<Order> => {
+        const response = await api.put(`/orders/${id}`, order);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/orders/${id}`);
+    },
+}
+
+export const ProductService = {
+    getAll: async (): Promise<Product[]> => {
+        const response = await api.get('/products');
+        return response.data;
+    },
+    create: async (product: Omit<Product, 'id'>): Promise<Product> => {
+        const response = await api.post('/products', product);
+        return response.data;
+    },
+    update: async (id: string, product: Partial<Product>): Promise<Product> => {
+        const response = await api.put(`/products/${id}`, product);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/products/${id}`);
+    }
 }

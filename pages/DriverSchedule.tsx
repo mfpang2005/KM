@@ -63,7 +63,7 @@ const DriverSchedule: React.FC = () => {
         const timer = setInterval(() => {
             setNow(new Date());
             fetchOrders();
-        }, 10000);
+        }, 5000);
         return () => clearInterval(timer);
     }, []);
 

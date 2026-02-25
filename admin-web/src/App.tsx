@@ -6,8 +6,12 @@ import AdminLayout from './layouts/AdminLayout';
 import { DashboardPage } from './pages/DashboardPage';
 import { UsersPage } from './pages/UsersPage';
 import { OrdersPage } from './pages/OrdersPage';
+import { ProductsPage } from './pages/ProductsPage';
+import { WalkieTalkiePage } from './pages/WalkieTalkiePage';
 import { ConfigPage } from './pages/ConfigPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
+import { CreateOrderPage } from './pages/CreateOrderPage';
+import { DriversPage } from './pages/DriversPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -25,6 +29,10 @@ const App: React.FC = () => {
           <Route index element={<DashboardPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="drivers" element={<DriversPage />} />
+          <Route path="create-order" element={<CreateOrderPage />} />
+          <Route path="products" element={<ProductsPage />} />
+          <Route path="walkie-talkie" element={<WalkieTalkiePage />} />
           <Route path="config" element={<ConfigPage />} />
           <Route path="audit" element={<AuditLogsPage />} />
         </Route>

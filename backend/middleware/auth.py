@@ -47,11 +47,30 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     )
 
 
+async def require_admin(
+    current_user: dict = Depends(get_current_user),
+) -> dict:
+    """
+    权限守卫：允许 admin 或 super_admin 访问。（适用于常规后台操作）
+    """
+    if current_user.get("role") not in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value]:
+        logger.warning(
+            "Unauthorized admin access attempt by user %s (role: %s)",
+            current_user.get("id"),
+            current_user.get("role"),
+        )
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions. Admin access required."
+        )
+    return current_user
+
+
 async def require_super_admin(
     current_user: dict = Depends(get_current_user),
 ) -> dict:
     """
-    权限守卫：仅允许 super_admin 角色访问。
+    权限守卫：仅允许 super_admin 角色访问。（适用于最高层级敏感提权控制）
     作为 FastAPI 路由的依赖项注入使用。
     """
     if current_user.get("role") != UserRole.SUPER_ADMIN.value:

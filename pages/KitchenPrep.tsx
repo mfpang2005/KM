@@ -108,7 +108,7 @@ const KitchenPrep: React.FC = () => {
         const timer = setInterval(() => {
             setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
             fetchOrders(); // Poll
-        }, 10000);
+        }, 5000);
         return () => clearInterval(timer);
     }, []);
 

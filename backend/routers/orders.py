@@ -65,3 +65,23 @@ async def update_order_status(order_id: str, status: OrderStatus):
 async def delete_order(order_id: str):
     response = supabase.table("orders").delete().eq("id", order_id).execute()
     return {"message": "Order deleted"}
+
+
+# NOTE: 司机完成送餐后将照片 URL 列表写入对应订单，供 Admin 审阅
+@router.patch("/{order_id}/photos")
+async def update_delivery_photos(order_id: str, photos: dict):
+    """
+    接收 { "delivery_photos": [url1, url2, ...] } 并更新至对应订单
+    """
+    photo_urls = photos.get("delivery_photos", [])
+    if not photo_urls:
+        raise HTTPException(status_code=400, detail="No photos provided")
+    response = (
+        supabase.table("orders")
+        .update({"delivery_photos": photo_urls})
+        .eq("id", order_id)
+        .execute()
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+    return response.data[0]

@@ -51,10 +51,26 @@ export const ProductService = {
         const response = await api.get('/products');
         return response.data;
     },
-    create: async (product: Product): Promise<Product> => {
+    create: async (product: Omit<Product, 'id'>): Promise<Product> => {
         const response = await api.post('/products', product);
         return response.data;
-    }
+    },
+    update: async (id: string, product: Omit<Product, 'id'>): Promise<Product> => {
+        const response = await api.put(`/products/${id}`, product);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/products/${id}`);
+    },
+    /**
+     * 从产品列表中提取唯一品类列表，为前端创建订单菜单动态生成按钮
+     */
+    getCategories: async (): Promise<string[]> => {
+        const response = await api.get('/products');
+        const products: Product[] = response.data;
+        const cats = Array.from(new Set(products.map(p => p.category).filter(Boolean))) as string[];
+        return cats;
+    },
 };
 
 export const UserService = {

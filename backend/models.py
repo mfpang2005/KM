@@ -11,6 +11,12 @@ class UserRole(str, Enum):
     SUPER_ADMIN = 'super_admin'
 
 
+class UserStatus(str, Enum):
+    PENDING = 'pending'
+    ACTIVE = 'active'
+    DELETED = 'deleted'
+
+
 class OrderStatus(str, Enum):
     PENDING = 'pending'
     PREPARING = 'preparing'
@@ -47,6 +53,7 @@ class OrderBase(BaseModel):
     driverId: Optional[str] = None
     paymentMethod: Optional[PaymentMethod] = None
     paymentStatus: Optional[str] = 'pending'
+    delivery_photos: Optional[List[str]] = []
 
 
 class OrderCreate(OrderBase):
@@ -71,6 +78,7 @@ class User(BaseModel):
     id: str
     email: str
     role: UserRole
+    status: Optional[UserStatus] = UserStatus.PENDING
     name: Optional[str] = None
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
@@ -84,6 +92,7 @@ class UserUpdate(BaseModel):
     Super Admin 修改用户信息时使用的请求体
     """
     role: Optional[UserRole] = None
+    status: Optional[UserStatus] = None
     name: Optional[str] = None
     is_disabled: Optional[bool] = None
 

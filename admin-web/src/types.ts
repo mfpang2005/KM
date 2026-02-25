@@ -45,6 +45,7 @@ export interface Order {
     paymentMethod?: PaymentMethod;
     paymentStatus?: 'paid' | 'pending' | 'unpaid';
     created_at?: string;
+    delivery_photos?: string[];
 }
 
 export interface OrderCreate {
@@ -64,6 +65,7 @@ export interface User {
     id: string;
     email: string;
     role: UserRole;
+    status?: 'pending' | 'active' | 'deleted';
     name?: string;
     phone?: string;
     avatar_url?: string;
@@ -93,4 +95,22 @@ export interface StatsOverview {
     total_users: number;
     orders_by_status: Record<string, number>;
     recent_orders: Order[];
+}
+
+export interface Product {
+    id: string;
+    code: string;
+    name: string;
+    price: number;
+    category?: string;
+    image_url?: string;
+}
+
+export interface Transaction {
+    id: string;
+    type: string;
+    amount: number;
+    time: string;
+    status: 'paid' | 'pending' | 'unpaid';
+    method: 'cash' | 'transfer' | 'cheque';
 }

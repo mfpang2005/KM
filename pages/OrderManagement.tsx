@@ -33,7 +33,7 @@ const OrderManagement: React.FC = () => {
 
     useEffect(() => {
         loadOrders();
-        const timer = setInterval(loadOrders, 10000);
+        const timer = setInterval(loadOrders, 5000);
         return () => clearInterval(timer);
     }, []);
 

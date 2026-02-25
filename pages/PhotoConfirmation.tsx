@@ -1,15 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { PaymentMethod, OrderStatus } from '../types';
 import { OrderService } from '../src/services/api';
+import { supabase } from '../src/lib/supabase';
 
 const PhotoConfirmation: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const orderId = location.state?.orderId;
-    const [photos, setPhotos] = useState<Record<string, string>>({});
+    // photos: { stepId -> { localUrl, storageUrl } }
+    const [photos, setPhotos] = useState<Record<string, { localUrl: string; storageUrl: string }>>({});
     const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [uploadingStep, setUploadingStep] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+    const [pendingStepId, setPendingStepId] = useState<string | null>(null);
 
     const steps = [
         { id: 'receipt', label: '顾客签收底单', sub: 'Receipt Sign-off', icon: 'receipt_long', color: 'bg-blue-500' },
@@ -26,9 +31,49 @@ const PhotoConfirmation: React.FC = () => {
 
     const allPhotosCaptured = Object.keys(photos).length === steps.length;
 
-    // Prototype interaction for capturing
+    /**
+     * 打开相机拍摄界面：记录当前步骤 ID，然后触发隐藏 file input
+     */
     const handleCapture = (id: string) => {
-        setPhotos(prev => ({ ...prev, [id]: 'data:image/png;base64,...' }));
+        setPendingStepId(id);
+        fileInputRef.current?.click();
+    };
+
+    /**
+     * 用户选择或拍摄照片后：上传至 Supabase Storage，将返回的公开 URL 存入 state
+     */
+    const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file || !pendingStepId || !orderId) return;
+
+        setUploadingStep(pendingStepId);
+        try {
+            // 本地预览用 blob URL
+            const localUrl = URL.createObjectURL(file);
+
+            // 上传至 Supabase Storage Bucket: delivery-photos
+            const path = `${orderId}/${pendingStepId}-${Date.now()}.jpg`;
+            const { error } = await supabase.storage
+                .from('delivery-photos')
+                .upload(path, file, { upsert: true, contentType: file.type });
+
+            if (error) throw error;
+
+            const { data: urlData } = supabase.storage
+                .from('delivery-photos')
+                .getPublicUrl(path);
+
+            const storageUrl = urlData.publicUrl;
+            setPhotos(prev => ({ ...prev, [pendingStepId]: { localUrl, storageUrl } }));
+        } catch (err) {
+            console.error('Upload failed', err);
+            alert('照片上传失败，请重试。');
+        } finally {
+            setUploadingStep(null);
+            setPendingStepId(null);
+            // Reset input so the same step can be retaken
+            if (fileInputRef.current) fileInputRef.current.value = '';
+        }
     };
 
     const canSubmit = allPhotosCaptured && selectedPayment !== null && !!orderId && !isSubmitting;
@@ -37,6 +82,15 @@ const PhotoConfirmation: React.FC = () => {
         if (!canSubmit) return;
         setIsSubmitting(true);
         try {
+            // 1. 将 Storage URL 列表写入订单 delivery_photos 字段
+            const photoUrls = (Object.values(photos) as { localUrl: string; storageUrl: string }[]).map(p => p.storageUrl);
+            await fetch(`http://localhost:8000/orders/${orderId}/photos`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ delivery_photos: photoUrls }),
+            });
+
+            // 2. 更新订单状态为 COMPLETED 并记录付款方式
             const order = await OrderService.getById(orderId);
             const updated = {
                 ...order,
@@ -54,6 +108,15 @@ const PhotoConfirmation: React.FC = () => {
 
     return (
         <div className="flex flex-col h-full bg-[#fdfdfd] text-slate-900 font-sans">
+            {/* 隐藏的 file input，capture="environment" 指向后置相机 */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                onChange={handleFileSelected}
+            />
             {/* Elegant Sticky Header */}
             <header className="pt-12 pb-6 px-8 bg-white/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between border-b border-slate-100">
                 <button
@@ -107,8 +170,8 @@ const PhotoConfirmation: React.FC = () => {
                                 key={opt.id}
                                 onClick={() => setSelectedPayment(opt.id)}
                                 className={`group p-5 rounded-[32px] border-2 transition-all flex flex-col items-start gap-4 relative overflow-hidden active:scale-95 ${selectedPayment === opt.id
-                                        ? 'bg-primary/5 border-primary shadow-xl shadow-primary/10'
-                                        : 'bg-white border-slate-50 text-slate-400 hover:border-slate-100 shadow-sm'
+                                    ? 'bg-primary/5 border-primary shadow-xl shadow-primary/10'
+                                    : 'bg-white border-slate-50 text-slate-400 hover:border-slate-100 shadow-sm'
                                     }`}
                             >
                                 <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedPayment === opt.id ? 'bg-primary text-white scale-110' : 'bg-slate-50 text-slate-400'
@@ -152,15 +215,18 @@ const PhotoConfirmation: React.FC = () => {
                                     key={step.id}
                                     onClick={() => handleCapture(step.id)}
                                     className={`w-full group rounded-[36px] p-1 border-2 transition-all flex items-center gap-5 active:scale-[0.98] ${isCaptured
-                                            ? 'bg-green-50/50 border-green-500/20'
-                                            : 'bg-white border-slate-50 shadow-sm'
+                                        ? 'bg-green-50/50 border-green-500/20'
+                                        : 'bg-white border-slate-50 shadow-sm'
                                         }`}
                                 >
-                                    <div className={`w-24 h-24 rounded-[30px] flex items-center justify-center transition-all flex-shrink-0 ${isCaptured ? 'bg-green-500 text-white shadow-xl shadow-green-200' : 'bg-slate-50 text-slate-400'
-                                        }`}>
-                                        <span className="material-icons-round text-3xl">
-                                            {isCaptured ? 'photo_camera' : 'add_a_photo'}
-                                        </span>
+                                    <div className={`w-24 h-24 rounded-[30px] flex items-center justify-center transition-all flex-shrink-0 overflow-hidden ${isCaptured ? 'shadow-xl shadow-green-200' : 'bg-slate-50 text-slate-400'}`}>
+                                        {uploadingStep === step.id ? (
+                                            <span className="material-icons-round animate-spin text-2xl text-primary">autorenew</span>
+                                        ) : isCaptured ? (
+                                            <img src={photos[step.id].localUrl} alt={step.label} className="w-full h-full object-cover" />
+                                        ) : (
+                                            <span className="material-icons-round text-3xl">add_a_photo</span>
+                                        )}
                                     </div>
 
                                     <div className="text-left flex-1 py-4 pr-6">
@@ -173,7 +239,7 @@ const PhotoConfirmation: React.FC = () => {
                                         {isCaptured && (
                                             <div className="flex items-center gap-1.5 mt-2 animate-in fade-in slide-in-from-left duration-300">
                                                 <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                                                <span className="text-[9px] font-black text-green-600 uppercase">Evidence Saved</span>
+                                                <span className="text-[9px] font-black text-green-600 uppercase">Captured ✓ Tap to retake</span>
                                             </div>
                                         )}
                                     </div>
@@ -209,8 +275,8 @@ const PhotoConfirmation: React.FC = () => {
                         onClick={handleSubmit}
                         disabled={!canSubmit}
                         className={`w-full py-5 rounded-[28px] font-black text-base flex items-center justify-center gap-4 transition-all uppercase tracking-widest shadow-2xl relative overflow-hidden group ${canSubmit
-                                ? 'bg-primary text-white shadow-primary/30 active:scale-95'
-                                : 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-80'
+                            ? 'bg-primary text-white shadow-primary/30 active:scale-95'
+                            : 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-80'
                             }`}
                     >
                         {canSubmit && (

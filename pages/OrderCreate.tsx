@@ -1,30 +1,36 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { OrderService } from '../src/services/api';
+import { OrderService, ProductService } from '../src/services/api';
 import { OrderStatus, OrderCreate as OrderCreateType, PaymentMethod } from '../types';
+import type { Product as ApiProduct } from '../types';
 
-interface Product {
+// NOTE: Product 接口直接复用后端 API 类型，img 字段对应 image_url
+interface LocalProduct {
     id: string;
     code: string;
     name: string;
     category: string;
     price: number;
-    img: string;
+    img: string; // 映射自 api Product.image_url
 }
 
-interface OrderItem extends Product {
+interface OrderItem extends LocalProduct {
     quantity: number;
 }
 
-const MOCK_PRODUCTS: Product[] = [
-    { id: '1', code: 'ML-001', name: 'Nasi Lemak Special', category: '主食', price: 12.00, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA-zYrJbrNpXyj1ZApJ21DVeh2-UWkEcE_zHD3xjzDR2ypdgdPvD0V_NL69ECXIOlhLNgD0KtB5kIQD9BmKz4dy44rGBOU_9xUudK04cTPlUWReSnKfgEzFUXYX-Joqdr6d5gY4GsDHkfXA9jT4XKdBfVSpO1QZTWNbRs6tMmgG0RaPE0KlUn-5pWnKcCLRk8kPCfvhENj41hNmOLyBRL5v6b4EwGTwo2XqKOECOtYGSdZF6JNSRoAXEVowdaw2NSMOOWFs7G5D3mvf' },
-    { id: '2', code: 'ST-002', name: 'Chicken Satay (10)', category: '小吃', price: 15.00, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDCr1A0UkYD47bPyjINVhOMMiB-pdO6Vk9GkIst7TGBPcENh6mor-beIE0m-zai1jb8ISvg0dfAHur75hz38kljvdLDYDhZL-2ExznnuKSVz_DC0ZJEAL2uTdFO5HUVg3AYRyECUgerFv4RSqf8DUrKNHpID4Dd5JhD0TnTCZbd2A9ZDW4MCHQT65EjZTHjvSdZf_OqT0CAh_1IQOS7JVmm59EG9tT5QDfeexTdpUkUFKHXXnZwE66rkmWOuJ0Q7WWSPtN1nUcxBxRf' },
-    { id: '3', code: 'DR-003', name: 'Teh Tarik', category: '饮料', price: 3.50, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuA-zYrJbrNpXyj1ZApJ21DVeh2-UWkEcE_zHD3xjzDR2ypdgdPvD0V_NL69ECXIOlhLNgD0KtB5kIQD9BmKz4dy44rGBOU_9xUudK04cTPlUWReSnKfgEzFUXYX-Joqdr6d5gY4GsDHkfXA9jT4XKdBfVSpO1QZTWNbRs6tMmgG0RaPE0KlUn-5pWnKcCLRk8kPCfvhENj41hNmOLyBRL5v6b4EwGTwo2XqKOECOtYGSdZF6JNSRoAXEVowdaw2NSMOOWFs7G5D3mvf' },
-    { id: '4', code: 'ML-004', name: 'Mee Goreng Mamak', category: '主食', price: 10.50, img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDCr1A0UkYD47bPyjINVhOMMiB-pdO6Vk9GkIst7TGBPcENh6mor-beIE0m-zai1jb8ISvg0dfAHur75hz38kljvdLDYDhZL-2ExznnuKSVz_DC0ZJEAL2uTdFO5HUVg3AYRyECUgerFv4RSqf8DUrKNHpID4Dd5JhD0TnTCZbd2A9ZDW4MCHQT65EjZTHjvSdZf_OqT0CAh_1IQOS7JVmm59EG9tT5QDfeexTdpUkUFKHXXnZwE66rkmWOuJ0Q7WWSPtN1nUcxBxRf' },
-];
-
-const CATEGORIES = ['全部', '主食', '小吃', '饮料', '套餐'];
 const EQUIPMENTS_LIST = ['汤匙', '烤鸡网', '叉子', '垃圾袋', 'Food Tong', '盘子', '红烧桶', '高盖', '杯子', '篮子', '铁脚架', '装酱碗'];
+
+/**
+ * 将后端 Product 格式转换为组件内部 LocalProduct 格式
+ */
+const mapApiProduct = (p: ApiProduct): LocalProduct => ({
+    id: p.id,
+    code: p.code,
+    name: p.name,
+    category: p.category || '其他',
+    price: p.price,
+    img: p.image_url || '',
+});
 
 const OrderCreate: React.FC = () => {
     const navigate = useNavigate();
@@ -39,6 +45,10 @@ const OrderCreate: React.FC = () => {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [generatedOrderId, setGeneratedOrderId] = useState('');
 
+    // NOTE: 从后端 API 加载真实产品数据，替换原来的 MOCK_PRODUCTS
+    const [apiProducts, setApiProducts] = useState<LocalProduct[]>([]);
+    const [productsLoading, setProductsLoading] = useState(true);
+
     // Form fields
     const [customerName, setCustomerName] = useState('');
     const [customerPhone, setCustomerPhone] = useState('');
@@ -48,17 +58,29 @@ const OrderCreate: React.FC = () => {
     useEffect(() => {
         const rand = Math.floor(100000 + Math.random() * 900000);
         setGeneratedOrderId(`KL-${rand}`);
+
+        // 加载产品列表
+        ProductService.getAll()
+            .then(data => setApiProducts(data.map(mapApiProduct)))
+            .catch(err => console.error('Failed to load products', err))
+            .finally(() => setProductsLoading(false));
     }, []);
 
+    // 从产品数据中动态生成分类列表
+    const CATEGORIES = useMemo(() => {
+        const cats = Array.from(new Set(apiProducts.map(p => p.category).filter(Boolean)));
+        return ['全部', ...cats];
+    }, [apiProducts]);
+
     const filteredMenu = useMemo(() => {
-        return MOCK_PRODUCTS.filter(p => {
+        return apiProducts.filter(p => {
             const matchesCat = activeCategory === '全部' || p.category === activeCategory;
             const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.code.toLowerCase().includes(searchQuery.toLowerCase());
             return matchesCat && matchesSearch;
         });
-    }, [activeCategory, searchQuery]);
+    }, [apiProducts, activeCategory, searchQuery]);
 
-    const addToCart = (product: Product) => {
+    const addToCart = (product: LocalProduct) => {
         setCart(prev => {
             const existing = prev.find(item => item.id === product.id);
             if (existing) {
@@ -69,7 +91,7 @@ const OrderCreate: React.FC = () => {
     };
 
     const handleManualInput = () => {
-        const product = MOCK_PRODUCTS.find(p => p.code.toLowerCase() === manualCode.toLowerCase());
+        const product = apiProducts.find(p => p.code.toLowerCase() === manualCode.toLowerCase());
         if (product) {
             addToCart(product);
             setManualCode('');
@@ -385,7 +407,17 @@ const OrderCreate: React.FC = () => {
                     </div>
 
                     <div className="px-4 grid grid-cols-2 gap-3 mt-2">
-                        {filteredMenu.map(p => (
+                        {productsLoading ? (
+                            <div className="col-span-2 py-10 flex items-center justify-center text-slate-300">
+                                <span className="material-icons-round animate-spin text-3xl mr-2">autorenew</span>
+                                <span className="text-sm font-bold">加载菜单中...</span>
+                            </div>
+                        ) : filteredMenu.length === 0 ? (
+                            <div className="col-span-2 py-10 flex flex-col items-center text-slate-300">
+                                <span className="material-icons-round text-5xl mb-2">fastfood</span>
+                                <p className="text-xs font-bold">此分类暂无菜品</p>
+                            </div>
+                        ) : filteredMenu.map(p => (
                             <div
                                 key={p.id}
                                 className="bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-100 relative"
