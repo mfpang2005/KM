@@ -1,6 +1,6 @@
-
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { supabase } from './src/lib/supabase';
 import Login from './pages/Login';
 import AdminDashboard from './pages/AdminDashboard';
 import KitchenPrep from './pages/KitchenPrep';
@@ -19,6 +19,31 @@ import { UserRole } from './types';
 
 const App: React.FC = () => {
     const [user, setUser] = useState<UserRole | null>(null);
+
+    useEffect(() => {
+        // NOTE: 启动时检查是否已有有效 session（页面刷新或 OAuth 回调后恢复登录状态）
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+                // 从用户元数据中恢复角色；若无则默认为 ADMIN
+                const savedRole = session.user.user_metadata?.role as UserRole | undefined;
+                setUser(savedRole ?? UserRole.ADMIN);
+            }
+        });
+
+        // NOTE: 监听 Supabase 认证状态变化
+        // SIGNED_IN 会在密码登录、OAuth 回调完成后触发
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            if (session?.user) {
+                const savedRole = session.user.user_metadata?.role as UserRole | undefined;
+                setUser(savedRole ?? UserRole.ADMIN);
+            } else {
+                // SIGNED_OUT 时清除用户状态
+                setUser(null);
+            }
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
 
     return (
         <HashRouter>

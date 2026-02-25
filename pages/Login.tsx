@@ -10,81 +10,115 @@ interface LoginProps {
 const Login: React.FC<LoginProps> = ({ onLogin }) => {
     const [selectedRole, setSelectedRole] = useState<UserRole>(UserRole.ADMIN);
     const [mode, setMode] = useState<'login' | 'register'>('login');
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
 
+    /**
+     * 根据用户选择的角色跳转到对应页面
+     */
+    const navigateByRole = (role: UserRole) => {
+        if (role === UserRole.ADMIN) navigate('/admin');
+        if (role === UserRole.KITCHEN) navigate('/kitchen');
+        if (role === UserRole.DRIVER) navigate('/driver');
+    };
+
+    /**
+     * 邮件密码登录 —— 使用 Supabase signInWithPassword
+     */
     const handleLogin = async () => {
+        if (!email || !password) {
+            alert('请输入邮箱和密码');
+            return;
+        }
+        setLoading(true);
         try {
-            // Simplified login for demo: just simulate login with a default email based on role
-            // In a real app, you'd get email/password from inputs
-            const emailMap: Record<UserRole, string> = {
-                [UserRole.ADMIN]: 'admin@kimlong.com',
-                [UserRole.KITCHEN]: 'kitchen@kimlong.com',
-                [UserRole.DRIVER]: 'driver@kimlong.com'
-            };
-
-            // For now, we will just use the onLogin callback to set state in App.tsx
-            // But we should ideally verify with backend.
-            // Let's try to call the backend to verify "connection" even if we don't have a real auth system yet.
-            // If backend is down, we might want to fallback or show error.
-
-            // For this specific task, "ensure correct connection", let's try to hit the health check or login
-            // Since we don't have real users in DB yet unless user runs the SQL, let's keep it safe.
-            // We'll proceed with frontend state update but log the attempt.
-
-            console.log("Attempting login via backend...");
-            // await UserService.login(emailMap[selectedRole], selectedRole); 
-            // Commented out until we are sure backend has data, to avoid breaking the demo flow immediately.
-
+            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            if (error) throw error;
+            // NOTE: App.tsx 的 onAuthStateChange 会自动触发 onLogin，
+            // 此处手动调用是为了同步传递角色偏好
             onLogin(selectedRole);
-            if (selectedRole === UserRole.ADMIN) navigate('/admin');
-            if (selectedRole === UserRole.KITCHEN) navigate('/kitchen');
-            if (selectedRole === UserRole.DRIVER) navigate('/driver');
+            navigateByRole(selectedRole);
         } catch (error) {
-            console.error("Login failed", error);
-            alert("Login failed or Backend not reachable");
+            console.error('登录失败:', error);
+            alert(`登录失败: ${(error as Error).message}`);
+        } finally {
+            setLoading(false);
         }
     };
 
+    /**
+     * 邮件密码注册 —— 使用 Supabase signUp
+     */
+    const handleRegister = async () => {
+        if (!email || !password) {
+            alert('请输入邮箱和密码');
+            return;
+        }
+        if (password.length < 6) {
+            alert('密码至少需要 6 位字符');
+            return;
+        }
+        setLoading(true);
+        try {
+            const { data, error } = await supabase.auth.signUp({
+                email,
+                password,
+                options: {
+                    // NOTE: 用户元数据中保存角色，供后续权限判断使用
+                    data: { role: selectedRole }
+                }
+            });
+            if (error) throw error;
+            alert('注册成功！请查收验证邮件后再登录。\n（如管理员已关闭邮件验证，可直接登录）');
+            setMode('login');
+        } catch (error) {
+            console.error('注册失败:', error);
+            alert(`注册失败: ${(error as Error).message}`);
+        } finally {
+            setLoading(false);
+        }
+    };
 
-
-    // ... (retain LoginProps and component definition)
-
+    /**
+     * 社交登录（Google / Facebook）
+     * 需要在 Supabase Dashboard 中提前启用对应 Provider
+     */
     const handleSocialLogin = async (platform: 'Google' | 'Facebook') => {
-        const confirmLogin = window.confirm(`确定要使用 ${platform} 登录吗？(Confirm to login with ${platform})`);
+        const confirmLogin = window.confirm(`确定要使用 ${platform} 登录吗？`);
         if (!confirmLogin) return;
 
         try {
-            console.log(`Logging in with ${platform}...`);
-            const { data, error } = await supabase.auth.signInWithOAuth({
+            const { error } = await supabase.auth.signInWithOAuth({
                 provider: platform.toLowerCase() as 'google' | 'facebook',
                 options: {
-                    redirectTo: window.location.origin
+                    // NOTE: OAuth 完成后重定向回本应用，App.tsx 的
+                    // onAuthStateChange 会捕获 session 并自动完成登录
+                    redirectTo: window.location.origin + window.location.pathname
                 }
             });
-
             if (error) throw error;
-            // Supabase will redirect, so no need to navigate manually here usually.
         } catch (error) {
-            console.error("Social login error:", error);
+            console.error(`${platform} 登录失败:`, error);
             alert(`登录失败: ${(error as Error).message}`);
         }
     };
 
     return (
         <div className="flex flex-col h-full bg-white dark:bg-[#2a0a0a] border-t-[6px] border-primary">
-            {/* Header Section */}
+            {/* 顶部标题区 */}
             <div className="pt-24 pb-12 flex flex-col items-center">
                 <h1 className="text-3xl font-black text-slate-900 mb-3">
                     {mode === 'login' ? '欢迎回来' : '开启您的账号'}
                 </h1>
-                {/* Large Red Company Name as requested */}
                 <p className="text-3xl font-black text-primary tracking-tighter uppercase text-center px-6 leading-tight">
                     KIM LONG CATERING <br /> SDN BHD
                 </p>
                 <p className="text-[11px] text-slate-400 font-bold tracking-widest uppercase mt-8">选择登录角色</p>
             </div>
 
-            {/* Role Selection Grid */}
+            {/* 角色选择 */}
             <div className="px-8 mb-10">
                 <div className="grid grid-cols-3 gap-4">
                     {[
@@ -112,26 +146,36 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 </div>
             </div>
 
-            {/* Form Section */}
+            {/* 表单区域 */}
             <div className="px-8 flex-1 flex flex-col gap-4">
+                {/* 邮箱输入 */}
                 <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
-                        <span className="material-icons-round text-sm">person</span>
+                        <span className="material-icons-round text-sm">email</span>
                     </div>
                     <input
                         className="block w-full pl-10 pr-4 py-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/10 focus:border-primary/20 transition-all outline-none"
-                        placeholder="请输入账号"
-                        type="text"
+                        placeholder="请输入邮箱账号"
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
                     />
                 </div>
+
+                {/* 密码输入 */}
                 <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400">
                         <span className="material-icons-round text-sm">lock</span>
                     </div>
                     <input
                         className="block w-full pl-10 pr-10 py-4 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/10 focus:border-primary/20 transition-all outline-none"
-                        placeholder="请输入密码"
+                        placeholder="请输入密码（至少6位）"
                         type="password"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') mode === 'login' ? handleLogin() : handleRegister();
+                        }}
                     />
                 </div>
 
@@ -142,17 +186,21 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     >
                         {mode === 'login' ? '注册新用户' : '已有账号？登录'}
                     </button>
-                    <button className="text-[10px] font-black text-slate-400 uppercase tracking-wider hover:text-primary transition-colors">忘记密码？</button>
+                    <button className="text-[10px] font-black text-slate-400 uppercase tracking-wider hover:text-primary transition-colors">
+                        忘记密码？
+                    </button>
                 </div>
 
+                {/* 提交按钮 */}
                 <button
-                    onClick={handleLogin}
-                    className="w-full py-5 mt-4 bg-primary text-white rounded-2xl shadow-2xl shadow-primary/30 text-base font-black hover:bg-primary-dark active:scale-[0.98] transition-all uppercase tracking-widest"
+                    onClick={mode === 'login' ? handleLogin : handleRegister}
+                    disabled={loading}
+                    className="w-full py-5 mt-4 bg-primary text-white rounded-2xl shadow-2xl shadow-primary/30 text-base font-black hover:bg-primary-dark active:scale-[0.98] transition-all uppercase tracking-widest disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {mode === 'login' ? '立即登录' : '提交注册'}
+                    {loading ? '请稍候...' : mode === 'login' ? '立即登录' : '提交注册'}
                 </button>
 
-                {/* Social Login Section */}
+                {/* 社交登录分割线 */}
                 <div className="relative my-8">
                     <div className="absolute inset-0 flex items-center">
                         <div className="w-full border-t border-slate-100"></div>
@@ -162,6 +210,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                     </div>
                 </div>
 
+                {/* 社交登录按钮 */}
                 <div className="grid grid-cols-2 gap-4">
                     <button
                         onClick={() => handleSocialLogin('Google')}
