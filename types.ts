@@ -2,7 +2,8 @@
 export enum UserRole {
     ADMIN = 'admin',
     KITCHEN = 'kitchen',
-    DRIVER = 'driver'
+    DRIVER = 'driver',
+    SUPER_ADMIN = 'super_admin'
 }
 
 export enum OrderStatus {

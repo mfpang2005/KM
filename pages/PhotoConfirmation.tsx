@@ -1,11 +1,15 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { PaymentMethod } from '../types';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { PaymentMethod, OrderStatus } from '../types';
+import { OrderService } from '../src/services/api';
 
 const PhotoConfirmation: React.FC = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const orderId = location.state?.orderId;
     const [photos, setPhotos] = useState<Record<string, string>>({});
     const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
 
     const steps = [
         { id: 'receipt', label: '顾客签收底单', sub: 'Receipt Sign-off', icon: 'receipt_long', color: 'bg-blue-500' },
@@ -21,20 +25,39 @@ const PhotoConfirmation: React.FC = () => {
     ];
 
     const allPhotosCaptured = Object.keys(photos).length === steps.length;
-    
+
     // Prototype interaction for capturing
     const handleCapture = (id: string) => {
         setPhotos(prev => ({ ...prev, [id]: 'data:image/png;base64,...' }));
     };
 
-    const canSubmit = allPhotosCaptured && selectedPayment !== null;
+    const canSubmit = allPhotosCaptured && selectedPayment !== null && !!orderId && !isSubmitting;
+
+    const handleSubmit = async () => {
+        if (!canSubmit) return;
+        setIsSubmitting(true);
+        try {
+            const order = await OrderService.getById(orderId);
+            const updated = {
+                ...order,
+                status: OrderStatus.COMPLETED,
+                paymentMethod: selectedPayment as PaymentMethod
+            };
+            await OrderService.update(orderId, updated);
+            navigate('/driver');
+        } catch (error) {
+            console.error("Failed to complete delivery", error);
+            alert("交付确认失败，请重试");
+            setIsSubmitting(false);
+        }
+    };
 
     return (
         <div className="flex flex-col h-full bg-[#fdfdfd] text-slate-900 font-sans">
             {/* Elegant Sticky Header */}
             <header className="pt-12 pb-6 px-8 bg-white/80 backdrop-blur-xl sticky top-0 z-50 flex items-center justify-between border-b border-slate-100">
-                <button 
-                    onClick={() => navigate('/driver')} 
+                <button
+                    onClick={() => navigate('/driver')}
                     className="w-10 h-10 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 active:scale-90 transition-transform"
                 >
                     <span className="material-icons-round text-xl">arrow_back_ios_new</span>
@@ -56,7 +79,7 @@ const PhotoConfirmation: React.FC = () => {
                         <div className="relative z-10 flex justify-between items-start">
                             <div className="space-y-1">
                                 <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Active Delivery</span>
-                                <h2 className="text-3xl font-black tracking-tighter">#KL-468167</h2>
+                                <h2 className="text-3xl font-black tracking-tighter">#{orderId || 'UNKNOWN'}</h2>
                                 <p className="text-xs font-medium text-slate-400 mt-2 flex items-center gap-2">
                                     <span className="material-icons-round text-sm">person</span>
                                     Alice Wong (黄小姐)
@@ -77,21 +100,19 @@ const PhotoConfirmation: React.FC = () => {
                             {selectedPayment ? 'Selection OK' : 'Required'}
                         </span>
                     </div>
-                    
+
                     <div className="grid grid-cols-2 gap-4">
                         {paymentOptions.map((opt) => (
                             <button
                                 key={opt.id}
                                 onClick={() => setSelectedPayment(opt.id)}
-                                className={`group p-5 rounded-[32px] border-2 transition-all flex flex-col items-start gap-4 relative overflow-hidden active:scale-95 ${
-                                    selectedPayment === opt.id
-                                    ? 'bg-primary/5 border-primary shadow-xl shadow-primary/10'
-                                    : 'bg-white border-slate-50 text-slate-400 hover:border-slate-100 shadow-sm'
-                                }`}
+                                className={`group p-5 rounded-[32px] border-2 transition-all flex flex-col items-start gap-4 relative overflow-hidden active:scale-95 ${selectedPayment === opt.id
+                                        ? 'bg-primary/5 border-primary shadow-xl shadow-primary/10'
+                                        : 'bg-white border-slate-50 text-slate-400 hover:border-slate-100 shadow-sm'
+                                    }`}
                             >
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${
-                                    selectedPayment === opt.id ? 'bg-primary text-white scale-110' : 'bg-slate-50 text-slate-400'
-                                }`}>
+                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300 ${selectedPayment === opt.id ? 'bg-primary text-white scale-110' : 'bg-slate-50 text-slate-400'
+                                    }`}>
                                     <span className="material-icons-round text-2xl">{opt.icon}</span>
                                 </div>
                                 <div>
@@ -127,23 +148,21 @@ const PhotoConfirmation: React.FC = () => {
                         {steps.map((step) => {
                             const isCaptured = !!photos[step.id];
                             return (
-                                <button 
+                                <button
                                     key={step.id}
                                     onClick={() => handleCapture(step.id)}
-                                    className={`w-full group rounded-[36px] p-1 border-2 transition-all flex items-center gap-5 active:scale-[0.98] ${
-                                        isCaptured 
-                                        ? 'bg-green-50/50 border-green-500/20' 
-                                        : 'bg-white border-slate-50 shadow-sm'
-                                    }`}
+                                    className={`w-full group rounded-[36px] p-1 border-2 transition-all flex items-center gap-5 active:scale-[0.98] ${isCaptured
+                                            ? 'bg-green-50/50 border-green-500/20'
+                                            : 'bg-white border-slate-50 shadow-sm'
+                                        }`}
                                 >
-                                    <div className={`w-24 h-24 rounded-[30px] flex items-center justify-center transition-all flex-shrink-0 ${
-                                        isCaptured ? 'bg-green-500 text-white shadow-xl shadow-green-200' : 'bg-slate-50 text-slate-400'
-                                    }`}>
+                                    <div className={`w-24 h-24 rounded-[30px] flex items-center justify-center transition-all flex-shrink-0 ${isCaptured ? 'bg-green-500 text-white shadow-xl shadow-green-200' : 'bg-slate-50 text-slate-400'
+                                        }`}>
                                         <span className="material-icons-round text-3xl">
                                             {isCaptured ? 'photo_camera' : 'add_a_photo'}
                                         </span>
                                     </div>
-                                    
+
                                     <div className="text-left flex-1 py-4 pr-6">
                                         <h4 className={`text-sm font-black transition-colors ${isCaptured ? 'text-green-800' : 'text-slate-800'}`}>
                                             {step.label}
@@ -186,19 +205,18 @@ const PhotoConfirmation: React.FC = () => {
             {/* Floating Confirm Footer */}
             <footer className="fixed bottom-0 left-0 right-0 p-8 bg-white/90 backdrop-blur-2xl border-t border-slate-50 z-50 safe-bottom">
                 <div className="max-w-md mx-auto">
-                    <button 
-                        onClick={() => navigate('/driver')}
+                    <button
+                        onClick={handleSubmit}
                         disabled={!canSubmit}
-                        className={`w-full py-5 rounded-[28px] font-black text-base flex items-center justify-center gap-4 transition-all uppercase tracking-widest shadow-2xl relative overflow-hidden group ${
-                            canSubmit 
-                                ? 'bg-primary text-white shadow-primary/30 active:scale-95' 
+                        className={`w-full py-5 rounded-[28px] font-black text-base flex items-center justify-center gap-4 transition-all uppercase tracking-widest shadow-2xl relative overflow-hidden group ${canSubmit
+                                ? 'bg-primary text-white shadow-primary/30 active:scale-95'
                                 : 'bg-slate-100 text-slate-300 cursor-not-allowed opacity-80'
-                        }`}
+                            }`}
                     >
                         {canSubmit && (
                             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out"></div>
                         )}
-                        确认交付完成
+                        {isSubmitting ? '处理中...' : '确认交付完成'}
                         <span className="material-icons-round text-xl">rocket_launch</span>
                     </button>
                     {!canSubmit && (

@@ -252,9 +252,15 @@ const DriverSchedule: React.FC = () => {
                                                 <span className="material-icons-round text-sm">phone</span> 拨号
                                             </button>
                                         </div>
-                                        <button onClick={() => navigate('/driver/confirm')} className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
-                                            <span className="material-icons-round">camera_alt</span> 交付拍照 (FINISH)
-                                        </button>
+                                        {activeOrder.status === OrderStatus.READY ? (
+                                            <button onClick={() => handleUpdateStatus(activeOrder.id, OrderStatus.DELIVERING)} className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
+                                                <span className="material-icons-round">local_shipping</span> 装车出发 (START)
+                                            </button>
+                                        ) : (
+                                            <button onClick={() => navigate('/driver/confirm', { state: { orderId: activeOrder.id } })} className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
+                                                <span className="material-icons-round">camera_alt</span> 交付拍照 (FINISH)
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             </section>

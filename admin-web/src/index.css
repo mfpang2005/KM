@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+    @apply h-full w-full bg-slate-50 text-slate-800 m-0 p-0 font-sans;
+}
+
+/* 隐藏滚动条但保留滚动功能 */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}

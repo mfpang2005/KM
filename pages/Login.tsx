@@ -19,6 +19,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
      * 根据用户选择的角色跳转到对应页面
      */
     const navigateByRole = (role: UserRole) => {
+        if (role === UserRole.SUPER_ADMIN) navigate('/super-admin');
         if (role === UserRole.ADMIN) navigate('/admin');
         if (role === UserRole.KITCHEN) navigate('/kitchen');
         if (role === UserRole.DRIVER) navigate('/driver');
@@ -120,8 +121,9 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
             {/* 角色选择 */}
             <div className="px-8 mb-10">
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-4 gap-3">
                     {[
+                        { role: UserRole.SUPER_ADMIN, icon: 'shield', label: '超管' },
                         { role: UserRole.ADMIN, icon: 'admin_panel_settings', label: '管理员' },
                         { role: UserRole.KITCHEN, icon: 'soup_kitchen', label: '后厨' },
                         { role: UserRole.DRIVER, icon: 'local_shipping', label: '司机' }
@@ -130,11 +132,15 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                             key={item.role}
                             onClick={() => setSelectedRole(item.role)}
                             className={`flex flex-col items-center justify-center p-3 rounded-2xl border-2 transition-all h-28 ${selectedRole === item.role
-                                ? 'border-primary bg-[#FAF0F0] shadow-xl shadow-primary/10 ring-4 ring-primary/5 scale-105'
+                                ? item.role === UserRole.SUPER_ADMIN
+                                    ? 'border-amber-400 bg-amber-50 shadow-xl shadow-amber-400/10 ring-4 ring-amber-400/5 scale-105'
+                                    : 'border-primary bg-[#FAF0F0] shadow-xl shadow-primary/10 ring-4 ring-primary/5 scale-105'
                                 : 'border-slate-50 bg-slate-50 opacity-60'
                                 }`}
                         >
-                            <div className={`w-12 h-12 flex items-center justify-center rounded-full mb-3 shadow-sm ${selectedRole === item.role ? 'bg-primary text-white' : 'bg-slate-200 text-slate-500'
+                            <div className={`w-12 h-12 flex items-center justify-center rounded-full mb-3 shadow-sm ${selectedRole === item.role
+                                ? item.role === UserRole.SUPER_ADMIN ? 'bg-amber-500 text-white' : 'bg-primary text-white'
+                                : 'bg-slate-200 text-slate-500'
                                 }`}>
                                 <span className="material-icons-round text-2xl">{item.icon}</span>
                             </div>

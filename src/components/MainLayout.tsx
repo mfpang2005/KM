@@ -105,7 +105,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                         Let's just show top 4 for now and assume users use dashboard for others.
                     */}
                     <button
-                        onClick={() => navigate(user === UserRole.ADMIN ? '/admin' : '/login')}
+                        onClick={() => navigate(
+                            user === UserRole.SUPER_ADMIN ? '/super-admin' :
+                                user === UserRole.ADMIN ? '/admin' : '/login'
+                        )}
                         className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-400 hover:text-slate-600`}
                     >
                         <span className="material-icons-round text-2xl opacity-70">apps</span>
