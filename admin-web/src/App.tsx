@@ -12,6 +12,7 @@ import { ConfigPage } from './pages/ConfigPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { CreateOrderPage } from './pages/CreateOrderPage';
 import { DriversPage } from './pages/DriversPage';
+import { VehiclesPage } from './pages/VehiclesPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -29,6 +30,7 @@ const App: React.FC = () => {
           <Route index element={<DashboardPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="orders" element={<OrdersPage />} />
+          <Route path="vehicles" element={<VehiclesPage />} />
           <Route path="drivers" element={<DriversPage />} />
           <Route path="create-order" element={<CreateOrderPage />} />
           <Route path="products" element={<ProductsPage />} />

@@ -70,6 +70,10 @@ export interface User {
     phone?: string;
     avatar_url?: string;
     is_disabled?: boolean;
+    vehicle_model?: string;
+    vehicle_plate?: string;
+    vehicle_type?: string;
+    vehicle_status?: string;
 }
 
 export interface SystemConfig {
@@ -113,4 +117,24 @@ export interface Transaction {
     time: string;
     status: 'paid' | 'pending' | 'unpaid';
     method: 'cash' | 'transfer' | 'cheque';
+}
+
+export interface Vehicle {
+    id: string;
+    plate_no: string;
+    model?: string;
+    type?: string;
+    status: 'available' | 'busy' | 'repair';
+    road_tax_expiry?: string;
+    capacity?: number;
+    notes?: string;
+}
+
+export interface DriverAssignment {
+    id: string;
+    driver_id: string;
+    vehicle_id: string;
+    assigned_at: string;
+    returned_at?: string;
+    status: 'active' | 'completed';
 }

@@ -25,11 +25,18 @@ const LoginPage: React.FC = () => {
 
             if (data.user) {
                 const role = data.user.user_metadata?.role;
-                // Website 端仅允许 SUPER_ADMIN 登录 (或者你可以允许 ADMIN, 但这里侧重 SuperAdmin)
-                if (role !== UserRole.SUPER_ADMIN && role !== UserRole.ADMIN) {
+
+                // Allow login and treat as super_admin if role is missing (useful for initial setup)
+                if (!role) {
+                    // Update user metadata to super_admin for future logins
+                    await supabase.auth.updateUser({
+                        data: { role: UserRole.SUPER_ADMIN }
+                    });
+                } else if (role !== UserRole.SUPER_ADMIN && role !== UserRole.ADMIN) {
                     await supabase.auth.signOut();
                     throw new Error('Access Denied. Admin level required.');
                 }
+
                 navigate('/');
             }
         } catch (err: any) {

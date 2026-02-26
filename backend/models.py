@@ -11,6 +11,12 @@ class UserRole(str, Enum):
     SUPER_ADMIN = 'super_admin'
 
 
+class VehicleStatus(str, Enum):
+    AVAILABLE = 'available'
+    BUSY = 'busy'
+    REPAIR = 'repair'
+
+
 class UserStatus(str, Enum):
     PENDING = 'pending'
     ACTIVE = 'active'
@@ -60,6 +66,20 @@ class OrderCreate(OrderBase):
     pass
 
 
+class OrderUpdate(BaseModel):
+    customerName: Optional[str] = None
+    customerPhone: Optional[str] = None
+    address: Optional[str] = None
+    status: Optional[OrderStatus] = None
+    dueTime: Optional[str] = None
+    amount: Optional[float] = None
+    type: Optional[str] = None
+    batch: Optional[str] = None
+    driverId: Optional[str] = None
+    paymentMethod: Optional[PaymentMethod] = None
+    paymentStatus: Optional[str] = None
+
+
 class Order(OrderBase):
     id: str
     created_at: Optional[datetime] = None
@@ -82,6 +102,10 @@ class User(BaseModel):
     name: Optional[str] = None
     phone: Optional[str] = None
     avatar_url: Optional[str] = None
+    vehicle_model: Optional[str] = None
+    vehicle_plate: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    vehicle_status: Optional[str] = 'idle'
 
 
 # ── Super Admin 专用模型 ──
@@ -94,7 +118,12 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     status: Optional[UserStatus] = None
     name: Optional[str] = None
+    phone: Optional[str] = None
     is_disabled: Optional[bool] = None
+    vehicle_model: Optional[str] = None
+    vehicle_plate: Optional[str] = None
+    vehicle_type: Optional[str] = None
+    vehicle_status: Optional[str] = None
 
 
 class SystemConfig(BaseModel):
@@ -136,3 +165,41 @@ class StatsOverview(BaseModel):
     total_users: int
     orders_by_status: dict
     recent_orders: List[Order] = []
+
+
+class VehicleBase(BaseModel):
+    plate_no: str
+    model: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[VehicleStatus] = VehicleStatus.AVAILABLE
+    road_tax_expiry: Optional[str] = None
+    capacity: Optional[float] = None
+    notes: Optional[str] = None
+
+class VehicleCreate(VehicleBase):
+    pass
+
+class VehicleUpdate(BaseModel):
+    plate_no: Optional[str] = None
+    model: Optional[str] = None
+    type: Optional[str] = None
+    status: Optional[VehicleStatus] = None
+    road_tax_expiry: Optional[str] = None
+    capacity: Optional[float] = None
+    notes: Optional[str] = None
+
+class Vehicle(VehicleBase):
+    id: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class DriverAssignmentBase(BaseModel):
+    driver_id: str
+    vehicle_id: str
+
+class DriverAssignment(DriverAssignmentBase):
+    id: str
+    assigned_at: Optional[datetime] = None
+    returned_at: Optional[datetime] = None
+    status: str
+

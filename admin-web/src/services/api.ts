@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { supabase } from '../lib/supabase';
-import type { Order, OrderStatus, OrderCreate, User, StatsOverview, AuditLog, SystemConfig, Product } from '../types';
+import type { Order, OrderStatus, OrderCreate, User, StatsOverview, AuditLog, SystemConfig, Product, Vehicle, DriverAssignment } from '../types';
 // 使用完整的后端地址避免跨域问题，如果配置了 CORS 的话。
 const API_URL = 'http://localhost:8000';
 
@@ -125,3 +125,29 @@ export const ProductService = {
         await api.delete(`/products/${id}`);
     }
 }
+
+export const VehicleService = {
+    getAll: async (): Promise<Vehicle[]> => {
+        const response = await api.get('/vehicles');
+        return response.data;
+    },
+    create: async (vehicle: Partial<Vehicle>): Promise<Vehicle> => {
+        const response = await api.post('/vehicles', vehicle);
+        return response.data;
+    },
+    update: async (id: string, vehicle: Partial<Vehicle>): Promise<Vehicle> => {
+        const response = await api.put(`/vehicles/${id}`, vehicle);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/vehicles/${id}`);
+    },
+    assignToDriver: async (driverId: string, vehicleId: string): Promise<{ message: string, assignment: DriverAssignment }> => {
+        const response = await api.post('/vehicles/assign', { driver_id: driverId, vehicle_id: vehicleId });
+        return response.data;
+    },
+    unassignDriver: async (driverId: string): Promise<{ message: string }> => {
+        const response = await api.post(`/vehicles/unassign/${driverId}`);
+        return response.data;
+    }
+};

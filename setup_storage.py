@@ -12,7 +12,7 @@ import httpx
 SUPABASE_URL = "https://wryhvvakeysdbktvemzo.supabase.co"
 
 # 在 Supabase 控制台 → Settings → API → service_role (secret) 中复制
-SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "YOUR_SERVICE_ROLE_KEY_HERE")
+SERVICE_ROLE_KEY = os.getenv("SUPABASE_SERVICE_ROLE_KEY", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndyeWh2dmFrZXlzZGJrdHZlbXpvIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3MTYzNjY0MCwiZXhwIjoyMDg3MjEyNjQwfQ.jSX6PhPX1do1QOJl3bQVJ2tYrS5xDrL0TDF6EsAuUbc")
 
 HEADERS = {
     "apikey": SERVICE_ROLE_KEY,

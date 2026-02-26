@@ -1,14 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 from database import supabase
-from models import Order, OrderCreate, OrderStatus
+from models import Order, OrderCreate, OrderUpdate, OrderStatus
 
 router = APIRouter(
     prefix="/orders",
     tags=["orders"]
 )
 
-@router.get("/", response_model=List[Order])
+@router.get("", response_model=List[Order])
 async def get_orders():
     # In a real app, we would join with order_items table. 
     # For now, assuming 'items' is stored as a JSONB column or similar for simplicity, 
@@ -27,7 +27,7 @@ async def get_order(order_id: str):
         raise HTTPException(status_code=404, detail="Order not found")
     return response.data[0]
 
-@router.post("/", response_model=Order)
+@router.post("", response_model=Order)
 async def create_order(order: OrderCreate):
     # Depending on how we structure the DB, we might need to insert into 'orders' and 'order_items'
     # For this POC, let's assume 'items' is a JSONB column in 'orders' table to save time and complexity,
@@ -59,6 +59,23 @@ async def update_order_status(order_id: str, status: OrderStatus):
     response = supabase.table("orders").update({"status": status}).eq("id", order_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
+    return response.data[0]
+
+@router.patch("/{order_id}", response_model=Order)
+async def partial_update_order(order_id: str, update: OrderUpdate):
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    if not update_data:
+        raise HTTPException(status_code=400, detail="No fields to update")
+        
+    # Handle Enum to string conversion if needed
+    if "status" in update_data:
+        update_data["status"] = update_data["status"].value if hasattr(update_data["status"], "value") else update_data["status"]
+    if "paymentMethod" in update_data:
+        update_data["paymentMethod"] = update_data["paymentMethod"].value if hasattr(update_data["paymentMethod"], "value") else update_data["paymentMethod"]
+
+    response = supabase.table("orders").update(update_data).eq("id", order_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order not found or update failed")
     return response.data[0]
 
 @router.delete("/{order_id}")

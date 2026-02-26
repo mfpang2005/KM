@@ -96,7 +96,7 @@ export const DashboardPage: React.FC = () => {
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 relative z-10">
                     <button
-                        onClick={() => navigate('/orders')}
+                        onClick={() => navigate('/create-order')}
                         className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-red-50 hover:border-red-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-red-500/10 transition-all group"
                     >
                         <span className="material-icons-round text-3xl text-slate-400 group-hover:text-red-500 mb-3 transition-colors">add_shopping_cart</span>

@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ProductService } from '../services/api';
-import { supabase } from '../lib/supabase';
+import { api, ProductService } from '../services/api';
 import type { Product } from '../types';
 
 // NOTE: 预设品类选项，可根据供应商菜单扩展
@@ -96,22 +95,15 @@ export const ProductsPage: React.FC = () => {
             const localPreview = URL.createObjectURL(file);
             setImagePreview(localPreview);
 
-            // NOTE: 使用 delivery-photos bucket（已确认存在且权限正确）存储产品图片
-            const path = `products/${form.code || 'item'}-${Date.now()}.${file.name.split('.').pop()}`;
-            const { error } = await supabase.storage
-                .from('delivery-photos')
-                .upload(path, file, { upsert: true, contentType: file.type });
+            const formData = new FormData();
+            formData.append('file', file);
 
-            if (error) {
-                console.error('Upload error detail:', error);
-                throw new Error(error.message);
-            }
+            // POST to backend
+            const response = await api.post('/products/upload', formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
 
-            const { data: urlData } = supabase.storage
-                .from('delivery-photos')
-                .getPublicUrl(path);
-
-            setForm(prev => ({ ...prev, image_url: urlData.publicUrl }));
+            setForm(prev => ({ ...prev, image_url: response.data.url }));
         } catch (err) {
             console.error('Image upload failed', err);
             alert('图片上传失败，请重试。');
