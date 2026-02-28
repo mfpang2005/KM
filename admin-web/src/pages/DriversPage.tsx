@@ -24,6 +24,11 @@ export const DriversPage: React.FC = () => {
     const [editForm, setEditForm] = useState<Partial<User>>({});
     const [isSaving, setIsSaving] = useState(false);
 
+    // Add Driver State
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
+    const [isAdding, setIsAdding] = useState(false);
+
     // Vehicle Assignment State
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [assigningVehicleToDriver, setAssigningVehicleToDriver] = useState<DriverWithOrders | null>(null);
@@ -225,6 +230,37 @@ export const DriversPage: React.FC = () => {
         }
     };
 
+    const handleAddDriver = async () => {
+        if (!addForm.name || !addForm.phone) {
+            alert('Name and Phone are required.');
+            return;
+        }
+        setIsAdding(true);
+        try {
+            // Create user via admin endpoint
+            const res = await api.post(`/admin/users/?email=${encodeURIComponent(addForm.email || `driver_${Date.now()}@system.local`)}&name=${encodeURIComponent(addForm.name)}&role=driver`);
+            const newDriverId = res.data.id;
+
+            // Update additional driver specific info via super-admin patch
+            await api.patch(`/super-admin/users/${newDriverId}`, {
+                phone: addForm.phone,
+                vehicle_model: addForm.vehicle_model,
+                vehicle_plate: addForm.vehicle_plate,
+                vehicle_type: addForm.vehicle_type,
+                vehicle_status: 'idle'
+            });
+
+            setShowAddModal(false);
+            setAddForm({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
+            loadData();
+        } catch (error) {
+            console.error('Failed to create new driver', error);
+            alert('Failed to create new driver. Please try again.');
+        } finally {
+            setIsAdding(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex h-64 items-center justify-center">
@@ -241,6 +277,13 @@ export const DriversPage: React.FC = () => {
                     <p className="text-slate-500 text-sm mt-1">Realtime Fleet Tracking & Dispatch Control</p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setShowAddModal(true)}
+                        className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 transition-colors"
+                    >
+                        <span className="material-icons-round text-[18px]">person_add</span>
+                        Add Driver
+                    </button>
                     <div className="flex bg-slate-100 p-1 rounded-xl">
                         {(['All', 'Available', 'On Duty'] as const).map((t) => (
                             <button
@@ -629,6 +672,123 @@ export const DriversPage: React.FC = () => {
                                     暂无已登记的车辆，请先前往车辆面板添加。
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Add Driver Modal */}
+            {showAddModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-[32px] w-full max-w-md shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+                        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+                            <h2 className="text-lg font-bold text-slate-800">Add New Driver</h2>
+                            <button
+                                onClick={() => { setShowAddModal(false); setAddForm({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' }); }}
+                                className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 flex items-center justify-center transition-colors"
+                            >
+                                <span className="material-icons-round text-[18px]">close</span>
+                            </button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto no-scrollbar space-y-6">
+                            {/* Personal Details */}
+                            <div className="space-y-4">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <span className="material-icons-round text-[14px]">person</span> Driver Details
+                                </h3>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Driver Name *</label>
+                                        <input
+                                            type="text"
+                                            value={addForm.name}
+                                            onChange={e => setAddForm({ ...addForm, name: e.target.value })}
+                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
+                                            placeholder="e.g. Ali Bin Abu"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Phone Number *</label>
+                                            <input
+                                                type="text"
+                                                value={addForm.phone}
+                                                onChange={e => setAddForm({ ...addForm, phone: e.target.value })}
+                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
+                                                placeholder="e.g. 0123456789"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Email (Optional)</label>
+                                            <input
+                                                type="email"
+                                                value={addForm.email}
+                                                onChange={e => setAddForm({ ...addForm, email: e.target.value })}
+                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
+                                                placeholder="e.g. driver@local"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Vehicle Details */}
+                            <div className="space-y-4 pt-4 border-t border-slate-100">
+                                <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <span className="material-icons-round text-[14px]">local_shipping</span> Vehicle Info (Optional)
+                                </h3>
+                                <div className="space-y-3">
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Vehicle Model</label>
+                                        <input
+                                            type="text"
+                                            value={addForm.vehicle_model}
+                                            onChange={e => setAddForm({ ...addForm, vehicle_model: e.target.value })}
+                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
+                                            placeholder="e.g. Toyota Hiace"
+                                        />
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Plate Number</label>
+                                            <input
+                                                type="text"
+                                                value={addForm.vehicle_plate}
+                                                onChange={e => setAddForm({ ...addForm, vehicle_plate: e.target.value })}
+                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all uppercase"
+                                                placeholder="e.g. VNZ 1234"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Type</label>
+                                            <input
+                                                type="text"
+                                                value={addForm.vehicle_type}
+                                                onChange={e => setAddForm({ ...addForm, vehicle_type: e.target.value })}
+                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
+                                                placeholder="e.g. 冷链运输"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-6 border-t border-slate-100 flex gap-3 shrink-0">
+                            <button
+                                onClick={() => { setShowAddModal(false); setAddForm({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' }); }}
+                                className="flex-1 py-3.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-xl transition-colors text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={handleAddDriver}
+                                disabled={isAdding || !addForm.name || !addForm.phone}
+                                className="flex-1 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-black/10 transition-all active:scale-95 text-sm flex items-center justify-center disabled:opacity-70 disabled:pointer-events-none"
+                            >
+                                {isAdding ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Create Driver'}
+                            </button>
                         </div>
                     </div>
                 </div>

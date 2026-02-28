@@ -31,6 +31,7 @@ export const OrdersPage: React.FC = () => {
     // Create Order Modal state
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [products, setProducts] = useState<Product[]>([]);
+    const [productSearchQuery, setProductSearchQuery] = useState('');
     const [newOrder, setNewOrder] = useState({
         id: '',
         customerName: '',
@@ -173,6 +174,7 @@ export const OrdersPage: React.FC = () => {
 
             setShowCreateModal(false);
             setEditingOrder(null);
+            setProductSearchQuery('');
             setNewOrder({
                 id: '', customerName: '', customerPhone: '', address: '', type: 'delivery', paymentMethod: PaymentMethod.CASH, items: [], equipments: {}, driverId: null, eventDate: '', eventTime: ''
             });
@@ -520,46 +522,62 @@ export const OrdersPage: React.FC = () => {
 
             {/* Create Order Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-3xl shadow-xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden relative border border-slate-100">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden relative border border-slate-100 mt-4 sm:mt-0">
+                        <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white z-10">
                             <div>
-                                <h2 className="text-xl font-bold text-slate-800">{editingOrder ? 'Edit Order' : 'Create New Order'}</h2>
-                                <p className="text-sm text-slate-500 mt-1">{editingOrder ? 'Modify existing order details' : 'Manually dispatch a POS point order'}</p>
+                                <h2 className="text-xl font-black text-slate-800 tracking-tight">{editingOrder ? 'Edit Order' : 'Create New Order'}</h2>
+                                <p className="text-sm font-medium text-slate-500 mt-1">{editingOrder ? 'Modify existing order details' : 'Manually dispatch a POS point order'}</p>
                             </div>
                             <button
-                                onClick={() => { setShowCreateModal(false); setEditingOrder(null); }}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 transition-colors"
+                                onClick={() => { setShowCreateModal(false); setEditingOrder(null); setProductSearchQuery(''); }}
+                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors"
                             >
                                 <span className="material-icons-round">close</span>
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+                        <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-slate-50/50">
                             {/* Left: Menu Selection */}
-                            <div className="flex-1 border-r border-slate-100 p-6 overflow-y-auto bg-slate-50/50">
-                                <h3 className="font-bold text-slate-700 mb-4">Select Items</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {products.map(p => {
-                                        const selected = newOrder.items.find(i => i.product.id === p.id);
-                                        return (
-                                            <div
-                                                key={p.id}
-                                                onClick={() => toggleOrderItem(p)}
-                                                className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${selected ? 'border-red-500 bg-red-50/30' : 'border-transparent bg-white shadow-sm hover:shadow-md'}`}
-                                            >
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-12 h-12 bg-slate-100 rounded-lg shrink-0 overflow-hidden flex items-center justify-center">
-                                                        {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : <span className="material-icons-round text-slate-300">fastfood</span>}
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-bold text-sm text-slate-800 line-clamp-1">{p.name}</p>
-                                                        <p className="text-xs font-black text-slate-500 mt-1">RM {p.price.toFixed(2)}</p>
+                            <div className="flex-1 border-r border-slate-200 p-6 overflow-y-auto flex flex-col h-full bg-slate-50/50">
+                                <div className="shrink-0 mb-4 space-y-3">
+                                    <h3 className="font-black text-slate-700 tracking-tight uppercase text-sm">Select Items</h3>
+                                    {/* 红色部分要求：产品搜索栏 */}
+                                    <div className="relative">
+                                        <span className="material-icons-round absolute left-3 top-2.5 text-slate-400">search</span>
+                                        <input
+                                            type="text"
+                                            placeholder="Search products..."
+                                            value={productSearchQuery}
+                                            onChange={(e) => setProductSearchQuery(e.target.value)}
+                                            className="w-full pl-10 pr-4 py-2 border border-red-500/30 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all shadow-sm"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto custom-scrollbar pb-6 pr-2">
+                                    {products
+                                        .filter(p => p.name.toLowerCase().includes(productSearchQuery.toLowerCase()) || (p.code && p.code.toLowerCase().includes(productSearchQuery.toLowerCase())))
+                                        .map(p => {
+                                            const selected = newOrder.items.find(i => i.product.id === p.id);
+                                            return (
+                                                <div
+                                                    key={p.id}
+                                                    onClick={() => toggleOrderItem(p)}
+                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${selected ? 'border-red-500 bg-red-50/30' : 'border-transparent bg-white shadow-sm hover:shadow-md'}`}
+                                                >
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-12 h-12 bg-slate-100 rounded-lg shrink-0 overflow-hidden flex items-center justify-center">
+                                                            {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : <span className="material-icons-round text-slate-300">fastfood</span>}
+                                                        </div>
+                                                        <div>
+                                                            <p className="font-bold text-sm text-slate-800 line-clamp-1">{p.name}</p>
+                                                            <p className="text-xs font-black text-slate-500 mt-1">RM {p.price.toFixed(2)}</p>
+                                                        </div>
                                                     </div>
                                                 </div>
-                                            </div>
-                                        );
-                                    })}
+                                            );
+                                        })}
                                 </div>
                             </div>
 
@@ -826,128 +844,274 @@ export const OrdersPage: React.FC = () => {
             )}
             {/* View Bill / Print Receipt Modal */}
             {selectedPrintOrder && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in print:bg-white print:p-0">
-                    <style>
-                        {`
-                        @media print {
-                            body * { visibility: hidden; }
-                            #printable-receipt, #printable-receipt * { visibility: visible; }
-                            #printable-receipt { position: absolute; left: 0; top: 0; width: 100%; height: auto; box-shadow: none; overflow: visible; padding: 20px; }
-                            @page { margin: 0; size: auto; }
-                            .no-print { display: none !important; }
+                <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 sm:items-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in print:bg-white print:p-0 print:items-start print:justify-start">
+                    {/* 打印模式样式 — A4 纸张适配，尽量单页完成 */}
+                    <style>{`
+                        @page {
+                            size: A4 portrait;
+                            margin: 10mm;
                         }
-                        `}
-                    </style>
-                    <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden relative border border-slate-100 print:shadow-none print:border-none print:max-h-none">
+                        @media print {
+                            /* 1. 隐藏页面上的所有元素 */
+                            body * {
+                                visibility: hidden;
+                            }
+                            
+                            /* 2. 只显示我们的模态框以及模态框里的所有子元素 */
+                            #printable-order-wrapper, 
+                            #printable-order-wrapper * {
+                                visibility: visible;
+                            }
 
-                        {/* Header Actions (Hidden in Print) */}
-                        <div className="p-4 border-b border-slate-100 flex justify-between items-center shrink-0 no-print bg-slate-50">
-                            <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                                <span className="material-icons-round text-purple-500">receipt_long</span>
-                                Order Invoice
-                            </h2>
-                            <div className="flex gap-2">
+                            /* 3. 把模态框强行拉到页面的最左上角，脱离原本的文档流 */
+                            #printable-order-wrapper {
+                                position: absolute !important;
+                                left: 0 !important;
+                                top: 0 !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
+                                width: 100% !important;
+                                max-height: none !important;
+                                overflow: visible !important;
+                                /* 取消任何滚动条和多余背景 */
+                                background: white !important;
+                            }
+
+                            /* 4. 清理模态框自身的样式，确保它在白纸上能占满全宽 */
+                            #printable-order {
+                                width: 100% !important;
+                                max-width: 100% !important;
+                                box-shadow: none !important;
+                                border: none !important;
+                                border-radius: 0 !important;
+                                margin: 0 !important;
+                                padding: 0 !important;
+                            }
+
+                            /* 5. 隐藏一些特定的不该被打印的元素 (例如关闭按钮和打印按钮) */
+                            .no-print-area, .no-print-area * {
+                                display: none !important;
+                            }
+
+                            /* 6. 防止表格内容被硬切断 */
+                            table { page-break-inside: auto; }
+                            tr { page-break-inside: avoid; page-break-after: auto; }
+                            thead { display: table-header-group; }
+                            tfoot { display: table-footer-group; }
+                            
+                            /* 7. 强制开启背景色打印 (很多浏览器默认忽略 CSS 背景色) */
+                            .bg-slate-50 { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                            .bg-blue-50 { background-color: #eff6ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                            .bg-violet-50 { background-color: #f5f3ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                            .bg-amber-50 { background-color: #fffbeb !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+                        }
+                    `}</style>
+                    <div id="printable-order-wrapper" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar bg-transparent print:max-h-none print:overflow-visible">
+                        <div className="bg-white rounded-[32px] shadow-xl border border-slate-100 overflow-hidden relative mx-auto print:rounded-none print:shadow-none print:border-none" id="printable-order">
+
+                            {/* 关闭按钮 (不可打印) */}
+                            <button
+                                onClick={() => setSelectedPrintOrder(null)}
+                                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors z-10 no-print-area"
+                            >
+                                <span className="material-icons-round text-[18px]">close</span>
+                            </button>
+
+                            {/* 标题 */}
+                            <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-6 text-white text-center no-print-area">
+                                <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                                    <span className="material-icons-round text-3xl">receipt_long</span>
+                                </div>
+                                <h2 className="text-xl font-black">Order Details</h2>
+                                <p className="text-blue-100 text-xs mt-1 font-bold uppercase tracking-widest">Receipt</p>
+                            </div>
+
+                            <div className="p-8 print:p-0 space-y-6 print:space-y-4 max-w-3xl mx-auto font-sans">
+                                {/* 收据公司标头（打印时显示）*/}
+                                <div className="text-center pb-6 border-b-2 border-slate-800 flex flex-col items-center">
+                                    {/* 公司 Logo */}
+                                    <img
+                                        src="/logo.jpg"
+                                        alt="Kim Long Logo"
+                                        className="w-20 h-20 print:w-16 print:h-16 rounded-full object-cover border border-slate-200 mb-3 shadow-sm"
+                                        onError={(e) => {
+                                            (e.target as HTMLImageElement).style.display = 'none';
+                                        }}
+                                    />
+                                    <h1 className="text-2xl print:text-xl font-black text-slate-900 tracking-tight">KIM LONG CATERING SDN BHD</h1>
+                                    <p className="text-sm print:text-xs text-slate-600 font-bold mt-1">1519675-T</p>
+                                    <div className="text-sm print:text-[11px] text-slate-500 font-medium leading-tight mt-2 space-y-0.5">
+                                        <p>NO 120&121, JALAN SENAI UTAMA</p>
+                                        <p>TAMAN SENAI UTAMA 5/17</p>
+                                        <p>81400, SENAI, JOHOR.</p>
+                                    </div>
+                                    <p className="text-xs print:text-[10px] text-blue-600 font-black tracking-widest mt-4 uppercase bg-blue-50 px-3 py-1 rounded-md">CUSTOMER BILL / INVOICE</p>
+                                </div>
+
+                                {/* 订单基础信息 & 客户信息 */}
+                                <div className="flex flex-col md:flex-row justify-between gap-6 print:gap-4 pb-4">
+                                    {/* 左侧：客户信息 */}
+                                    <div className="flex-1 space-y-2">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">Billed To</h3>
+                                        <div className="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1 text-sm print:text-xs">
+                                            <span className="text-slate-500 font-medium">Name:</span>
+                                            <span className="font-bold text-slate-900">{selectedPrintOrder.customerName || '-'}</span>
+
+                                            <span className="text-slate-500 font-medium">Phone:</span>
+                                            <span className="font-bold text-slate-900 font-mono">{selectedPrintOrder.customerPhone || '-'}</span>
+
+                                            <span className="text-slate-500 font-medium">Address:</span>
+                                            <span className="font-bold text-slate-900 leading-snug">{selectedPrintOrder.address || 'Self Pickup'}</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 右侧：订单信息 & QR */}
+                                    <div className="flex gap-4 sm:justify-end">
+                                        <div className="space-y-2 flex-grow sm:flex-grow-0 min-w-[200px]">
+                                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2 text-right">Order Details</h3>
+                                            <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm print:text-xs text-right">
+                                                <span className="text-slate-500 font-medium">Order Ref:</span>
+                                                <span className="font-black text-slate-900 font-mono">{selectedPrintOrder.id}</span>
+
+                                                <span className="text-slate-500 font-medium">Created:</span>
+                                                <span className="font-bold text-slate-700">{selectedPrintOrder.created_at ? new Date(selectedPrintOrder.created_at).toLocaleString('en-MY', { hour12: false }) : '-'}</span>
+
+                                                <span className="text-slate-500 font-medium">Event Time:</span>
+                                                <span className="font-bold text-slate-900">{selectedPrintOrder.dueTime ? new Date(selectedPrintOrder.dueTime).toLocaleString('en-MY', { hour12: false }) : '-'}</span>
+                                            </div>
+                                        </div>
+
+                                        <div className="shrink-0 pt-1">
+                                            <img
+                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(selectedPrintOrder.id)}&bgcolor=ffffff&color=0f172a&margin=0`}
+                                                alt="Order QR Code"
+                                                className="w-16 h-16 border border-slate-200 p-1"
+                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 商品明细 */}
+                                <div>
+                                    <table className="w-full text-sm print:text-xs border-collapse">
+                                        <thead>
+                                            <tr className="border-b-2 border-slate-800">
+                                                <th className="text-left py-2 font-black text-slate-700 uppercase tracking-wider">Description</th>
+                                                <th className="text-center py-2 font-black text-slate-700 uppercase tracking-wider w-16">Qty</th>
+                                                <th className="text-right py-2 font-black text-slate-700 uppercase tracking-wider w-24">Unit Price</th>
+                                                <th className="text-right py-2 font-black text-slate-700 uppercase tracking-wider w-24">Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-200">
+                                            {selectedPrintOrder.items?.map((item: any, idx: number) => (
+                                                <tr key={idx} className="group">
+                                                    <td className="py-3 pr-2">
+                                                        <p className="font-bold text-slate-900">{item.name}</p>
+                                                        {item.code && <p className="text-xs text-slate-500 font-mono mt-0.5">Item Code: {item.code}</p>}
+                                                        {item.note && <p className="text-xs text-slate-500 italic mt-0.5">Note: {item.note}</p>}
+                                                    </td>
+                                                    <td className="py-3 px-2 text-center align-top">
+                                                        <span className="font-black text-slate-900">{item.quantity}</span>
+                                                    </td>
+                                                    <td className="py-3 px-2 text-right text-slate-600 font-mono align-top">RM {item.price ? Number(item.price).toFixed(2) : '-'}</td>
+                                                    <td className="py-3 pl-2 text-right font-black text-slate-900 font-mono align-top">RM {item.price ? (Number(item.price) * item.quantity).toFixed(2) : '-'}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* 设备 / 物资 */}
+                            {selectedPrintOrder.equipments && Object.keys(selectedPrintOrder.equipments).length > 0 && (
+                                <div className="pt-2">
+                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">Equipments / Materials</h3>
+                                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                        {Object.entries(selectedPrintOrder.equipments)
+                                            .filter(([_, qty]) => Number(qty) > 0)
+                                            .map(([name, qty]) => (
+                                                <span key={name} className="text-sm print:text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                                    {name}
+                                                    <span className="text-slate-500 font-normal ml-1">× {qty}</span>
+                                                </span>
+                                            ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 底部附加信息 & 金额总计 */}
+                            <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-6 border-t border-slate-200 mt-6 page-break-avoid">
+                                {/* 左侧：其他杂项信息 */}
+                                <div className="flex-1 space-y-3 w-full sm:w-auto">
+                                    <div className="grid grid-cols-[100px_1fr] gap-y-1.5 text-sm print:text-xs">
+                                        <span className="text-slate-500 font-medium">Payment:</span>
+                                        <span className="font-bold text-slate-900 uppercase">
+                                            {selectedPrintOrder.paymentMethod === 'cash' ? 'Cash' :
+                                                selectedPrintOrder.paymentMethod === 'bank_transfer' ? 'Bank Transfer' :
+                                                    selectedPrintOrder.paymentMethod === 'ewallet' ? 'E-Wallet' :
+                                                        selectedPrintOrder.paymentMethod === 'cheque' ? 'Cheque' :
+                                                            (selectedPrintOrder.paymentMethod || 'Cash')}
+                                        </span>
+
+                                        <span className="text-slate-500 font-medium">Driver:</span>
+                                        <span className="font-bold text-slate-900">
+                                            {selectedPrintOrder.driverId ? (drivers.find(d => d.id === selectedPrintOrder.driverId)?.name || 'Assigned') : 'Unassigned'}
+                                        </span>
+
+                                        <span className="text-slate-500 font-medium">Status:</span>
+                                        <span className="font-bold text-slate-900 uppercase tracking-wider">{selectedPrintOrder.status}</span>
+                                    </div>
+
+                                    {(selectedPrintOrder as any).remarks && (
+                                        <div className="mt-4 p-3 border border-dashed border-slate-300 rounded-lg bg-slate-50/50">
+                                            <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Remarks</span>
+                                            <p className="text-sm print:text-xs font-medium text-slate-800">{(selectedPrintOrder as any).remarks}</p>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* 右侧：总合计 */}
+                                <div className="w-full sm:w-64 shrink-0">
+                                    <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
+                                        <div className="flex justify-between items-center text-sm print:text-xs text-slate-600">
+                                            <span>Subtotal</span>
+                                            <span className="font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span>
+                                        </div>
+                                        <div className="flex justify-between items-center text-sm print:text-xs text-slate-600">
+                                            <span>Tax (0%)</span>
+                                            <span className="font-mono">RM 0.00</span>
+                                        </div>
+                                        <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
+                                            <span className="text-sm print:text-xs font-black text-slate-900 uppercase tracking-wider">Total</span>
+                                            <span className="text-2xl print:text-xl font-black text-slate-900 font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="text-center mt-6 text-[10px] text-slate-400 space-y-1">
+                                        <p>Thank you for choosing Kim Long.</p>
+                                        <p>This is a computer-generated document. No signature is required.</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 操作按钮 (不打印) */}
+                            <div className="flex gap-3 no-print-area mt-8">
                                 <button
                                     onClick={() => window.print()}
-                                    className="px-4 py-1.5 bg-purple-600 text-white text-sm font-bold rounded-full hover:bg-purple-700 transition shadow-sm flex items-center gap-1.5"
+                                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30"
                                 >
-                                    <span className="material-icons-round text-[16px]">print</span>
-                                    Print Bill
-                                </button>
-                                <button
-                                    onClick={() => setSelectedPrintOrder(null)}
-                                    className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-200 text-slate-600 hover:bg-slate-300 transition-colors"
-                                >
-                                    <span className="material-icons-round text-[16px]">close</span>
+                                    <span className="material-icons-round text-[18px]">print</span>
+                                    Print Customer Bill
                                 </button>
                             </div>
                         </div>
-
-                        {/* Printable Content */}
-                        <div id="printable-receipt" className="p-8 overflow-y-auto bg-white flex-1 text-slate-800">
-                            <div className="text-center mb-6 border-b-2 border-slate-900 pb-6">
-                                <h1 className="text-2xl font-black tracking-wider uppercase mb-1">Kim Long Smart Catering</h1>
-                                <p className="text-sm text-slate-500">Official Order Invoice</p>
-                                <p className="text-xs font-mono mt-3 text-slate-400">ID: {selectedPrintOrder.id}</p>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4 text-sm mb-6 bg-slate-50/50 p-4 rounded-xl border border-slate-100 print:border-slate-300">
-                                <div>
-                                    <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">Customer Name</p>
-                                    <p className="font-bold">{selectedPrintOrder.customerName || 'N/A'}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">Phone Contact</p>
-                                    <p className="font-bold">{selectedPrintOrder.customerPhone || 'N/A'}</p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">Event Due Date</p>
-                                    <p className="font-bold">
-                                        {selectedPrintOrder.dueTime
-                                            ? new Date(selectedPrintOrder.dueTime).toLocaleString('zh-CN', { hour12: false })
-                                            : 'Not Set'}
-                                    </p>
-                                </div>
-                                <div>
-                                    <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">Order Type</p>
-                                    <p className="font-bold uppercase text-indigo-600">{selectedPrintOrder.type}</p>
-                                </div>
-                                <div className="col-span-2">
-                                    <p className="text-xs text-slate-400 font-bold uppercase mb-0.5">Delivery Address</p>
-                                    <p className="font-bold">{selectedPrintOrder.address || 'Takeaway/Dine-In'}</p>
-                                </div>
-                            </div>
-
-                            <div className="mb-6">
-                                <h3 className="text-sm font-black uppercase text-slate-400 border-b border-slate-200 pb-2 mb-3">Itemized List</h3>
-                                <table className="w-full text-sm">
-                                    <thead>
-                                        <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
-                                            <th className="pb-2 font-bold uppercase">Item</th>
-                                            <th className="pb-2 font-bold uppercase text-center w-16">Qty</th>
-                                            <th className="pb-2 font-bold uppercase text-right w-24">Total</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {selectedPrintOrder.items?.map((item: any, index: number) => (
-                                            <tr key={index}>
-                                                <td className="py-3 font-bold">{item.name}</td>
-                                                <td className="py-3 text-center">{item.quantity}x</td>
-                                                <td className="py-3 text-right font-bold">RM {(item.price * item.quantity).toFixed(2)}</td>
-                                            </tr>
-                                        ))}
-                                        {selectedPrintOrder.equipments && Object.entries(selectedPrintOrder.equipments).filter(([_, qty]) => Number(qty) > 0).map(([equip, qty], index) => (
-                                            <tr key={`eq-${index}`}>
-                                                <td className="py-2 pl-4 text-xs text-slate-500 italic flex items-center gap-1.5">+ Equipment: {equip}</td>
-                                                <td className="py-2 text-center text-xs text-slate-500">{qty}x</td>
-                                                <td className="py-2 text-right text-xs text-slate-400">—</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="pt-4 border-t-2 border-slate-900 flex justify-between items-end">
-                                <div>
-                                    <p className="text-xs font-bold text-slate-400 uppercase">Payment Method</p>
-                                    <p className="font-bold uppercase text-slate-700">{selectedPrintOrder.paymentMethod || 'NOT SET'}</p>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-xs font-bold text-slate-400 uppercase mb-1">Grand Total</p>
-                                    <p className="text-3xl font-black text-slate-900 leading-none">RM {selectedPrintOrder.amount.toFixed(2)}</p>
-                                </div>
-                            </div>
-
-                            <div className="mt-12 text-center text-xs text-slate-400 border-t border-slate-100 pt-6">
-                                <p>Thank you for choosing Kim Long Smart Catering!</p>
-                                <p>Please contact us for any inquiries regarding this order.</p>
-                            </div>
-                        </div>
-
                     </div>
                 </div>
             )}
-
         </div>
     );
 };
+
+export default OrdersPage;
