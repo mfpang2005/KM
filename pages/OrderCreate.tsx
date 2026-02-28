@@ -128,17 +128,27 @@ const OrderCreate: React.FC = () => {
         try {
             setIsSubmitting(true);
 
+            const activeEquipments = Object.fromEntries(
+                Object.entries(equipmentQuantities).filter(([_, qty]) => (qty as number) > 0)
+            ) as Record<string, number>;
+
             const orderData: OrderCreateType = {
                 customerName,
                 customerPhone,
                 address: address || '到店自取',
-                items: cart.map(item => ({ id: item.id, quantity: item.quantity })),
+                items: cart.map(item => ({
+                    id: item.id,
+                    name: item.name,
+                    price: item.price,
+                    quantity: item.quantity
+                })),
                 status: OrderStatus.PENDING,
                 dueTime: new Date(Date.now() + 60 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), // Default 1h later
                 amount: totalPrice,
                 type: address ? 'delivery' : 'takeaway',
                 paymentMethod: PaymentMethod.CASH, // Could be enhanced to selector
-                driverId: selectedDriver || undefined
+                driverId: selectedDriver || undefined,
+                equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined
             };
 
             await OrderService.create(orderData);

@@ -24,15 +24,21 @@ const LoginPage: React.FC = () => {
             if (error) throw error;
 
             if (data.user) {
-                const role = data.user.user_metadata?.role;
+                // SECURITY: 从 public.users 验证真实角色，不信任 metadata 的自动提权逻辑
+                const { data: userData, error: userError } = await supabase
+                    .from('users')
+                    .select('role')
+                    .eq('id', data.user.id)
+                    .single();
 
-                // Allow login and treat as super_admin if role is missing (useful for initial setup)
-                if (!role) {
-                    // Update user metadata to super_admin for future logins
-                    await supabase.auth.updateUser({
-                        data: { role: UserRole.SUPER_ADMIN }
-                    });
-                } else if (role !== UserRole.SUPER_ADMIN && role !== UserRole.ADMIN) {
+                if (userError || !userData) {
+                    await supabase.auth.signOut();
+                    throw new Error('User record not found. Please contact support.');
+                }
+
+                const role = userData.role;
+
+                if (role !== UserRole.SUPER_ADMIN && role !== UserRole.ADMIN) {
                     await supabase.auth.signOut();
                     throw new Error('Access Denied. Admin level required.');
                 }

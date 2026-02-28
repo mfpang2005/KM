@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SuperAdminService } from '../services/api';
+import { supabase } from '../lib/supabase';
 import type { StatsOverview } from '../types';
 
 export const DashboardPage: React.FC = () => {
@@ -20,9 +21,24 @@ export const DashboardPage: React.FC = () => {
                 if (showLoading) setLoading(false);
             }
         };
+
         loadStats(true);
-        const timer = setInterval(() => loadStats(false), 5000);
-        return () => clearInterval(timer);
+
+        // NOTE: 用 Supabase Realtime 替代定时器轮询，实现“秒级”数据刷新
+        const channel = supabase
+            .channel('dashboard-stats-sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'orders' },
+                () => {
+                    loadStats(false);
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const statusLabels: Record<string, string> = {

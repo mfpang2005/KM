@@ -1,41 +1,46 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-import { UserRole } from '../types';
 
 export const useAuth = () => {
     const [user, setUser] = useState<{ id: string; role: string; email: string } | null>(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const checkAuth = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session?.user) {
-                const metadata = session.user.user_metadata;
-                setUser({
-                    id: session.user.id,
-                    email: session.user.email || '',
-                    role: metadata.role || UserRole.ADMIN,
-                });
+        const fetchUserData = async (userId: string, email: string) => {
+            const { data, error } = await supabase
+                .from('users')
+                .select('role')
+                .eq('id', userId)
+                .single();
+
+            if (data && !error) {
+                setUser({ id: userId, email, role: data.role });
             } else {
+                // 如果在 public.users 找不到，可能是新用户或同步延迟，降级为普通访问或清除 session
                 setUser(null);
             }
             setLoading(false);
         };
 
-        checkAuth();
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        const checkAuth = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
             if (session?.user) {
-                const metadata = session.user.user_metadata;
-                setUser({
-                    id: session.user.id,
-                    email: session.user.email || '',
-                    role: metadata.role || UserRole.ADMIN,
-                });
+                await fetchUserData(session.user.id, session.user.email || '');
             } else {
                 setUser(null);
+                setLoading(false);
             }
-            setLoading(false);
+        };
+
+        checkAuth();
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+            if (session?.user) {
+                await fetchUserData(session.user.id, session.user.email || '');
+            } else {
+                setUser(null);
+                setLoading(false);
+            }
         });
 
         return () => subscription.unsubscribe();

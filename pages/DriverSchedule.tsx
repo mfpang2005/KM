@@ -105,18 +105,29 @@ const DriverSchedule: React.FC = () => {
         // Supabase Realtime Listener for Vehicles
         const vehicleChannel = supabase.channel('public:vehicles')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, payload => {
-                fetchVehicles(); // Reload vehicles when there's a change
+                fetchVehicles();
             })
+            .subscribe();
+
+        // NOTE: 用 Supabase Realtime 监听订单变更，消除 5s 轮询延迟
+        const orderChannel = supabase.channel('driver-orders-sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'orders' },
+                () => {
+                    fetchOrders();
+                }
+            )
             .subscribe();
 
         const timer = setInterval(() => {
             setNow(new Date());
-            fetchOrders();
-        }, 5000);
+        }, 10000); // 仅更新时间点，数据由 Realtime 处理
 
         return () => {
             clearInterval(timer);
             supabase.removeChannel(vehicleChannel);
+            supabase.removeChannel(orderChannel);
         };
     }, []);
 

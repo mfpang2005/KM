@@ -50,13 +50,14 @@ export interface OrderCreate {
     customerName: string;
     customerPhone: string;
     address: string;
-    items: { id: string; quantity: number }[];
+    items: { id: string; name: string; quantity: number; price?: number }[];
     status: OrderStatus;
     dueTime: string;
     amount: number;
     type: 'dine-in' | 'takeaway' | 'delivery';
     paymentMethod?: PaymentMethod;
     driverId?: string;
+    equipments?: Record<string, number>;
 }
 
 export interface Transaction {

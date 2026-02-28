@@ -37,6 +37,7 @@ async def create_order(order: OrderCreate):
     import re
     import uuid
     from services.google_calendar import sync_order_to_calendar
+    from services.goeasy import publish_message, notify_order_update
 
     order_data = order.model_dump(mode='json', exclude_none=True)
     # Generate custom order ID: KM-YY/MM/DD/000
@@ -68,6 +69,10 @@ async def create_order(order: OrderCreate):
             response = supabase.table("orders").insert(order_data).execute()
             if not response.data:
                 raise HTTPException(status_code=400, detail="Could not create order")
+            
+            # GoEasy Notification
+            await notify_order_update(response.data[0], action="create")
+            
             return response.data[0]
         except HTTPException:
             raise
@@ -121,6 +126,11 @@ async def update_order(order_id: str, order: dict):
             response = supabase.table("orders").update(order_data).eq("id", order_id).execute()
             if not response.data:
                 raise HTTPException(status_code=404, detail="Order not found or update failed")
+            
+            # GoEasy Notification
+            from services.goeasy import notify_order_update
+            await notify_order_update(response.data[0], action="update")
+            
             return response.data[0]
         except HTTPException:
             raise
@@ -141,6 +151,11 @@ async def update_order_status(order_id: str, status: OrderStatus):
     response = supabase.table("orders").update({"status": status}).eq("id", order_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # GoEasy Notification
+    from services.goeasy import notify_order_update
+    await notify_order_update(response.data[0], action="status_update")
+    
     return response.data[0]
 
 @router.patch("/{order_id:path}", response_model=Order)
@@ -176,6 +191,11 @@ async def partial_update_order(order_id: str, update: OrderUpdate):
     response = supabase.table("orders").update(update_data).eq("id", order_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Update failed")
+    
+    # GoEasy Notification
+    from services.goeasy import notify_order_update
+    await notify_order_update(response.data[0], action="partial_update")
+    
     return response.data[0]
 
 @router.delete("/{order_id:path}")
@@ -190,7 +210,35 @@ async def delete_order(order_id: str):
     if res.data and res.data[0].get("calendar_event_id"):
         delete_calendar_event(res.data[0]["calendar_event_id"])
         
+    # GoEasy Notification
+    from services.goeasy import publish_message
+    await publish_message({
+        "type": "order_update",
+        "action": "delete",
+        "orderId": order_id
+    })
+        
     return {"message": "Order deleted"}
+
+
+@router.post("/{order_id:path}/assign", response_model=Order)
+async def assign_driver(order_id: str, payload: dict):
+    """
+    指派司机。接收 { "driver_id": "uuid" }。
+    """
+    driver_id = payload.get("driver_id")
+    if not driver_id:
+        raise HTTPException(status_code=400, detail="driver_id is required")
+        
+    response = supabase.table("orders").update({"driverId": driver_id}).eq("id", order_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+        
+    # GoEasy Notification
+    from services.goeasy import notify_order_update
+    await notify_order_update(response.data[0], action="assign")
+    
+    return response.data[0]
 
 
 # NOTE: 司机完成送餐后将照片 URL 列表写入对应订单，供 Admin 审阅

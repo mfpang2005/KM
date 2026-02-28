@@ -117,6 +117,14 @@ async def update_user(
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # GoEasy Notification
+    from services.goeasy import publish_message
+    await publish_message({
+        "type": "user_update",
+        "userId": user_id,
+        "detail": update_data
+    })
+
     # 记录审计日志
     await _log_audit(
         actor=current_user,
@@ -277,5 +285,9 @@ async def approve_order(
         target=order_id,
         detail={"old_status": "pending", "new_status": "preparing"},
     )
+    
+    # GoEasy Notification
+    from services.goeasy import notify_order_update
+    await notify_order_update(response.data[0], action="approve")
     
     return response.data[0]

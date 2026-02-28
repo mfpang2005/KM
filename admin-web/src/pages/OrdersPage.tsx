@@ -329,10 +329,11 @@ export const OrdersPage: React.FC = () => {
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm relative">
-                <div className="max-h-[65vh] overflow-y-auto custom-scrollbar">
-                    <table className="w-full text-left border-collapse min-w-max">
-                        <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-sm shadow-sm">
-                            <tr className="border-b border-slate-200 text-slate-500 font-bold text-[11px] uppercase tracking-wider">
+                {/* 锁定高度与固定表头加固 */}
+                <div className="h-[60vh] min-h-[400px] overflow-y-auto custom-scrollbar scroll-smooth">
+                    <table className="w-full text-left border-collapse min-w-max table-auto">
+                        <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-md shadow-sm border-b border-slate-200">
+                            <tr className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">
                                 <th className="px-6 py-4 whitespace-nowrap">Order ID</th>
                                 <th className="px-6 py-4">Customer</th>
                                 <th className="px-6 py-4">Total Amount</th>

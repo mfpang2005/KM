@@ -109,6 +109,7 @@ class User(BaseModel):
     vehicle_plate: Optional[str] = None
     vehicle_type: Optional[str] = None
     vehicle_status: Optional[str] = 'idle'
+    employee_id: Optional[str] = None
 
 
 # ── Super Admin 专用模型 ──
@@ -127,6 +128,14 @@ class UserUpdate(BaseModel):
     vehicle_plate: Optional[str] = None
     vehicle_type: Optional[str] = None
     vehicle_status: Optional[str] = None
+    employee_id: Optional[str] = None
+
+class UserCreateInternal(BaseModel):
+    email: str
+    password: str
+    role: UserRole
+    name: Optional[str] = None
+    employee_id: Optional[str] = None
 
 
 class SystemConfig(BaseModel):
@@ -168,6 +177,19 @@ class StatsOverview(BaseModel):
     total_users: int
     orders_by_status: dict
     recent_orders: List[Order] = []
+
+
+class DailyRevenue(BaseModel):
+    date: str
+    revenue: float
+    order_count: int
+
+
+class FinancialStats(BaseModel):
+    total_revenue: float
+    revenue_by_method: dict
+    daily_revenue: List[DailyRevenue]
+    growth_rate: Optional[float] = 0.0
 
 
 class VehicleBase(BaseModel):

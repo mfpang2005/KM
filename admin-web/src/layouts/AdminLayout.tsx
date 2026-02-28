@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../lib/supabase';
@@ -19,6 +19,8 @@ const StatusDot: React.FC<{ status: ServiceStatus; latency?: number }> = ({ stat
         </span>
     );
 };
+
+import RealtimeStatus from '../components/RealtimeStatus';
 
 /** 徧边栏底部健康检查组件 */
 const HealthCheck: React.FC = () => {
@@ -82,6 +84,9 @@ const HealthCheck: React.FC = () => {
                     </span>
                     <StatusDot status={supabaseStatus} latency={sbLatency} />
                 </div>
+                <div className="mt-2 pt-2 border-t border-white/5">
+                    <RealtimeStatus />
+                </div>
             </div>
         </div>
     );
@@ -90,6 +95,38 @@ const HealthCheck: React.FC = () => {
 const AdminLayout: React.FC = () => {
     const { user, logout } = useAuth();
     const location = useLocation();
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const [headerHide, setHeaderHide] = useState(false);
+
+    // ── 自动收起 Header 逻辑 ──────────────────────────────────────────────────
+    useEffect(() => {
+        const el = scrollRef.current;
+        if (!el) return;
+
+        let lastScrollTop = 0;
+        const threshold = 100; // 滚动超过 100px 后开始生效
+
+        const handleScroll = () => {
+            const currentScrollTop = el.scrollTop;
+
+            // 向下滚动超过阈值则收起，向上滚动则立即显示
+            if (currentScrollTop > lastScrollTop && currentScrollTop > threshold) {
+                setHeaderHide(true);
+            } else if (currentScrollTop < lastScrollTop) {
+                setHeaderHide(false);
+            }
+
+            lastScrollTop = Math.max(0, currentScrollTop);
+        };
+
+        el.addEventListener('scroll', handleScroll, { passive: true });
+        return () => el.removeEventListener('scroll', handleScroll);
+    }, []);
+
+    // 页面切换时自动显示 Header
+    useEffect(() => {
+        setHeaderHide(false);
+    }, [location.pathname]);
 
     // ── 通知铃铛状态 ────────────────────────────────────────────────────────
     const [showNotifs, setShowNotifs] = useState(false);
@@ -146,6 +183,8 @@ const AdminLayout: React.FC = () => {
         { path: '/', label: 'Overview', icon: 'dashboard' },
         { path: '/users', label: 'Users', icon: 'people' },
         { path: '/orders', label: 'Orders', icon: 'receipt_long' },
+        { path: '/kitchen-prep', label: 'Kitchen Management', icon: 'precision_manufacturing' },
+        { path: '/kitchen-calendar', label: 'Kitchen Calendar', icon: 'calendar_month' },
         { path: '/create-order', label: 'Create New Order', icon: 'add_shopping_cart' },
         { path: '/vehicles', label: 'Vehicle Inventory', icon: 'directions_car' },
         { path: '/drivers', label: 'Drivers Management', icon: 'directions_bike' },
@@ -224,7 +263,7 @@ const AdminLayout: React.FC = () => {
                 <div className="absolute top-[-10%] right-[-5%] w-96 h-96 bg-blue-400/20 rounded-full blur-[100px] pointer-events-none"></div>
                 <div className="absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-purple-400/20 rounded-full blur-[100px] pointer-events-none"></div>
 
-                <header className="h-20 bg-white/40 backdrop-blur-xl border-b border-white/50 flex items-center px-10 shadow-[0_4px_30px_rgba(0,0,0,0.02)] justify-between sticky top-0 z-10">
+                <header className={`h-20 bg-white/40 backdrop-blur-xl border-b border-white/50 flex items-center px-10 shadow-[0_4px_30px_rgba(0,0,0,0.02)] justify-between sticky top-0 z-10 transition-all duration-500 ease-in-out ${headerHide ? '-mt-20 opacity-0 pointer-events-none' : 'mt-0 opacity-100'}`}>
                     {/* 当前页标题（无副标题） */}
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight">
                         {navItems.find(i => location.pathname === i.path || (i.path !== '/' && location.pathname.startsWith(i.path)))?.label || 'Dashboard'}
@@ -293,7 +332,10 @@ const AdminLayout: React.FC = () => {
                         )}
                     </div>
                 </header>
-                <div className="flex-1 overflow-y-auto p-10 relative z-0 no-scrollbar">
+                <div
+                    ref={scrollRef}
+                    className="flex-1 overflow-y-auto p-10 relative z-0 no-scrollbar"
+                >
                     <div className="max-w-7xl mx-auto h-full">
                         <Outlet />
                     </div>

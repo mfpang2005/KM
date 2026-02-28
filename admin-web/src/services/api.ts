@@ -47,9 +47,9 @@ export const SuperAdminService = {
         return response.data;
     },
 
-    /** 在内部系统新建用户 (分配 Kitchen / Driver) */
-    createInternalUser: async (data: { email: string; role: string; name?: string }) => {
-        const response = await api.post(`/admin/users/?email=${encodeURIComponent(data.email)}&role=${data.role}${data.name ? `&name=${encodeURIComponent(data.name)}` : ''}`);
+    /** 在内部系统新建用户 (通过 Supabase Auth Admin) */
+    createInternalUser: async (data: { email: string; role: string; name?: string; password?: string; employee_id?: string }) => {
+        const response = await api.post('/admin/users/', data);
         return response.data;
     },
 

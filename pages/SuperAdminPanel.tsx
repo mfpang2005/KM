@@ -252,6 +252,14 @@ const UsersSection: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [editingUser, setEditingUser] = useState<string | null>(null);
     const [editRole, setEditRole] = useState('');
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [newUserForm, setNewUserForm] = useState({
+        email: '',
+        role: UserRole.DRIVER as string,
+        name: '',
+        password: '',
+        employee_id: ''
+    });
 
     const loadUsers = useCallback(async () => {
         try {
@@ -266,6 +274,26 @@ const UsersSection: React.FC = () => {
 
     useEffect(() => { loadUsers(); }, [loadUsers]);
 
+    const handleCreateInternalUser = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!newUserForm.password || newUserForm.password.length < 6) {
+            alert('密码长度至少为 6 位');
+            return;
+        }
+        try {
+            setLoading(true);
+            await SuperAdminService.createInternalUser(newUserForm);
+            setShowAddModal(false);
+            setNewUserForm({ email: '', role: UserRole.DRIVER, name: '', password: '', employee_id: '' });
+            await loadUsers();
+        } catch (error) {
+            console.error('Failed to create user:', error);
+            alert('创建失败，请检查后端状态');
+        } finally {
+            setLoading(false);
+        }
+    };
+
     const roleLabels: Record<string, string> = {
         super_admin: '超级管理员',
         admin: '管理员',
@@ -274,10 +302,10 @@ const UsersSection: React.FC = () => {
     };
 
     const roleColors: Record<string, string> = {
-        super_admin: 'bg-amber-50 text-amber-700 border-amber-200',
-        admin: 'bg-primary/5 text-primary border-primary/20',
-        kitchen: 'bg-green-50 text-green-700 border-green-200',
-        driver: 'bg-blue-50 text-blue-700 border-blue-200',
+        super_admin: 'bg-indigo-100 text-indigo-700 border-indigo-200',
+        admin: 'bg-blue-100 text-blue-700 border-blue-200',
+        kitchen: 'bg-orange-100 text-orange-700 border-orange-200',
+        driver: 'bg-emerald-100 text-emerald-700 border-emerald-200',
     };
 
     /**
@@ -318,8 +346,15 @@ const UsersSection: React.FC = () => {
 
     return (
         <div className="space-y-3">
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-slate-700">所有用户 ({users.length})</h3>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-bold text-slate-700">全体员工列表 ({users.length})</h3>
+                <button
+                    onClick={() => setShowAddModal(true)}
+                    className="px-4 py-2 bg-primary text-white rounded-xl font-bold text-xs shadow-lg shadow-primary/20 flex items-center gap-1.5 active:scale-95 transition-all"
+                >
+                    <span className="material-icons-round text-sm">person_add</span>
+                    新增员工账号
+                </button>
             </div>
 
             {users.length === 0 ? (
@@ -336,8 +371,13 @@ const UsersSection: React.FC = () => {
                                     <span className="material-icons-round text-slate-400">person</span>
                                 </div>
                                 <div>
-                                    <p className="text-sm font-bold text-slate-800">
-                                        {user.name || user.email}
+                                    <p className="text-sm font-bold text-slate-800 flex items-center gap-2">
+                                        {user.name || '未命名'}
+                                        {(user as any).employee_id && (
+                                            <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-mono tracking-tighter">
+                                                {(user as any).employee_id}
+                                            </span>
+                                        )}
                                     </p>
                                     <p className="text-[10px] text-slate-400">{user.email}</p>
                                 </div>
@@ -393,6 +433,100 @@ const UsersSection: React.FC = () => {
                         )}
                     </div>
                 ))
+            )}
+
+            {/* 新增用户弹窗 */}
+            {showAddModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden relative border border-slate-100">
+                        <div className="p-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+                            <div>
+                                <h2 className="text-lg font-bold text-slate-800">新增员工账号</h2>
+                                <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-widest font-bold">Create Internal Staff</p>
+                            </div>
+                            <button onClick={() => setShowAddModal(false)} className="text-slate-300 hover:text-slate-500 transition-colors">
+                                <span className="material-icons-round">close</span>
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateInternalUser} className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">姓名</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-primary/10 outline-none text-xs font-bold"
+                                        placeholder="员工姓名"
+                                        value={newUserForm.name}
+                                        onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">工号 (可选)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-primary/10 outline-none text-xs font-bold"
+                                        placeholder="KL-000"
+                                        value={newUserForm.employee_id}
+                                        onChange={e => setNewUserForm({ ...newUserForm, employee_id: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">登录邮箱 *</label>
+                                <input
+                                    type="email"
+                                    required
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-primary/10 outline-none text-xs font-bold"
+                                    placeholder="email@kimlong.com"
+                                    value={newUserForm.email}
+                                    onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">初始密码 * (至少6位)</label>
+                                <input
+                                    type="password"
+                                    required
+                                    minLength={6}
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-primary/10 outline-none text-xs font-bold"
+                                    placeholder="••••••••"
+                                    value={newUserForm.password}
+                                    onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 px-1">权限分配 *</label>
+                                <select
+                                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl focus:ring-2 focus:ring-primary/10 outline-none text-xs font-black text-slate-700"
+                                    value={newUserForm.role}
+                                    onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value })}
+                                >
+                                    <option value="driver">🚚 司机 (Driver)</option>
+                                    <option value="kitchen">🍳 后厨 (Kitchen)</option>
+                                    <option value="admin">💼 管理员 (Admin)</option>
+                                </select>
+                            </div>
+
+                            <div className="pt-4 flex items-center justify-end gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowAddModal(false)}
+                                    className="px-5 py-3 text-slate-400 hover:text-slate-600 text-xs font-bold transition-colors"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="px-6 py-3 bg-primary text-white rounded-xl text-xs font-black hover:bg-primary-dark transition-all shadow-lg shadow-primary/20 disabled:opacity-50"
+                                >
+                                    {loading ? '正在创建...' : '确认发布账号'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
         </div>
     );

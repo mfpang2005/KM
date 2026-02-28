@@ -72,6 +72,7 @@ export interface User {
     phone?: string;
     avatar_url?: string;
     is_disabled?: boolean;
+    employee_id?: string;
     vehicle_model?: string;
     vehicle_plate?: string;
     vehicle_type?: string;

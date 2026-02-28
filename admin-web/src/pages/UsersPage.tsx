@@ -10,7 +10,13 @@ export const UsersPage: React.FC = () => {
     const [editingUser, setEditingUser] = useState<string | null>(null);
     const [editRole, setEditRole] = useState<string>('');
     const [showAddModal, setShowAddModal] = useState(false);
-    const [newUserForm, setNewUserForm] = useState<{ email: string; role: UserRole; name: string }>({ email: '', role: UserRole.DRIVER, name: '' });
+    const [newUserForm, setNewUserForm] = useState<{ email: string; role: UserRole; name: string; password?: string; employee_id?: string }>({
+        email: '',
+        role: UserRole.DRIVER,
+        name: '',
+        password: '',
+        employee_id: ''
+    });
 
     const loadUsers = useCallback(async () => {
         try {
@@ -61,11 +67,15 @@ export const UsersPage: React.FC = () => {
 
     const handleCreateInternalUser = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!newUserForm.password || newUserForm.password.length < 6) {
+            alert('Password must be at least 6 characters.');
+            return;
+        }
         try {
             setLoading(true);
             await SuperAdminService.createInternalUser(newUserForm);
             setShowAddModal(false);
-            setNewUserForm({ email: '', role: UserRole.DRIVER, name: '' });
+            setNewUserForm({ email: '', role: UserRole.DRIVER, name: '', password: '', employee_id: '' });
             await loadUsers();
         } catch (error) {
             console.error('Failed to create user', error);
@@ -77,14 +87,15 @@ export const UsersPage: React.FC = () => {
 
     const filteredUsers = users.filter(u =>
         u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        (u.name && u.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+        (u.employee_id && u.employee_id.toLowerCase().includes(searchQuery.toLowerCase()))
     );
 
     const roleColors: Record<string, string> = {
-        [UserRole.SUPER_ADMIN]: 'bg-amber-100 text-amber-800 border bg-opacity-50',
-        [UserRole.ADMIN]: 'bg-indigo-100 text-indigo-800 border bg-opacity-50',
-        [UserRole.KITCHEN]: 'bg-green-100 text-green-800 border bg-opacity-50',
-        [UserRole.DRIVER]: 'bg-blue-100 text-blue-800 border bg-opacity-50',
+        [UserRole.SUPER_ADMIN]: 'bg-purple-100 text-purple-800 border-purple-200',
+        [UserRole.ADMIN]: 'bg-indigo-100 text-indigo-800 border-indigo-200',
+        [UserRole.KITCHEN]: 'bg-orange-100 text-orange-800 border-orange-200',
+        [UserRole.DRIVER]: 'bg-blue-100 text-blue-800 border-blue-200',
     };
 
     const statusColors: Record<string, string> = {
@@ -106,14 +117,14 @@ export const UsersPage: React.FC = () => {
                         onClick={() => setShowAddModal(true)}
                         className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold text-sm hover:shadow-[0_8px_20px_rgba(220,38,38,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2"
                     >
-                        <span className="material-icons-round text-[18px]">add</span>
-                        Internal Invite
+                        <span className="material-icons-round text-[18px]">person_add</span>
+                        Create Staff Account
                     </button>
                     <div className="relative w-64">
                         <span className="material-icons-round absolute left-3 top-2.5 text-slate-400">search</span>
                         <input
                             type="text"
-                            placeholder="Search users..."
+                            placeholder="Search email, name or ID..."
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
@@ -126,7 +137,7 @@ export const UsersPage: React.FC = () => {
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold">
-                            <th className="px-6 py-4 w-1/3">User</th>
+                            <th className="px-6 py-4 w-1/3">User Info</th>
                             <th className="px-6 py-4 w-1/4">Role</th>
                             <th className="px-6 py-4 w-1/4">Status</th>
                             <th className="px-6 py-4 w-1/6 text-right">Actions</th>
@@ -147,8 +158,22 @@ export const UsersPage: React.FC = () => {
                             filteredUsers.map(user => (
                                 <tr key={user.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="px-6 py-4">
-                                        <p className="font-bold text-slate-800">{user.name || 'No Name'}</p>
-                                        <p className="text-xs text-slate-500">{user.email}</p>
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-xs">
+                                                {user.name ? user.name.charAt(0).toUpperCase() : '?'}
+                                            </div>
+                                            <div>
+                                                <p className="font-bold text-slate-800 flex items-center gap-2">
+                                                    {user.name || 'No Name'}
+                                                    {user.employee_id && (
+                                                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-mono tracking-tighter">
+                                                            {user.employee_id}
+                                                        </span>
+                                                    )}
+                                                </p>
+                                                <p className="text-xs text-slate-500">{user.email}</p>
+                                            </div>
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4">
                                         {editingUser === user.id ? (
@@ -163,7 +188,7 @@ export const UsersPage: React.FC = () => {
                                                 <option value={UserRole.SUPER_ADMIN}>Super Admin</option>
                                             </select>
                                         ) : (
-                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${roleColors[user.role] || 'bg-slate-100 text-slate-600'}`}>
+                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${roleColors[user.role] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
                                                 {user.role}
                                             </span>
                                         )}
@@ -222,9 +247,9 @@ export const UsersPage: React.FC = () => {
             {showAddModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden relative border border-slate-100">
-                        <div className="p-6 border-b border-slate-100 relative">
-                            <h2 className="text-xl font-bold text-slate-800">Add Internal Staff</h2>
-                            <p className="text-sm text-slate-500 mt-1">Generate a quick account for Driver or Kitchen staff</p>
+                        <div className="p-6 border-b border-slate-100 relative bg-slate-50/50">
+                            <h2 className="text-xl font-bold text-slate-800">Create Staff Account</h2>
+                            <p className="text-sm text-slate-500 mt-1">This will create a new Supabase Auth account and profile</p>
                             <button
                                 onClick={() => setShowAddModal(false)}
                                 className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors"
@@ -234,29 +259,53 @@ export const UsersPage: React.FC = () => {
                         </div>
 
                         <form onSubmit={handleCreateInternalUser} className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Full Name</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
+                                        placeholder="John Doe"
+                                        value={newUserForm.name}
+                                        onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Staff ID (Optional)</label>
+                                    <input
+                                        type="text"
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
+                                        placeholder="KL-001"
+                                        value={newUserForm.employee_id}
+                                        onChange={e => setNewUserForm({ ...newUserForm, employee_id: e.target.value })}
+                                    />
+                                </div>
+                            </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">Email Address *</label>
+                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Email Address *</label>
                                 <input
                                     type="email"
                                     required
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                    placeholder="e.g. kitchen1@kimlong.com"
+                                    placeholder="kitchen1@kimlong.com"
                                     value={newUserForm.email}
                                     onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">Full Name (Optional)</label>
+                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Initial Password * (Min 6 chars)</label>
                                 <input
-                                    type="text"
+                                    type="password"
+                                    required
+                                    minLength={6}
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                    placeholder="John Doe"
-                                    value={newUserForm.name}
-                                    onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })}
+                                    placeholder="••••••••"
+                                    value={newUserForm.password}
+                                    onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5">Assign Role *</label>
+                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Assign Role *</label>
                                 <select
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-bold text-slate-700"
                                     value={newUserForm.role}
@@ -282,7 +331,7 @@ export const UsersPage: React.FC = () => {
                                     className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20 disabled:opacity-50 flex items-center gap-2"
                                 >
                                     {loading ? <span className="material-icons-round animate-spin text-[18px]">autorenew</span> : null}
-                                    Confirm Account
+                                    Create Account
                                 </button>
                             </div>
                         </form>

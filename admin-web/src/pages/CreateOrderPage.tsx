@@ -48,7 +48,7 @@ const PAYMENT_OPTIONS = [
 
 const EQUIPMENT_LIST = [
     "设备 (可选数量)", "汤匙", "烤鸡网", "叉子", "垃圾袋",
-    "Food Tong", "盘子", "红烧桶", "高盖", "杯子", "篮子", "铁脚架"
+    "Food Tong", "盘子", "红烧桶", "高盖", "杯子", "篮子", "铁脚架", "装酱碗"
 ];
 
 export const CreateOrderPage: React.FC = () => {

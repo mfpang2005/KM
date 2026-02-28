@@ -17,22 +17,40 @@ accounts = [
 
 for acc in accounts:
     try:
-        # Create user in auth schema
-        res = supabase.auth.admin.create_user({
-            "email": acc["email"],
-            "password": acc["password"],
-            "email_confirm": True
-        })
-        user = res.user
-        print(f"Created auth user: {acc['email']} with ID: {user.id}")
+        # 1. Try to create user in auth schema
+        try:
+            res = supabase.auth.admin.create_user({
+                "email": acc["email"],
+                "password": acc["password"],
+                "email_confirm": True,
+                "user_metadata": {"role": acc["role"]}
+            })
+            user_id = res.user.id
+            print(f"Auth user created: {acc['email']} ({user_id})")
+        except Exception as e:
+            if "already been registered" in str(e):
+                # 2. If already exists, we need to list users to find the ID (Admin API)
+                users_list = supabase.auth.admin.list_users()
+                target_user = next((u for u in users_list if u.email == acc["email"]), None)
+                if target_user:
+                    user_id = target_user.id
+                    print(f"Found existing auth user: {acc['email']} ({user_id})")
+                else:
+                    print(f"Critical error: Account says registered but not found in list for {acc['email']}")
+                    continue
+            else:
+                print(f"Failed to process {acc['email']}: {e}")
+                continue
         
-        # update public.users
-        supabase.table("users").update({
+        # 3. Force upsert to public.users
+        supabase.table("users").upsert({
+            "id": user_id,
+            "email": acc["email"],
             "role": acc["role"],
             "name": acc["name"],
             "status": "active"
-        }).eq("id", user.id).execute()
-        print(f"Updated public user role to {acc['role']}")
+        }).execute()
+        print(f"Successfully synced {acc['email']} to public.users")
         
     except Exception as e:
-        print(f"Error creating {acc['email']}: {e}")
+        print(f"Global error for {acc['email']}: {e}")

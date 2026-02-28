@@ -54,6 +54,8 @@ import { Order, OrderStatus } from '../types';
 
 // ... (retain interfaces)
 
+import { supabase } from '../src/lib/supabase';
+
 const KitchenPrep: React.FC = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'production' | 'history' | 'recipes'>('production');
@@ -69,35 +71,26 @@ const KitchenPrep: React.FC = () => {
             const orders = await OrderService.getAll();
 
             // Transform Orders to PrepItems
-            // Filter relevant statuses for Kitchen: PENDING (New), PREPARING (In Progress), READY (Done - for history)
-            // Note: We only show PENDING/PREPARING in 'production' tab usually, and READY in 'history'
-
             const items: PrepItem[] = orders.flatMap(order => {
-                // Determine internal status based on OrderStatus
                 let internalStatus: 'pending' | 'preparing' | 'ready' = 'pending';
                 if (order.status === OrderStatus.PREPARING) internalStatus = 'preparing';
                 if (order.status === OrderStatus.READY || order.status === OrderStatus.DELIVERING || order.status === OrderStatus.COMPLETED) internalStatus = 'ready';
 
-                // If order is still 'pending' or 'preparing' or just became 'ready'
-
                 return order.items.map(item => ({
-                    id: `${order.id}-${item.id}`, // specific unique ID
+                    id: `${order.id}-${item.id}`,
                     orderId: order.id,
                     name: item.name,
                     quantity: item.quantity,
-                    category: '主食', // Default category for now
+                    category: '主食',
                     note: item.note,
                     dueTime: order.dueTime,
-                    dueDate: new Date().toLocaleDateString(), // Mock date for grouping
+                    dueDate: new Date().toLocaleDateString(),
                     status: internalStatus,
                     completedAt: internalStatus === 'ready' ? new Date().toLocaleTimeString() : undefined
                 }));
             });
 
-            // Filter out items that shouldn't be in the kitchen view at all?
-            // For now, we keep all, and the tabs filter them.
             setPrepItems(items);
-
         } catch (error) {
             console.error("Failed to fetch kitchen orders", error);
         }
@@ -105,11 +98,26 @@ const KitchenPrep: React.FC = () => {
 
     useEffect(() => {
         fetchOrders();
+
+        // NOTE: 用 Supabase Realtime 监听订单，实现厨房端即时刷新
+        const channel = supabase.channel('kitchen-prep-sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'orders' },
+                () => {
+                    fetchOrders();
+                }
+            )
+            .subscribe();
+
         const timer = setInterval(() => {
             setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-            fetchOrders(); // Poll
-        }, 5000);
-        return () => clearInterval(timer);
+        }, 10000);
+
+        return () => {
+            clearInterval(timer);
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const groupedProduction = useMemo(() => {

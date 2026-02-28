@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 from database import supabase
-from models import User, UserRole, UserStatus, UserUpdate
+from models import User, UserRole, UserStatus, UserUpdate, UserCreateInternal
 from middleware.auth import require_admin
 import logging
 
@@ -15,39 +15,56 @@ router = APIRouter(
 
 @router.post("/", response_model=User)
 async def create_internal_user(
-    email: str,
-    role: UserRole,
-    name: str = None,
+    user_data: UserCreateInternal,
     current_user: dict = Depends(require_admin)
 ):
     """
     管理员手动下发内部账号 (如 Kitchen, Driver)
-    将直接注册并默认为 ACTIVE 状态
-    注意：在实际环境中这里应该调用 supabase.auth.admin.create_user 发配密码
+    通过 Supabase Auth Admin API 直接创建账号，跳过邮件验证
     """
     try:
-        data = {
-            "email": email,
-            "role": role.value,
-            "name": name,
+        # 1. 在 Supabase Auth 中创建账号
+        auth_response = supabase.auth.admin.create_user({
+            "email": user_data.email,
+            "password": user_data.password,
+            "email_confirm": True,
+            "user_metadata": {
+                "role": user_data.role.value,
+                "name": user_data.name
+            }
+        })
+        
+        if not auth_response.user:
+            raise Exception("Failed to create auth user")
+
+        # 2. 同步到业务表 users
+        db_data = {
+            "id": auth_response.user.id,
+            "email": user_data.email,
+            "role": user_data.role.value,
+            "name": user_data.name,
+            "employee_id": user_data.employee_id,
             "status": UserStatus.ACTIVE.value
         }
-        # 由于我们尚未完全接入后端发信Auth，我们只写业务表
-        response = supabase.table("users").insert(data).execute()
+        response = supabase.table("users").insert(db_data).execute()
         
-        # 记录审计日志
+        # 3. 记录审计日志
         supabase.table("audit_logs").insert({
             "actor_id": current_user.get("id"),
             "actor_role": current_user.get("role"),
             "action": "create_internal_user",
-            "target": email,
-            "detail": {"role": role.value, "status": UserStatus.ACTIVE.value}
+            "target": user_data.email,
+            "detail": {
+                "role": user_data.role.value, 
+                "employee_id": user_data.employee_id,
+                "auth_id": auth_response.user.id
+            }
         }).execute()
         
         return response.data[0]
     except Exception as e:
         logger.error(f"Failed to create user: {e}")
-        raise HTTPException(status_code=500, detail="Failed to create user account")
+        raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
 
 
 @router.patch("/{user_id}/status", response_model=User)

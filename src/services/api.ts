@@ -109,6 +109,12 @@ export const SuperAdminService = {
         return response.data;
     },
 
+    /** 创建内部员工账号 (无需邮箱验证) */
+    createInternalUser: async (data: any) => {
+        const response = await api.post('/admin/users/', data);
+        return response.data;
+    },
+
     /** 获取系统配置 */
     getConfig: async () => {
         const response = await api.get('/super-admin/config');
