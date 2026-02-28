@@ -249,7 +249,7 @@ async def get_all_orders(
     return response.data or []
 
 
-@router.patch("/orders/{order_id}/approve")
+@router.patch("/orders/{order_id:path}/approve")
 async def approve_order(
     order_id: str,
     current_user: dict = Depends(require_super_admin),

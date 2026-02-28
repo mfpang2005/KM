@@ -128,3 +128,20 @@ export const SuperAdminService = {
     },
 };
 
+export const VehicleService = {
+    getAll: async () => {
+        const response = await api.get('/vehicles');
+        return response.data;
+    },
+    declareVehicle: async (vehicleId: string, driverId: string) => {
+        // According to vehicle backend router, this might be a PUT or POST to assign/declare
+        // Let's rely on standard backend, using supabase directly if no endpoint exists, or standard API
+        const response = await api.post(`/vehicles/${vehicleId}/assign`, { user_id: driverId });
+        return response.data;
+    },
+    unassignVehicle: async (vehicleId: string, driverId: string) => {
+        const response = await api.post(`/vehicles/${vehicleId}/unassign`, { user_id: driverId });
+        return response.data;
+    }
+};
+

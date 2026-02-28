@@ -1,14 +1,34 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ProductService, AdminOrderService } from '../services/api';
+import { ProductService, AdminOrderService, SuperAdminService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { OrderStatus, PaymentMethod } from '../types';
-import type { Product, OrderCreate } from '../types';
+import type { Product, OrderCreate, User } from '../types';
 
 /** 购物车项目 */
 interface CartItem {
     product: Product;
     quantity: number;
     note: string;
+}
+
+/** 订单确认快照 — 含全部可打印所需字段 */
+interface ConfirmedOrderSnapshot {
+    orderId: string;
+    orderRef: string;
+    total: number;
+    customerName: string;
+    customerPhone: string;
+    address: string;
+    mapsLink: string;
+    remarks: string;
+    eventDate: string;
+    eventTime: string;
+    payment: string;
+    items: CartItem[];
+    equipments: Record<string, number>;
+    driverName: string;
+    dueTime: string;
+    createdAt: string;
 }
 
 /** 格式化订单号：ORD-YYYYMMDD-三位序号 */
@@ -26,6 +46,11 @@ const PAYMENT_OPTIONS = [
     { id: PaymentMethod.CHEQUE, label: '支票 Cheque', icon: 'receipt' },
 ];
 
+const EQUIPMENT_LIST = [
+    "设备 (可选数量)", "汤匙", "烤鸡网", "叉子", "垃圾袋",
+    "Food Tong", "盘子", "红烧桶", "高盖", "杯子", "篮子", "铁脚架"
+];
+
 export const CreateOrderPage: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [productsLoading, setProductsLoading] = useState(true);
@@ -37,17 +62,36 @@ export const CreateOrderPage: React.FC = () => {
     const [address, setAddress] = useState('');
     const [mapsLink, setMapsLink] = useState('');
     const [remarks, setRemarks] = useState('');
+    const [eventDate, setEventDate] = useState('');
+    const [eventTime, setEventTime] = useState('');
     const [payment, setPayment] = useState<string>(PaymentMethod.CASH);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [confirmedOrder, setConfirmedOrder] = useState<{ orderId: string; orderRef: string; total: number } | null>(null);
+    const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderSnapshot | null>(null);
     const orderRef = useRef(generateOrderRef());
 
-    // 加载产品
+    // 新增状态
+    const [equipments, setEquipments] = useState<Record<string, number>>(
+        EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {})
+    );
+    const [drivers, setDrivers] = useState<User[]>([]);
+    const [driversLoading, setDriversLoading] = useState(true);
+    const [selectedDriverId, setSelectedDriverId] = useState<string | undefined>(undefined);
+
+    // 加载产品和司机
     useEffect(() => {
-        ProductService.getAll()
-            .then(setProducts)
-            .catch(err => console.error('Failed to load products', err))
-            .finally(() => setProductsLoading(false));
+        Promise.all([
+            ProductService.getAll(),
+            SuperAdminService.getUsers()
+        ])
+            .then(([productsData, usersData]) => {
+                setProducts(productsData);
+                setDrivers(usersData.filter(u => u.role === 'driver'));
+            })
+            .catch(err => console.error('Failed to load data', err))
+            .finally(() => {
+                setProductsLoading(false);
+                setDriversLoading(false);
+            });
     }, []);
 
     // NOTE: Supabase Realtime 监听 orders 表变化，确保管理员下单后 App 端可实时收到推送
@@ -97,6 +141,14 @@ export const CreateOrderPage: React.FC = () => {
         setCart(prev => prev.map(i => i.product.id === id ? { ...i, note } : i));
     };
 
+    /** 更新设备数量 */
+    const updateEquipmentQty = (name: string, delta: number) => {
+        setEquipments(prev => ({
+            ...prev,
+            [name]: Math.max(0, prev[name] + delta)
+        }));
+    };
+
     /** 提交后台下单 */
     const handleSubmit = async () => {
         if (!customerName.trim() || !customerPhone.trim()) {
@@ -110,25 +162,51 @@ export const CreateOrderPage: React.FC = () => {
 
         setIsSubmitting(true);
         try {
+            // 过滤掉数量为 0 的设备
+            const activeEquipments = Object.fromEntries(
+                Object.entries(equipments).filter(([_, qty]) => qty > 0)
+            );
             const payload: OrderCreate = {
                 customerName: customerName.trim(),
                 customerPhone: customerPhone.trim(),
                 address: address.trim() || '到店自取',
                 items: cart.map(i => ({
                     id: i.product.id,
+                    name: i.product.name,
+                    price: i.product.price,
                     quantity: i.quantity,
                     note: i.note || undefined,
-                } as { id: string; quantity: number })),
+                })),
                 status: OrderStatus.PENDING,
                 dueTime: new Date(Date.now() + 60 * 60 * 1000)
                     .toLocaleTimeString('zh-MY', { hour: '2-digit', minute: '2-digit' }),
                 amount: totalAmount,
                 type: address.trim() ? 'delivery' : 'takeaway',
                 paymentMethod: payment as PaymentMethod,
+                driverId: selectedDriverId,
+                equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
             };
 
             const order = await AdminOrderService.create(payload);
-            setConfirmedOrder({ orderId: order.id, orderRef: orderRef.current, total: totalAmount });
+            const assignedDriver = selectedDriverId ? drivers.find(d => d.id === selectedDriverId) : null;
+            setConfirmedOrder({
+                orderId: order.id,
+                orderRef: orderRef.current,
+                total: totalAmount,
+                customerName: customerName.trim(),
+                customerPhone: customerPhone.trim(),
+                address: address.trim() || '到店自取',
+                mapsLink: mapsLink.trim(),
+                remarks: remarks.trim(),
+                eventDate: eventDate.trim(),
+                eventTime: eventTime.trim(),
+                payment,
+                items: [...cart],
+                equipments: { ...equipments },
+                driverName: assignedDriver?.name || assignedDriver?.email || '未指派',
+                dueTime: payload.dueTime,
+                createdAt: new Date().toLocaleString('zh-MY', { hour12: false }),
+            });
         } catch (err) {
             console.error('Failed to create order', err);
             alert('下单失败，请检查后端服务是否运行');
@@ -145,59 +223,284 @@ export const CreateOrderPage: React.FC = () => {
         setAddress('');
         setMapsLink('');
         setRemarks('');
+        setEventDate('');
+        setEventTime('');
         setPayment(PaymentMethod.CASH);
+        setEquipments(EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {}));
+        setSelectedDriverId(undefined);
         setConfirmedOrder(null);
         orderRef.current = generateOrderRef();
     };
 
-    // ─── 订单确认成功界面 ──────────────────────────────────────────────────
+    // ─── 订单确认成功界面 —— 全部明细 + 可打印收据─────────────────────
     if (confirmedOrder) {
+        const activeEquip = Object.entries(confirmedOrder.equipments).filter(([, qty]) => qty > 0);
+        const paymentLabel = PAYMENT_OPTIONS.find(p => p.id === confirmedOrder.payment)?.label ?? confirmedOrder.payment;
+
         return (
-            <div className="max-w-xl mx-auto animate-in fade-in duration-500">
-                <div className="bg-white rounded-[32px] shadow-xl border border-green-100 overflow-hidden">
-                    <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-8 text-white text-center">
-                        <div className="w-16 h-16 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-4">
-                            <span className="material-icons-round text-4xl">check_circle</span>
+            <div className="max-w-2xl mx-auto animate-in fade-in duration-500" id="printable-order">
+                {/* 打印模式样式 — A4 纸张适配，尽量单页完成 */}
+                <style>{`
+                    @page {
+                        size: A4 portrait;
+                        margin: 10mm;
+                    }
+                    @media print {
+                        /* ── 结构：隐藏侧边栏 / 顶栏 / 按钮 ── */
+                        aside, header, .no-print-area { display: none !important; }
+
+                        /* ── 解除祖先 overflow / height 限制 ── */
+                        html, body, #root, #root > *, #root > * > * {
+                            overflow: visible !important;
+                            height: auto !important;
+                        }
+                        main {
+                            width: 100% !important;
+                            overflow: visible !important;
+                            padding: 0 !important;
+                        }
+                        main > div, main > div > div {
+                            overflow: visible !important;
+                            height: auto !important;
+                            max-width: 100% !important;
+                            padding: 0 !important;
+                        }
+
+                        /* ── 收据容器全宽、无动画 ── */
+                        #printable-order {
+                            width: 100% !important;
+                            max-width: 100% !important;
+                            margin: 0 !important;
+                            animation: none !important;
+                        }
+                        #printable-order > div {
+                            box-shadow: none !important;
+                            border-radius: 8px !important;
+                        }
+
+                        /* ── 全局缩小字体基准（rem 跟随缩） ── */
+                        #printable-order { font-size: 10px !important; }
+
+                        /* ── 压缩各级标题 ── */
+                        #printable-order .text-3xl  { font-size: 16px !important; }
+                        #printable-order .text-2xl  { font-size: 14px !important; }
+                        #printable-order .text-xl   { font-size: 13px !important; }
+                        #printable-order .text-lg   { font-size: 12px !important; }
+                        #printable-order .text-sm   { font-size: 10px !important; }
+                        #printable-order .text-xs   { font-size: 9px  !important; }
+                        #printable-order .text-\\[10px\\] { font-size: 8px !important; }
+                        #printable-order .text-\\[9px\\]  { font-size: 7px !important; }
+
+                        /* ── 压缩内边距 ── */
+                        #printable-order .p-6 { padding: 8px !important; }
+                        #printable-order .p-5 { padding: 7px !important; }
+                        #printable-order .p-4 { padding: 6px !important; }
+                        #printable-order .p-3 { padding: 5px !important; }
+                        #printable-order .p-8 { padding: 8px !important; }
+                        #printable-order .py-4 { padding-top: 5px !important; padding-bottom: 5px !important; }
+                        #printable-order .py-3 { padding-top: 4px !important; padding-bottom: 4px !important; }
+                        #printable-order .py-2\\.5 { padding-top: 3px !important; padding-bottom: 3px !important; }
+                        #printable-order .px-4 { padding-left: 8px !important; padding-right: 8px !important; }
+                        #printable-order .px-3 { padding-left: 6px !important; padding-right: 6px !important; }
+
+                        /* ── 压缩间距 ── */
+                        #printable-order .space-y-5 > * + * { margin-top: 6px !important; }
+                        #printable-order .space-y-3 > * + * { margin-top: 4px !important; }
+                        #printable-order .space-y-2\\.5 > * + * { margin-top: 3px !important; }
+                        #printable-order .gap-4 { gap: 6px !important; }
+                        #printable-order .gap-3 { gap: 5px !important; }
+                        #printable-order .mb-8 { margin-bottom: 6px !important; }
+                        #printable-order .mb-5 { margin-bottom: 5px !important; }
+                        #printable-order .mb-3 { margin-bottom: 4px !important; }
+                        #printable-order .mb-2 { margin-bottom: 3px !important; }
+                        #printable-order .pb-4 { padding-bottom: 5px !important; }
+
+                        /* ── 表格压缩 ── */
+                        #printable-order table { font-size: 9px !important; }
+                        #printable-order thead th { padding: 3px 6px !important; }
+                        #printable-order tbody td { padding: 3px 6px !important; }
+
+                        /* ── QR 码缩小 ── */
+                        #printable-order img { max-width: 70px !important; max-height: 70px !important; width: 70px !important; height: 70px !important; }
+
+                        /* ── 避免在表格行中间断页 ── */
+                        #printable-order tr { page-break-inside: avoid; }
+                        #printable-order .space-y-5 > div { page-break-inside: avoid; }
+                    }
+                `}</style>
+
+                <div className="bg-white rounded-[32px] shadow-xl border border-slate-100 overflow-hidden">
+                    {/* 成功标头 */}
+                    <div className="bg-gradient-to-r from-green-500 to-emerald-500 p-6 text-white text-center no-print-area">
+                        <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
+                            <span className="material-icons-round text-3xl">check_circle</span>
                         </div>
-                        <h2 className="text-2xl font-black">订单已创建</h2>
-                        <p className="text-green-100 text-sm mt-1 font-bold uppercase tracking-widest">Order Confirmed</p>
+                        <h2 className="text-xl font-black">订单已创建</h2>
+                        <p className="text-green-100 text-xs mt-1 font-bold uppercase tracking-widest">Order Confirmed</p>
                     </div>
 
-                    <div className="p-8 space-y-6">
-                        {/* 订单号 */}
-                        <div className="text-center">
-                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">订单参考号</p>
-                            <p className="text-3xl font-black text-slate-900 tracking-tight">{confirmedOrder.orderRef}</p>
-                            <p className="text-xs text-slate-400 mt-1 font-mono">{confirmedOrder.orderId}</p>
+                    <div className="p-6 space-y-5">
+                        {/* 收据公司标头（打印时显示）*/}
+                        <div className="hidden print:block text-center pb-4 border-b border-slate-200">
+                            <p className="text-xl font-black text-slate-900">金龙餐饮配送系统</p>
+                            <p className="text-xs text-slate-400 font-mono">Kim Long Smart Catering System</p>
                         </div>
 
-                        {/* 条形码 */}
-                        <div className="flex flex-col items-center gap-2 bg-slate-50 rounded-2xl p-4">
-                            <p className="text-xs font-black text-slate-400 uppercase tracking-widest">扫描条码</p>
-                            <img
-                                src={`https://bwipjs-api.metafloor.com/?bcid=code128&text=${confirmedOrder.orderRef}&scale=3&rotate=N&includetext=true`}
-                                alt="Order Barcode"
-                                className="h-16 w-auto"
-                            />
+                        {/* 订单参考号 + 时间 */}
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">订单参考号</p>
+                                <p className="text-2xl font-black text-slate-900 tracking-tight font-mono">{confirmedOrder.orderRef}</p>
+                                <p className="text-[10px] text-slate-400 font-mono mt-0.5">{confirmedOrder.orderId}</p>
+                            </div>
+                            <div className="text-right text-xs text-slate-500 font-medium shrink-0">
+                                <p>创建时间: <span className="font-bold text-slate-700">{confirmedOrder.createdAt}</span></p>
+                                <p>预计交付: <span className="font-bold text-slate-700">{confirmedOrder.dueTime}</span></p>
+                            </div>
                         </div>
 
-                        {/* 总额 */}
-                        <div className="flex justify-between items-center py-4 border-t border-slate-100">
-                            <span className="text-slate-600 font-bold">应付总额</span>
-                            <span className="text-2xl font-black text-primary">RM {confirmedOrder.total.toFixed(2)}</span>
+                        {/* QR 码 + 客户信息 */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="flex flex-col items-center gap-2 bg-slate-50 rounded-2xl p-4">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">扫描订单</p>
+                                <img
+                                    src={`https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent(confirmedOrder.orderRef)}&bgcolor=f8f8f8&color=1e293b&margin=2`}
+                                    alt="Order QR Code"
+                                    className="w-24 h-24 rounded-xl"
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                />
+                                <p className="text-[9px] font-black text-slate-300 tracking-widest font-mono">{confirmedOrder.orderRef}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-2xl p-4 space-y-2.5">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">客户资讯</p>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold">姓名</p>
+                                    <p className="text-sm font-black text-slate-800">{confirmedOrder.customerName}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold">电话</p>
+                                    <p className="text-sm font-bold text-slate-700 font-mono">{confirmedOrder.customerPhone}</p>
+                                </div>
+                                <div>
+                                    <p className="text-[10px] text-slate-400 font-bold">地址</p>
+                                    <p className="text-xs font-bold text-slate-700 leading-relaxed">{confirmedOrder.address}</p>
+                                </div>
+                                {confirmedOrder.mapsLink && (
+                                    <a href={confirmedOrder.mapsLink} target="_blank" rel="noopener noreferrer"
+                                        className="inline-flex items-center gap-1 text-[10px] font-black text-red-500 no-print-area">
+                                        <span className="material-icons-round text-[11px]">place</span>Maps 导航
+                                    </a>
+                                )}
+                            </div>
                         </div>
 
-                        <div className="flex gap-3">
+                        {/* 商品明细 */}
+                        <div>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">商品明细</p>
+                            <div className="rounded-2xl border border-slate-100 overflow-hidden">
+                                <table className="w-full text-sm">
+                                    <thead className="bg-slate-50">
+                                        <tr>
+                                            <th className="text-left px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">编号 / 品名</th>
+                                            <th className="text-center px-3 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">数量</th>
+                                            <th className="text-right px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">单价</th>
+                                            <th className="text-right px-4 py-2.5 text-[10px] font-black text-slate-400 uppercase tracking-wider">小计</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {confirmedOrder.items.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-slate-50/50">
+                                                <td className="px-4 py-3">
+                                                    <p className="font-bold text-slate-800">{item.product.name}</p>
+                                                    <p className="text-[9px] text-slate-400 font-mono">{item.product.code}</p>
+                                                    {item.note && <p className="text-[9px] text-slate-400 italic mt-0.5">备注: {item.note}</p>}
+                                                </td>
+                                                <td className="px-3 py-3 text-center">
+                                                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 font-black text-xs">{item.quantity}</span>
+                                                </td>
+                                                <td className="px-4 py-3 text-right text-slate-600 font-mono font-bold text-xs">RM {item.product.price.toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-right font-black text-slate-800 font-mono text-xs">RM {(item.product.price * item.quantity).toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        {/* 设备 / 物资 */}
+                        {activeEquip.length > 0 && (
+                            <div>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">设备 / 物资</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {activeEquip.map(([name, qty]) => (
+                                        <span key={name} className="px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl text-xs font-black">
+                                            {name} × {qty}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* 其他信息 */}
+                        <div className="grid grid-cols-3 gap-3">
+                            <div className="bg-slate-50 rounded-2xl p-3">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">付款方式</p>
+                                <p className="text-xs font-black text-slate-700">{paymentLabel}</p>
+                            </div>
+                            <div className="bg-slate-50 rounded-2xl p-3">
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">配送司机</p>
+                                <p className="text-xs font-black text-slate-700">{confirmedOrder.driverName}</p>
+                            </div>
+                            {confirmedOrder.remarks && (
+                                <div className="bg-amber-50 rounded-2xl p-3 border border-amber-100">
+                                    <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">整单备注</p>
+                                    <p className="text-xs font-bold text-amber-700">{confirmedOrder.remarks}</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* 活动日期 + 活动时间（有值才显示） */}
+                        {(confirmedOrder.eventDate || confirmedOrder.eventTime) && (
+                            <div className="flex gap-3">
+                                {confirmedOrder.eventDate && (
+                                    <div className="flex-1 bg-violet-50 rounded-2xl p-3 border border-violet-100 flex items-center gap-2">
+                                        <span className="material-icons-round text-violet-500 text-[16px]">event</span>
+                                        <div>
+                                            <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest">活动日期</p>
+                                            <p className="text-xs font-black text-violet-700">{confirmedOrder.eventDate}</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {confirmedOrder.eventTime && (
+                                    <div className="flex-1 bg-violet-50 rounded-2xl p-3 border border-violet-100 flex items-center gap-2">
+                                        <span className="material-icons-round text-violet-500 text-[16px]">schedule</span>
+                                        <div>
+                                            <p className="text-[9px] font-black text-violet-400 uppercase tracking-widest">活动时间</p>
+                                            <p className="text-xs font-black text-violet-700">{confirmedOrder.eventTime}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* 总计 */}
+                        <div className="flex justify-between items-center py-4 border-t-2 border-slate-900">
+                            <span className="text-sm font-black text-slate-600 uppercase tracking-wider">应付总额</span>
+                            <span className="text-3xl font-black text-indigo-600 font-mono">RM {confirmedOrder.total.toFixed(2)}</span>
+                        </div>
+
+                        {/* 操作按钮 */}
+                        <div className="flex gap-3 no-print-area">
                             <button
                                 onClick={() => window.print()}
                                 className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                             >
                                 <span className="material-icons-round text-[18px]">print</span>
-                                打印
+                                打印收据
                             </button>
                             <button
                                 onClick={handleReset}
-                                className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-blue-500/20 transition-all"
+                                className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-indigo-500/20 transition-all"
                             >
                                 <span className="material-icons-round text-[18px]">add_shopping_cart</span>
                                 再次下单
@@ -304,6 +607,39 @@ export const CreateOrderPage: React.FC = () => {
                                     })}
                                 </div>
                             )}
+                        </div>
+                    </div>
+
+                    {/* 设备/物资选择模块 */}
+                    <div className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden mt-4">
+                        <div className="p-5 border-b border-slate-50">
+                            <h3 className="font-black text-slate-700 text-sm flex items-center gap-2">
+                                <span className="material-icons-round text-[18px] text-blue-500">handyman</span>
+                                包含设备 / 物资
+                            </h3>
+                        </div>
+                        <div className="p-4 grid grid-cols-2 lg:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto no-scrollbar">
+                            {EQUIPMENT_LIST.map(eq => (
+                                <div key={eq} className={`flex flex-col justify-between p-3 rounded-2xl border transition-all ${equipments[eq] > 0 ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
+                                    <span className="text-xs font-bold text-slate-700 mb-2 truncate" title={eq}>{eq}</span>
+                                    <div className="flex items-center justify-between mt-auto">
+                                        <button
+                                            onClick={() => updateEquipmentQty(eq, -1)}
+                                            className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                                            disabled={equipments[eq] === 0}
+                                        >
+                                            <span className="material-icons-round text-sm">remove</span>
+                                        </button>
+                                        <span className="text-sm font-black w-8 text-center">{equipments[eq]}</span>
+                                        <button
+                                            onClick={() => updateEquipmentQty(eq, 1)}
+                                            className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors"
+                                        >
+                                            <span className="material-icons-round text-sm">add</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -473,6 +809,34 @@ export const CreateOrderPage: React.FC = () => {
                                 />
                             </div>
 
+                            {/* 活动日期和活动时间 */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-black text-slate-400 mb-1.5 flex items-center gap-1">
+                                        <span className="material-icons-round text-[13px] text-violet-500">event</span>
+                                        活动日期（选填）
+                                    </label>
+                                    <input
+                                        type="date"
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700"
+                                        value={eventDate}
+                                        onChange={e => setEventDate(e.target.value)}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-black text-slate-400 mb-1.5 flex items-center gap-1">
+                                        <span className="material-icons-round text-[13px] text-violet-500">schedule</span>
+                                        活动时间（选填）
+                                    </label>
+                                    <input
+                                        type="time"
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700"
+                                        value={eventTime}
+                                        onChange={e => setEventTime(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
                             {/* 付款方式 */}
                             <div>
                                 <label className="block text-xs font-black text-slate-400 mb-1.5">付款方式</label>
@@ -490,6 +854,67 @@ export const CreateOrderPage: React.FC = () => {
                                     ))}
                                 </div>
                             </div>
+                        </div>
+                    </div>
+
+                    {/* 指派配送员模块 */}
+                    <div className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden mt-4">
+                        <div className="p-5 border-b border-slate-50 flex justify-between items-center">
+                            <h3 className="font-black text-slate-700 text-sm flex items-center gap-2">
+                                <span className="material-icons-round text-[18px] text-teal-500">local_shipping</span>
+                                指派配送员
+                            </h3>
+                            {selectedDriverId && (
+                                <button
+                                    onClick={() => setSelectedDriverId(undefined)}
+                                    className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors"
+                                >
+                                    清除选择
+                                </button>
+                            )}
+                        </div>
+                        <div className="p-4">
+                            {driversLoading ? (
+                                <div className="text-center py-4 text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
+                                    <span className="material-icons-round animate-spin text-sm">autorenew</span>
+                                    加载司机列表中...
+                                </div>
+                            ) : drivers.length === 0 ? (
+                                <div className="text-center py-4 text-xs font-bold text-slate-400">
+                                    暂无可用司机
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 gap-2 max-h-[220px] overflow-y-auto no-scrollbar pr-1">
+                                    {drivers.map(driver => (
+                                        <button
+                                            key={driver.id}
+                                            onClick={() => setSelectedDriverId(driver.id)}
+                                            className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${selectedDriverId === driver.id ? 'bg-teal-50 border-teal-300 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-200'}`}
+                                        >
+                                            <div className="relative">
+                                                {driver.avatar_url ? (
+                                                    <img src={driver.avatar_url} alt={driver.name} className="w-10 h-10 rounded-full object-cover" />
+                                                ) : (
+                                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
+                                                        <span className="material-icons-round text-lg">person</span>
+                                                    </div>
+                                                )}
+                                                <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${driver.status === 'active' ? 'bg-green-500' : 'bg-slate-300'}`}></span>
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-sm font-bold text-slate-800 truncate">{driver.name || driver.email}</div>
+                                                <div className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mt-0.5">
+                                                    <span className="material-icons-round text-[12px] text-slate-400">phone</span>
+                                                    {driver.phone || '无电话记录'}
+                                                </div>
+                                            </div>
+                                            {selectedDriverId === driver.id && (
+                                                <span className="material-icons-round text-teal-600">check_circle</span>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
 

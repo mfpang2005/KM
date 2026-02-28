@@ -151,7 +151,6 @@ export const ProductsPage: React.FC = () => {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-xl font-bold text-slate-800">Products Management</h1>
-                    <p className="text-slate-500 text-sm mt-1">Manage global product catalog and pricing</p>
                 </div>
                 <button
                     onClick={() => handleOpenModal()}

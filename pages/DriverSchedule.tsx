@@ -1,24 +1,34 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { OrderService } from '../src/services/api';
-import { Order, OrderStatus, PaymentMethod } from '../types';
-
-import { GoogleGenAI, LiveServerMessage, Modality } from '@google/genai';
+import { Order, OrderStatus } from '../types';
+import GoEasy from 'goeasy';
+import { supabase } from '../src/lib/supabase';
 import { getGoogleMapsUrl } from '../src/utils/maps';
+
+// NOTE: GoEasy 配置 — 对应控制台 [IM即时通讯] KIM_LONG_COMUNITY 应用
+const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
+const GOEASY_HOST = 'singapore.goeasy.io';
+const CHANNEL = 'KIM_LONG_COMUNITY';
+
+/** 司机端聊天消息数据结构 */
+interface DriverChatMsg {
+    id: string;
+    senderId: string;
+    senderLabel: string;
+    senderRole: string;
+    content: string;
+    timestamp: number;
+    isMine: boolean;
+}
 
 interface Vehicle {
     id: string;
     model: string;
     plate: string;
     type: string;
-    status: 'good' | 'maintenance';
+    status: 'good' | 'maintenance' | 'available' | 'busy' | 'repair';
 }
-
-const MOCK_VEHICLES: Vehicle[] = [
-    { id: 'v1', model: 'Toyota Hiace', plate: 'VNZ 8821', type: '冷链运输', status: 'good' },
-    { id: 'v2', model: 'Lorry 3-Ton', plate: 'BCC 4492', type: '常温大货', status: 'good' },
-    { id: 'v3', model: 'Nissan Urvan', plate: 'WWR 1102', type: '市区小型', status: 'maintenance' },
-];
 
 const DriverSchedule: React.FC = () => {
     const navigate = useNavigate();
@@ -34,37 +44,80 @@ const DriverSchedule: React.FC = () => {
     const [driverImg, setDriverImg] = useState('https://lh3.googleusercontent.com/aida-public/AB6AXuDZnnLYlTfkxNz0bDfw9XrL63qvDkeps9ojYKowAsW6_ibm2prNRJ9pQeAdh0jje0WmIYPEZ9gt1HJOwCgCIUQQQC1FrEvlBa6czn2RSPcTGPdqXT8wzi8TnvuNXaRXK-tpg_kicZ6JoGRysicOIiBoY_Fpn1BaE4iQ4MYOvlxb-zYTVTt_DFVBBEYCf77OjEGCfqp-8jy1yT0OHey_bJ9oNyzKucAx8rM0VX3F43wPKJqkHiFfkWPR9YVULi4S2TInyYyQTAlHTOka');
 
     // Vehicle State
-    const [selectedVehicle, setSelectedVehicle] = useState<Vehicle>(MOCK_VEHICLES[0]);
+    const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+    const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
     const [isVehicleDeclaring, setIsVehicleDeclaring] = useState(false);
     const [declaredTime, setDeclaredTime] = useState<string | null>(null);
 
-    // PTT States
+    // PTT / GoEasy States
     const [isPttOpen, setIsPttOpen] = useState(false);
     const [isTransmitting, setIsTransmitting] = useState(false);
-    const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'LISTENING' | 'TALKING'>('IDLE');
+    const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'CONNECTED' | 'TALKING' | 'LISTENING'>('IDLE');
+    // NOTE: 聊天消息状态
+    const [driverChatMessages, setDriverChatMessages] = useState<DriverChatMsg[]>([]);
+    const [driverChatInput, setDriverChatInput] = useState('');
 
     const audioContextRef = useRef<AudioContext | null>(null);
-    const streamRef = useRef<MediaStream | null>(null);
-    const sessionRef = useRef<any>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    // NOTE: GoEasy 单例，避免重复初始化
+    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
+    const driverIdRef = useRef<string>(`driver-${Math.random().toString(36).slice(2, 9)}`);
+    // NOTE: Supabase Presence channel ref，PTT 开启时加入，让 admin-web 可以看到司机在线
+    const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+    const chatBottomRef = useRef<HTMLDivElement | null>(null);
 
     const fetchOrders = async () => {
         try {
             const allOrders = await OrderService.getAll();
-            // Driver sees orders that are READY (to handle) or DELIVERING (handling) or COMPLETED (history)
-            // Filter might be better done in backend for performance, but frontend filter ok for now
             setOrders(allOrders);
         } catch (error) {
             console.error("Failed to fetch driver orders", error);
         }
     };
 
+    const fetchVehicles = async () => {
+        try {
+            const { data, error } = await supabase.from('vehicles').select('*');
+            if (data && !error) {
+                // translate db columns to Vehicle interface
+                const mappedVehicles: Vehicle[] = data.map(v => ({
+                    id: v.id,
+                    model: v.model,
+                    plate: v.plate_no || v.plate,
+                    type: v.type,
+                    status: v.status as any
+                }));
+                setVehicles(mappedVehicles);
+                if (!selectedVehicle && mappedVehicles.length > 0) {
+                    setSelectedVehicle(mappedVehicles[0]);
+                }
+            }
+        } catch (error) {
+            console.error("Failed to fetch vehicles", error);
+        }
+    };
+
     useEffect(() => {
         fetchOrders();
+        fetchVehicles();
+
+        // Supabase Realtime Listener for Vehicles
+        const vehicleChannel = supabase.channel('public:vehicles')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, payload => {
+                fetchVehicles(); // Reload vehicles when there's a change
+            })
+            .subscribe();
+
         const timer = setInterval(() => {
             setNow(new Date());
             fetchOrders();
         }, 5000);
-        return () => clearInterval(timer);
+
+        return () => {
+            clearInterval(timer);
+            supabase.removeChannel(vehicleChannel);
+        };
     }, []);
 
     const taskOrders = useMemo(() => orders.filter(o =>
@@ -108,53 +161,286 @@ const DriverSchedule: React.FC = () => {
         }
     };
 
-    const startPttSession = async () => {
-        setPttStatus('CONNECTING');
-        try {
-            const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            streamRef.current = stream;
+    /** 将 Blob 转为 Base64 */
+    const blobToBase64 = (blob: Blob): Promise<string> =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
 
-            const sessionPromise = ai.live.connect({
-                model: 'gemini-2.5-flash-native-audio-preview-12-2025',
-                config: {
-                    responseModalities: [Modality.AUDIO],
-                    systemInstruction: "你现在是金龙餐饮的总台调度员。你正在通过对讲机与司机交流。回复要简短专业，像真正的对讲机通话。Over。"
-                },
-                callbacks: {
-                    onopen: () => setPttStatus('IDLE'),
-                    onmessage: async (message: LiveServerMessage) => {
-                        const audioData = message.serverContent?.modelTurn?.parts[0]?.inlineData?.data;
-                        if (audioData && audioContextRef.current) {
-                            setPttStatus('LISTENING');
-                            const bytes = atob(audioData);
-                            const array = new Uint8Array(bytes.length);
-                            for (let i = 0; i < bytes.length; i++) array[i] = bytes.charCodeAt(i);
-                            const dataInt16 = new Int16Array(array.buffer);
-                            const buffer = audioContextRef.current.createBuffer(1, dataInt16.length, 24000);
-                            const channelData = buffer.getChannelData(0);
-                            for (let i = 0; i < dataInt16.length; i++) channelData[i] = dataInt16[i] / 32768.0;
-                            const source = audioContextRef.current.createBufferSource();
-                            source.buffer = buffer;
-                            source.connect(audioContextRef.current.destination);
-                            source.onended = () => setPttStatus('IDLE');
-                            source.start();
-                        }
+    /** 播放收到的音频（Base64 → ArrayBuffer → Web Audio） */
+    const playAudio = useCallback(async (base64: string) => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+        try {
+            const binary = atob(base64);
+            const buf = new ArrayBuffer(binary.length);
+            const view = new Uint8Array(buf);
+            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
+            const src = audioContextRef.current.createBufferSource();
+            src.buffer = audioBuf;
+            src.connect(audioContextRef.current.destination);
+            src.onended = () => setPttStatus('CONNECTED');
+            src.start(0);
+            setPttStatus('LISTENING');
+        } catch (err) {
+            console.error('[GoEasy PTT] Audio decode error', err);
+            setPttStatus('CONNECTED');
+        }
+    }, []);
+
+    /** 初始化 GoEasy 连接并订阅频道，同时加入 Supabase Presence */
+    const startPttSession = async () => {
+        setIsPttOpen(true);
+        setPttStatus('CONNECTING');
+
+        /** 内部帧函数，一定在断开旧连接后才执行 */
+        const doConnect = () => {
+            try {
+                const goEasy = GoEasy.getInstance({
+                    host: GOEASY_HOST,
+                    appkey: GOEASY_APPKEY,
+                    modules: ['pubsub'],
+                });
+                goEasyRef.current = goEasy;
+
+                goEasy.connect({
+                    id: driverIdRef.current,
+                    data: { role: 'driver' },
+                    onSuccess: () => {
+                        setPttStatus('CONNECTED');
+                        goEasy.pubsub.subscribe({
+                            channel: CHANNEL,
+                            onMessage: async (message: any) => {
+                                try {
+                                    const payload = JSON.parse(message.content);
+                                    if (payload.senderId === driverIdRef.current) return;
+                                    if (payload.type === 'text') {
+                                        setDriverChatMessages(prev => [...prev, {
+                                            id: `${payload.senderId}-${payload.timestamp}`,
+                                            senderId: payload.senderId,
+                                            senderLabel: payload.senderLabel ?? '管理员',
+                                            senderRole: payload.senderRole ?? 'admin',
+                                            content: payload.content,
+                                            timestamp: payload.timestamp,
+                                            isMine: false,
+                                        }]);
+                                        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+                                    } else if (payload.type === 'audio' || payload.audio) {
+                                        await playAudio(payload.audio);
+                                    }
+                                } catch (err) {
+                                    console.error('[GoEasy PTT] Failed to handle message', err);
+                                }
+                            },
+                            onSuccess: () => console.log('[GoEasy PTT] Subscribed to Global'),
+                            onFailed: (err: any) => console.error('[GoEasy PTT] Subscribe failed', err),
+                        });
+                        // 订阅司机私人频道
+                        const privateChannel = `driver_${driverIdRef.current}`;
+                        goEasy.pubsub.subscribe({
+                            channel: privateChannel,
+                            onMessage: async (message: any) => {
+                                try {
+                                    const payload = JSON.parse(message.content);
+                                    if (payload.type === 'text') {
+                                        setDriverChatMessages(prev => [...prev, {
+                                            id: `${payload.senderId}-${payload.timestamp}`,
+                                            senderId: payload.senderId,
+                                            senderLabel: payload.senderLabel ?? '管理员',
+                                            senderRole: payload.senderRole ?? 'admin',
+                                            content: payload.content,
+                                            timestamp: payload.timestamp,
+                                            isMine: false,
+                                        }]);
+                                        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+                                    } else if (payload.type === 'audio' || payload.audio) {
+                                        await playAudio(payload.audio);
+                                    }
+                                } catch (err) {
+                                    console.error('[GoEasy Private] handle message error', err);
+                                }
+                            },
+                            onSuccess: () => console.log(`[GoEasy] Subscribed to private: ${privateChannel}`),
+                            onFailed: (err: any) => console.error('[GoEasy] Private subscribe failed', err),
+                        });
                     },
-                    onclose: () => setPttStatus('IDLE'),
-                    onerror: () => setPttStatus('IDLE')
+                    onFailed: (err: any) => {
+                        console.error('[GoEasy PTT] Connect failed', err);
+                        setPttStatus('IDLE');
+                    },
+                    onDisconnected: () => setPttStatus('IDLE')
+                });
+            } catch (e) {
+                console.error('[GoEasy PTT] Init error', e);
+                setPttStatus('IDLE');
+            }
+        };
+
+        // NOTE: 初始化前先检查并断开旧连接，避免单例状态冲突
+        try {
+            const status = GoEasy.getConnectionStatus();
+            if (status === 'disconnected') {
+                doConnect();
+            } else {
+                GoEasy.disconnect({
+                    onSuccess: () => doConnect(),
+                    onFailed: () => doConnect(),
+                });
+            }
+        } catch {
+            doConnect();
+        }
+
+        // NOTE: 加入 Supabase Presence，让 admin-web Walkie-Talkie 页面的在线用户列表显示此司机
+        try {
+            const ch = supabase.channel('walkie-talkie-room', {
+                config: { presence: { key: driverIdRef.current } },
+            });
+            ch.subscribe(async (status) => {
+                if (status === 'SUBSCRIBED') {
+                    await ch.track({
+                        userId: driverIdRef.current,
+                        email: '司机端',
+                        role: 'driver',
+                        joinedAt: new Date().toISOString(),
+                    });
                 }
             });
-            sessionRef.current = await sessionPromise;
+            presenceChannelRef.current = ch;
         } catch (e) {
-            setPttStatus('IDLE');
+            console.error('[Presence] Failed to join walkie-talkie-room', e);
         }
     };
 
-    const handlePttDown = () => { if (sessionRef.current) { setIsTransmitting(true); setPttStatus('TALKING'); } };
-    const handlePttUp = () => { setIsTransmitting(false); setPttStatus('IDLE'); };
-    const stopPttSession = () => { sessionRef.current?.close(); streamRef.current?.getTracks().forEach(t => t.stop()); setIsPttOpen(false); setPttStatus('IDLE'); };
+    /** 按下 PTT — 开始录音 */
+    const handlePttDown = async () => {
+        if (pttStatus !== 'CONNECTED') return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            audioChunksRef.current = [];
+            mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+            mr.start(100);
+            mediaRecorderRef.current = mr;
+            setIsTransmitting(true);
+            setPttStatus('TALKING');
+        } catch {
+            alert('请允许麦克风权限以使用对讲功能。');
+        }
+    };
+
+    /** 松开 PTT — 停止录音，发布音频到 GoEasy */
+    const handlePttUp = () => {
+        if (!mediaRecorderRef.current || !isTransmitting) return;
+        setIsTransmitting(false);
+        setPttStatus('CONNECTED');
+        const mr = mediaRecorderRef.current;
+        // NOTE: onstop 必须在 stop() 之前赋值，否则有时序 bug 导致回调不触发
+        mr.onstop = async () => {
+            if (!goEasyRef.current) return;
+            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            if (blob.size < 100) return;
+            try {
+                const base64Audio = await blobToBase64(blob);
+                const payload = JSON.stringify({
+                    type: 'audio',
+                    senderId: driverIdRef.current,
+                    senderLabel: '司机端',
+                    senderRole: 'driver',
+                    audio: base64Audio,
+                });
+                goEasyRef.current.pubsub.publish({
+                    channel: CHANNEL,
+                    message: payload,
+                    onSuccess: () => console.log('[GoEasy PTT] Audio published'),
+                    onFailed: (err: any) => console.error('[GoEasy PTT] Publish failed', err),
+                });
+
+                // 将语音记录存储到 Supabase messages 表，触发 SuperAdmin 的 Realtime 监听
+                await supabase.from('messages').insert([{
+                    sender_id: driverIdRef.current,
+                    sender_label: driverName || '司机端',
+                    sender_role: 'driver',
+                    receiver_id: 'GLOBAL',
+                    content: base64Audio,
+                    type: 'audio'
+                }]);
+            } catch (err) {
+                console.error('[GoEasy PTT] Encode/send error', err);
+            }
+            audioChunksRef.current = [];
+        };
+        mr.stop();
+        mr.stream.getTracks().forEach(t => t.stop());
+    };
+
+    /** 关闭 PTT 面板，断开 GoEasy 并离开 Supabase Presence */
+    const stopPttSession = () => {
+        if (goEasyRef.current) {
+            try {
+                goEasyRef.current.pubsub.unsubscribe({ channel: CHANNEL, onSuccess: () => { }, onFailed: () => { } });
+            } catch { }
+        }
+        mediaRecorderRef.current?.stop();
+        // NOTE: 必须调用 disconnect 清理单例状态，否则下次打开 PTT 会报 Initialization failed
+        try {
+            GoEasy.disconnect({ onSuccess: () => { }, onFailed: () => { } });
+        } catch { }
+        // NOTE: 离开 Presence 频道，admin 在线列表中移除此司机
+        if (presenceChannelRef.current) {
+            supabase.removeChannel(presenceChannelRef.current);
+            presenceChannelRef.current = null;
+        }
+        setIsPttOpen(false);
+        setPttStatus('IDLE');
+        goEasyRef.current = null;
+    };
+
+    /** 司机端发送文字消息到 GoEasy 频道 */
+    const sendDriverTextMessage = () => {
+        const text = driverChatInput.trim();
+        if (!text || !goEasyRef.current || pttStatus === 'IDLE' || pttStatus === 'CONNECTING') return;
+        const ts = Date.now();
+        setDriverChatMessages(prev => [...prev, {
+            id: `${driverIdRef.current}-${ts}`,
+            senderId: driverIdRef.current,
+            senderLabel: '司机端',
+            senderRole: 'driver',
+            content: text,
+            timestamp: ts,
+            isMine: true,
+        }]);
+        setDriverChatInput('');
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+        goEasyRef.current.pubsub.publish({
+            channel: CHANNEL,
+            message: JSON.stringify({ type: 'text', senderId: driverIdRef.current, senderLabel: '司机端', senderRole: 'driver', content: text, timestamp: ts }),
+            onSuccess: () => { },
+            onFailed: (err: any) => console.error('[GoEasy] Text publish failed', err),
+        });
+
+        const insertMsg = async () => {
+            try {
+                await supabase.from('messages').insert([{
+                    sender_id: driverIdRef.current,
+                    sender_label: driverName || '司机端',
+                    sender_role: 'driver',
+                    receiver_id: 'GLOBAL',
+                    content: text,
+                    type: 'text'
+                }]);
+            } catch (err) {
+                console.error('Failed to insert message', err);
+            }
+        };
+        insertMsg();
+    };
 
     const handleWhatsApp = (order: Order, type: 'general' | 'arrival' = 'general') => {
         const cleanPhone = order.customerPhone.replace(/\D/g, '');
@@ -166,10 +452,16 @@ const DriverSchedule: React.FC = () => {
         window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
     };
 
-    const handleDeclareVehicle = (vehicle: Vehicle) => {
-        setSelectedVehicle(vehicle);
-        setDeclaredTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
-        setIsVehicleDeclaring(false);
+    const handleDeclareVehicle = async (vehicle: Vehicle) => {
+        try {
+            // Update db status to busy to simulate declaration/assignment
+            await supabase.from('vehicles').update({ status: 'busy' }).eq('id', vehicle.id);
+            setSelectedVehicle(vehicle);
+            setDeclaredTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            setIsVehicleDeclaring(false);
+        } catch (error) {
+            console.error("Failed to declare vehicle", error);
+        }
     };
 
     return (
@@ -191,8 +483,12 @@ const DriverSchedule: React.FC = () => {
                         <button onClick={() => { window.location.href = `tel:${driverPhone}`; }} className="w-10 h-10 bg-slate-900 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90">
                             <span className="material-icons-round text-sm">headset_mic</span>
                         </button>
-                        <button onClick={() => { if (!isPttOpen) { setIsPttOpen(true); startPttSession(); } }} className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-90 ${isPttOpen ? 'bg-primary text-white animate-pulse' : 'bg-white text-slate-400 border border-slate-100'}`}>
-                            <span className="material-icons-round text-sm">radio</span>
+                        {/* GoEasy PTT 入口按钮 */}
+                        <button
+                            onClick={() => { if (!isPttOpen) startPttSession(); }}
+                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-90 ${isPttOpen ? 'bg-primary text-white animate-pulse' : 'bg-white text-slate-400 border border-slate-100'
+                                }`}>
+                            <span className="material-icons-round text-sm">cell_tower</span>
                         </button>
                     </div>
                 )}
@@ -373,15 +669,17 @@ const DriverSchedule: React.FC = () => {
                                         <span className="material-icons-round">local_shipping</span>
                                     </div>
                                     <div>
-                                        <p className="text-sm font-black text-slate-800">{selectedVehicle.model}</p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{selectedVehicle.plate} • {selectedVehicle.type}</p>
+                                        <p className="text-sm font-black text-slate-800">{selectedVehicle?.model || '未选择车辆'}</p>
+                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{selectedVehicle?.plate || '-'} • {selectedVehicle?.type || '-'}</p>
                                         {declaredTime && (
                                             <p className="text-[8px] text-primary font-black uppercase mt-1">已申报使用: {declaredTime}</p>
                                         )}
                                     </div>
                                 </div>
                                 <div className="flex flex-col items-end gap-1">
-                                    <span className="bg-green-50 text-green-600 text-[8px] font-black uppercase px-2 py-1 rounded-md">运行良好</span>
+                                    <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${selectedVehicle?.status === 'repair' || selectedVehicle?.status === 'maintenance' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
+                                        {selectedVehicle?.status === 'repair' || selectedVehicle?.status === 'maintenance' ? '维保中' : '运行良好'}
+                                    </span>
                                     <span className="text-[10px] font-black text-slate-300 group-hover:text-primary transition-colors">修改车辆</span>
                                 </div>
                             </button>
@@ -424,27 +722,27 @@ const DriverSchedule: React.FC = () => {
                             </button>
                         </header>
                         <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-6">
-                            {MOCK_VEHICLES.map(v => (
+                            {vehicles.map(v => (
                                 <button
                                     key={v.id}
                                     onClick={() => handleDeclareVehicle(v)}
-                                    disabled={v.status === 'maintenance'}
-                                    className={`w-full p-6 rounded-[32px] border transition-all text-left flex items-center justify-between group active:scale-[0.98] ${selectedVehicle.id === v.id ? 'bg-primary/5 border-primary shadow-lg shadow-primary/5' : 'bg-slate-50 border-slate-100'}`}
+                                    disabled={v.status === 'maintenance' || v.status === 'repair'}
+                                    className={`w-full p-6 rounded-[32px] border transition-all text-left flex items-center justify-between group active:scale-[0.98] ${selectedVehicle?.id === v.id ? 'bg-primary/5 border-primary shadow-lg shadow-primary/5' : 'bg-slate-50 border-slate-100'}`}
                                 >
                                     <div className="flex items-center gap-4">
-                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${selectedVehicle.id === v.id ? 'bg-primary text-white' : 'bg-white text-slate-300'}`}>
+                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${selectedVehicle?.id === v.id ? 'bg-primary text-white' : 'bg-white text-slate-300'}`}>
                                             <span className="material-icons-round text-2xl">local_shipping</span>
                                         </div>
                                         <div>
-                                            <h4 className={`text-sm font-black ${selectedVehicle.id === v.id ? 'text-slate-900' : 'text-slate-700'}`}>{v.model}</h4>
+                                            <h4 className={`text-sm font-black ${selectedVehicle?.id === v.id ? 'text-slate-900' : 'text-slate-700'}`}>{v.model}</h4>
                                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{v.plate} • {v.type}</p>
                                         </div>
                                     </div>
-                                    {v.status === 'maintenance' ? (
+                                    {v.status === 'maintenance' || v.status === 'repair' ? (
                                         <span className="bg-red-50 text-red-500 text-[8px] font-black uppercase px-2 py-1 rounded-md">维保中</span>
                                     ) : (
-                                        <span className={`text-[10px] font-black uppercase ${selectedVehicle.id === v.id ? 'text-primary' : 'text-slate-300'}`}>
-                                            {selectedVehicle.id === v.id ? '正在使用' : '选择此车'}
+                                        <span className={`text-[10px] font-black uppercase ${selectedVehicle?.id === v.id ? 'text-primary' : 'text-slate-300'}`}>
+                                            {selectedVehicle?.id === v.id ? '正在使用' : '选择此车'}
                                         </span>
                                     )}
                                 </button>
@@ -460,39 +758,116 @@ const DriverSchedule: React.FC = () => {
                 </div>
             )}
 
-            {/* PTT / Zello Overlay */}
+            {/* GoEasy PTT Overlay — 语音 + 即时文字聊天 */}
             {isPttOpen && (
-                <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-[100] flex flex-col items-center justify-center animate-in fade-in duration-300 px-8">
-                    <div className="absolute top-12 left-0 right-0 px-8 flex justify-between items-center">
+                <div className="fixed inset-0 bg-slate-900/95 backdrop-blur-xl z-[100] flex flex-col animate-in fade-in duration-300">
+                    {/* 顶部状态栏 */}
+                    <div className="px-6 pt-12 pb-4 flex justify-between items-center border-b border-white/5 shrink-0">
                         <div className="flex items-center gap-3 text-white">
                             <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center text-primary border border-primary/20">
-                                <span className="material-icons-round">radio</span>
+                                <span className="material-icons-round">cell_tower</span>
                             </div>
                             <div>
-                                <h2 className="font-black text-sm uppercase tracking-widest">总台对讲频道</h2>
-                                <p className="text-[10px] text-slate-500 font-bold uppercase tracking-tight">Channel: Central Dispatch 01</p>
+                                <h2 className="font-black text-sm uppercase tracking-widest">GoEasy 对讲频道</h2>
+                                <p className="text-[10px] font-bold uppercase tracking-tight"
+                                    style={{ color: pttStatus === 'CONNECTED' || pttStatus === 'TALKING' || pttStatus === 'LISTENING' ? '#4ade80' : '#64748b' }}>
+                                    {pttStatus === 'CONNECTING' ? '连接中...' : pttStatus === 'CONNECTED' ? 'LIVE · KIM_LONG_COMUNITY' : pttStatus === 'TALKING' ? '正在发射...' : pttStatus === 'LISTENING' ? '收到信号...' : '已断开'}
+                                </p>
                             </div>
                         </div>
                         <button onClick={stopPttSession} className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-transform">
                             <span className="material-icons-round">close</span>
                         </button>
                     </div>
-                    <div className="flex-1 flex flex-col items-center justify-center w-full gap-12 text-center">
-                        <div>
-                            <div className={`text-4xl font-black mb-2 tracking-tighter ${pttStatus === 'TALKING' ? 'text-primary' : pttStatus === 'LISTENING' ? 'text-green-500' : 'text-slate-500'}`}>
-                                {pttStatus === 'CONNECTING' ? '正在连接...' : pttStatus === 'TALKING' ? '正在发射...' : pttStatus === 'LISTENING' ? '总台传讯中' : '等待呼叫'}
+
+                    {/* 聊天消息区域 */}
+                    <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3">
+                        {driverChatMessages.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-2">
+                                <span className="material-icons-round text-3xl">chat_bubble_outline</span>
+                                <p className="text-xs font-bold">暂无消息</p>
                             </div>
-                            <p className="text-[10px] text-slate-600 font-black uppercase tracking-[0.3em]">{pttStatus === 'IDLE' ? '长按圆形按钮说话' : '松手发送给总台'}</p>
+                        ) : driverChatMessages.map((msg) => {
+                            const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                            const roleColor = msg.senderRole === 'driver' ? 'bg-primary' : msg.senderRole === 'super_admin' ? 'bg-purple-500' : 'bg-blue-500';
+                            const roleIcon = msg.senderRole === 'driver' ? 'local_shipping' : 'admin_panel_settings';
+                            return (
+                                <div key={msg.id} className={`flex gap-2.5 ${msg.isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+                                    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${roleColor}`}>
+                                        <span className="material-icons-round text-white text-[12px]">{roleIcon}</span>
+                                    </div>
+                                    <div className={`max-w-[70%] flex flex-col gap-0.5 ${msg.isMine ? 'items-end' : 'items-start'}`}>
+                                        <div className="flex items-center gap-1.5">
+                                            {!msg.isMine && <span className="text-[9px] font-black text-slate-400">{msg.senderLabel}</span>}
+                                            <span className="text-[9px] text-slate-600">{time}</span>
+                                        </div>
+                                        <div className={`px-3.5 py-2 rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-slate-700/80 text-slate-100 rounded-tl-sm'}`}>
+                                            {msg.content}
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                        <div ref={chatBottomRef} />
+                    </div>
+
+                    {/* PTT 按钮区（紧凑版）*/}
+                    <div className="shrink-0 border-t border-white/5 py-4 flex flex-col items-center gap-3">
+                        <p className={`text-xs font-black uppercase tracking-[0.2em] ${pttStatus === 'TALKING' ? 'text-primary' : pttStatus === 'LISTENING' ? 'text-green-400' : pttStatus === 'CONNECTED' ? 'text-white' : 'text-slate-500'
+                            }`}>
+                            {pttStatus === 'CONNECTING' ? '正在连接...' : pttStatus === 'TALKING' ? '正在发射...' : pttStatus === 'LISTENING' ? '收到信号' : pttStatus === 'CONNECTED' ? '频道就绪 · 长按说话' : '等待连接'}
+                        </p>
+                        <div className="flex items-center gap-6">
+                            {/* 波形动画 */}
+                            <div className="flex items-end gap-0.5 h-8 w-16">
+                                {[3, 5, 7, 5, 3].map((h, i) => (
+                                    <div key={i} className={`flex-1 rounded-full transition-all duration-200 ${pttStatus === 'TALKING' ? 'bg-primary' : pttStatus === 'LISTENING' ? 'bg-green-500' : 'bg-slate-700'}`}
+                                        style={{ height: (pttStatus === 'TALKING' || pttStatus === 'LISTENING') ? `${h * 10 + Math.random() * 20}%` : `${h * 5}%` }}></div>
+                                ))}
+                            </div>
+                            {/* PTT 圆形大按钮 */}
+                            <button
+                                onMouseDown={handlePttDown}
+                                onMouseUp={handlePttUp}
+                                onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
+                                onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
+                                disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'}
+                                className={`w-20 h-20 rounded-full border-4 transition-all flex items-center justify-center shadow-2xl relative active:scale-95 ${isTransmitting ? 'bg-primary border-white/20 scale-110 shadow-primary/50' :
+                                    pttStatus === 'CONNECTED' ? 'bg-slate-700 border-white/10' : 'bg-slate-800 border-white/5 opacity-40 cursor-not-allowed'
+                                    }`}>
+                                {isTransmitting && <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-30"></div>}
+                                <span className="material-icons-round text-3xl text-white">{isTransmitting ? 'mic' : 'mic_none'}</span>
+                            </button>
+                            {/* 右侧波形（镜像）*/}
+                            <div className="flex items-end gap-0.5 h-8 w-16">
+                                {[3, 5, 7, 5, 3].reverse().map((h, i) => (
+                                    <div key={i} className={`flex-1 rounded-full transition-all duration-200 ${pttStatus === 'TALKING' ? 'bg-primary' : pttStatus === 'LISTENING' ? 'bg-green-500' : 'bg-slate-700'}`}
+                                        style={{ height: (pttStatus === 'TALKING' || pttStatus === 'LISTENING') ? `${h * 10 + Math.random() * 20}%` : `${h * 5}%` }}></div>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex items-end justify-center gap-1.5 h-24 w-full px-12">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 7, 6, 5, 4, 3, 2, 1].map((v, i) => (
-                                <div key={i} className={`flex-1 rounded-full transition-all duration-200 ${pttStatus === 'TALKING' ? 'bg-primary' : pttStatus === 'LISTENING' ? 'bg-green-500' : 'bg-slate-800'}`}
-                                    style={{ height: pttStatus === 'IDLE' ? '4px' : `${20 + Math.random() * 80}%` }}></div>
-                            ))}
+                    </div>
+
+                    {/* 文字输入栏 */}
+                    <div className="shrink-0 px-4 pb-8 pt-3 border-t border-white/5 flex items-center gap-3">
+                        <div className="flex-1 flex items-center bg-slate-800 rounded-2xl px-4 py-2.5 border border-white/10 gap-2">
+                            <span className="material-icons-round text-slate-500 text-[16px]">chat</span>
+                            <input
+                                type="text"
+                                value={driverChatInput}
+                                onChange={(e) => setDriverChatInput(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); sendDriverTextMessage(); } }}
+                                placeholder={pttStatus === 'CONNECTED' ? '输入文字消息，Enter 发送…' : '频道未连接'}
+                                disabled={pttStatus !== 'CONNECTED'}
+                                className="flex-1 bg-transparent text-sm text-slate-200 placeholder:text-slate-600 outline-none font-medium"
+                            />
                         </div>
-                        <button onMouseDown={handlePttDown} onMouseUp={handlePttUp} onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }} onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }} className={`w-48 h-48 rounded-full border-8 transition-all flex items-center justify-center shadow-2xl relative active:scale-95 ${isTransmitting ? 'bg-primary border-white/20 scale-110 shadow-primary/50' : 'bg-slate-800 border-white/5 shadow-black/50'}`}>
-                            {isTransmitting && <div className="absolute inset-0 rounded-full bg-primary animate-ping opacity-30"></div>}
-                            <span className="material-icons-round text-6xl text-white">{isTransmitting ? 'mic' : 'mic_none'}</span>
+                        <button
+                            onClick={sendDriverTextMessage}
+                            disabled={pttStatus !== 'CONNECTED' || !driverChatInput.trim()}
+                            className="w-10 h-10 rounded-2xl bg-primary hover:bg-primary/90 disabled:bg-slate-700 text-white flex items-center justify-center transition-all shrink-0"
+                        >
+                            <span className="material-icons-round text-[18px]">send</span>
                         </button>
                     </div>
                 </div>
@@ -597,5 +972,4 @@ const DriverSchedule: React.FC = () => {
         </div>
     );
 };
-
 export default DriverSchedule;

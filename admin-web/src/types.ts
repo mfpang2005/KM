@@ -46,6 +46,7 @@ export interface Order {
     paymentStatus?: 'paid' | 'pending' | 'unpaid';
     created_at?: string;
     delivery_photos?: string[];
+    equipments?: Record<string, number>;
 }
 
 export interface OrderCreate {
@@ -59,6 +60,7 @@ export interface OrderCreate {
     type: 'dine-in' | 'takeaway' | 'delivery';
     paymentMethod?: PaymentMethod;
     driverId?: string;
+    equipments?: Record<string, number>;
 }
 
 export interface User {

@@ -60,13 +60,16 @@ class OrderBase(BaseModel):
     paymentMethod: Optional[PaymentMethod] = None
     paymentStatus: Optional[str] = 'pending'
     delivery_photos: Optional[List[str]] = []
+    equipments: Optional[dict] = {}
+    calendar_event_id: Optional[str] = None
 
 
 class OrderCreate(OrderBase):
-    pass
+    id: Optional[str] = None
 
 
 class OrderUpdate(BaseModel):
+    id: Optional[str] = None
     customerName: Optional[str] = None
     customerPhone: Optional[str] = None
     address: Optional[str] = None
@@ -89,7 +92,7 @@ class Product(BaseModel):
     id: str
     code: str
     name: str
-    price: float
+    price: Optional[float] = None
     category: Optional[str] = None
     image_url: Optional[str] = None
 

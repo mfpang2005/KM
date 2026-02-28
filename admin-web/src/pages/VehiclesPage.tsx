@@ -7,6 +7,7 @@ export const VehiclesPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [isEditModalOpen, setEditModalOpen] = useState(false);
     const [editingVehicle, setEditingVehicle] = useState<Partial<Vehicle> | null>(null);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const loadVehicles = async () => {
         try {
@@ -39,6 +40,21 @@ export const VehiclesPage: React.FC = () => {
         } catch (error) {
             console.error('Failed to save vehicle', error);
             alert('Failed to save vehicle');
+        }
+    };
+
+    /** 删除车辆 */
+    const handleDelete = async (id: string, plateNo: string) => {
+        if (!window.confirm(`确定要删除车辆 ${plateNo} 吗？此操作不可撤销。`)) return;
+        setDeletingId(id);
+        try {
+            await VehicleService.delete(id);
+            setVehicles(prev => prev.filter(v => v.id !== id));
+        } catch (error) {
+            console.error('Failed to delete vehicle', error);
+            alert('删除失败，请重试');
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -149,9 +165,26 @@ export const VehiclesPage: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* 编辑悬浮按钮 */}
-                                <div className="absolute top-4 right-4 w-8 h-8 bg-white/80 backdrop-blur-sm rounded-full flex items-center justify-center text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity border border-slate-100 shadow-sm">
-                                    <span className="material-icons-round text-[16px]">edit</span>
+                                {/* 操作按钮组：悬停时出现 */}
+                                <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    {/* 编辑 */}
+                                    <div className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                                        <span className="material-icons-round text-[16px]">edit</span>
+                                    </div>
+                                    {/* 删除 */}
+                                    <button
+                                        onClick={e => {
+                                            e.stopPropagation();
+                                            handleDelete(vehicle.id, vehicle.plate_no);
+                                        }}
+                                        disabled={deletingId === vehicle.id}
+                                        className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm hover:text-red-500 hover:border-red-200 transition-colors disabled:opacity-50"
+                                        title="删除车辆"
+                                    >
+                                        {deletingId === vehicle.id
+                                            ? <span className="material-icons-round text-[16px] animate-spin">autorenew</span>
+                                            : <span className="material-icons-round text-[16px]">delete</span>}
+                                    </button>
                                 </div>
                             </div>
                         )
@@ -250,6 +283,21 @@ export const VehiclesPage: React.FC = () => {
                             </div>
 
                             <div className="pt-4 flex gap-3">
+                                {/* 编辑模式下显示删除按钮 */}
+                                {editingVehicle.id && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setEditModalOpen(false);
+                                            handleDelete(editingVehicle.id!, editingVehicle.plate_no || '');
+                                        }}
+                                        disabled={deletingId === editingVehicle.id}
+                                        className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-2xl font-black text-sm transition-colors flex items-center gap-1"
+                                    >
+                                        <span className="material-icons-round text-[16px]">delete</span>
+                                        删除
+                                    </button>
+                                )}
                                 <button
                                     type="button"
                                     onClick={() => setEditModalOpen(false)}

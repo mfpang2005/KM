@@ -96,32 +96,50 @@ const AdminLayout: React.FC = () => {
     const [notifs, setNotifs] = useState<{ id: string; customerName: string; amount: number; created_at: string }[]>([]);
     const [unread, setUnread] = useState(0);
 
-    // NOTE: 初次加载 + Realtime 监听，拉取最新 5 条 PENDING 订单作为通知
+    const loadNotifs = async () => {
+        const lastSeen = parseInt(localStorage.getItem('last_seen_notifs') || '0');
+        const { data } = await supabase
+            .from('orders')
+            .select('id, customerName, amount, created_at')
+            .eq('status', 'pending')
+            .order('created_at', { ascending: false })
+            .limit(10);
+        if (data) {
+            const unseen = data.filter(n => new Date(n.created_at).getTime() > lastSeen);
+            setNotifs(unseen);
+            setUnread(unseen.length);
+        }
+    };
+
+    // NOTE: 初次加载 + Realtime 监听，拉取最新 PENDING 订单作为通知
     useEffect(() => {
-        const load = async () => {
-            const { data } = await supabase
-                .from('orders')
-                .select('id, customerName, amount, created_at')
-                .eq('status', 'pending')
-                .order('created_at', { ascending: false })
-                .limit(5);
-            if (data) {
-                setNotifs(data);
-                setUnread(data.length);
-            }
-        };
-        load();
+        loadNotifs();
 
         const ch = supabase
             .channel('notif-bell')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => load())
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => loadNotifs())
             .subscribe();
         return () => { supabase.removeChannel(ch); };
     }, []);
 
     const handleBell = () => {
-        setShowNotifs(v => !v);
-        if (!showNotifs) setUnread(0); // 打开后清零红点
+        const willShow = !showNotifs;
+        setShowNotifs(willShow);
+        if (willShow) {
+            setUnread(0); // 打开后清零红点
+        } else {
+            // 关闭后清空（查看后删除）
+            localStorage.setItem('last_seen_notifs', Date.now().toString());
+            setNotifs([]);
+            setUnread(0);
+        }
+    };
+
+    const handleClearAll = () => {
+        localStorage.setItem('last_seen_notifs', Date.now().toString());
+        setNotifs([]);
+        setUnread(0);
+        setShowNotifs(false);
     };
 
     const navItems = [
@@ -231,7 +249,14 @@ const AdminLayout: React.FC = () => {
                             <div className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
                                 <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
                                     <h4 className="font-black text-slate-700 text-sm">新订单通知</h4>
-                                    <span className="text-xs font-bold text-slate-400">{notifs.length} 条待处理</span>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs font-bold text-slate-400">{notifs.length} 条待处理</span>
+                                        {notifs.length > 0 && (
+                                            <button onClick={handleClearAll} className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full font-bold transition-colors">
+                                                清空
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                                 <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
                                     {notifs.length === 0 ? (
@@ -258,10 +283,10 @@ const AdminLayout: React.FC = () => {
                                 </div>
                                 <div className="px-5 py-3 border-t border-slate-50 bg-slate-50/50">
                                     <button
-                                        onClick={() => { setShowNotifs(false); }}
+                                        onClick={handleClearAll}
                                         className="w-full text-center text-xs font-black text-indigo-600 hover:text-indigo-800 transition-colors"
                                     >
-                                        关闭
+                                        关闭并清空
                                     </button>
                                 </div>
                             </div>
