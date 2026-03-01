@@ -19,11 +19,15 @@ export const UsersPage: React.FC = () => {
     });
 
     const loadUsers = useCallback(async () => {
+        setLoading(true);
         try {
             const data = await SuperAdminService.getUsers();
-            setUsers(data);
-        } catch (error) {
+            setUsers(data || []);
+        } catch (error: any) {
             console.error('Failed to load users', error);
+            if (error.response?.status === 403) {
+                setUsers([]);
+            }
         } finally {
             setLoading(false);
         }

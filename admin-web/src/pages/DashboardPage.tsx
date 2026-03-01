@@ -15,8 +15,12 @@ export const DashboardPage: React.FC = () => {
             try {
                 const data = await SuperAdminService.getStats();
                 setStats(data);
-            } catch (error) {
+            } catch (error: any) {
                 console.error("Failed to fetch stats", error);
+                // NOTE: If we get a 403, it means the user is not a super_admin
+                if (error.response?.status === 403) {
+                    setStats(null); // Ensure we don't show old data
+                }
             } finally {
                 if (showLoading) setLoading(false);
             }
@@ -65,8 +69,20 @@ export const DashboardPage: React.FC = () => {
         );
     }
 
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    const isSuperAdmin = user.role === 'super_admin';
+
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+            {stats === null && !loading && !isSuperAdmin && (
+                <div className="bg-amber-50 border border-amber-200 p-6 rounded-3xl flex items-center gap-4 text-amber-800">
+                    <span className="material-icons-round text-3xl">gpp_maybe</span>
+                    <div>
+                        <p className="font-black">权限受限 (Limited Access)</p>
+                        <p className="text-sm opacity-80">当前页面部分数据需要超级管理员权限。普通管理员仅能进行基础操作。</p>
+                    </div>
+                </div>
+            )}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-6 hover:-translate-y-1 transition-all duration-300 group cursor-default">
                     <div className="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">

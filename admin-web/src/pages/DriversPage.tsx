@@ -26,7 +26,7 @@ export const DriversPage: React.FC = () => {
 
     // Add Driver State
     const [showAddModal, setShowAddModal] = useState(false);
-    const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
+    const [addForm, setAddForm] = useState({ name: '', phone: '', email: '', password: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
     const [isAdding, setIsAdding] = useState(false);
 
     // Vehicle Assignment State
@@ -238,7 +238,12 @@ export const DriversPage: React.FC = () => {
         setIsAdding(true);
         try {
             // Create user via admin endpoint
-            const res = await api.post(`/admin/users/?email=${encodeURIComponent(addForm.email || `driver_${Date.now()}@system.local`)}&name=${encodeURIComponent(addForm.name)}&role=driver`);
+            const res = await api.post('/admin/users/', {
+                email: addForm.email || `driver_${Date.now()}@system.local`,
+                name: addForm.name,
+                password: addForm.password,
+                role: 'driver'
+            });
             const newDriverId = res.data.id;
 
             // Update additional driver specific info via super-admin patch
@@ -251,7 +256,7 @@ export const DriversPage: React.FC = () => {
             });
 
             setShowAddModal(false);
-            setAddForm({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
+            setAddForm({ name: '', phone: '', email: '', password: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
             loadData();
         } catch (error) {
             console.error('Failed to create new driver', error);
@@ -684,7 +689,7 @@ export const DriversPage: React.FC = () => {
                         <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between shrink-0">
                             <h2 className="text-lg font-bold text-slate-800">Add New Driver</h2>
                             <button
-                                onClick={() => { setShowAddModal(false); setAddForm({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' }); }}
+                                onClick={() => { setShowAddModal(false); setAddForm({ name: '', phone: '', email: '', password: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' }); }}
                                 className="w-8 h-8 rounded-full bg-slate-50 hover:bg-slate-100 text-slate-500 flex items-center justify-center transition-colors"
                             >
                                 <span className="material-icons-round text-[18px]">close</span>
@@ -720,15 +725,25 @@ export const DriversPage: React.FC = () => {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Email (Optional)</label>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Initial Password *</label>
                                             <input
-                                                type="email"
-                                                value={addForm.email}
-                                                onChange={e => setAddForm({ ...addForm, email: e.target.value })}
+                                                type="password"
+                                                value={addForm.password}
+                                                onChange={e => setAddForm({ ...addForm, password: e.target.value })}
                                                 className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                                placeholder="e.g. driver@local"
+                                                placeholder="e.g. SecurePass123"
                                             />
                                         </div>
+                                    </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Email (Optional)</label>
+                                        <input
+                                            type="email"
+                                            value={addForm.email}
+                                            onChange={e => setAddForm({ ...addForm, email: e.target.value })}
+                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
+                                            placeholder="e.g. driver@local"
+                                        />
                                     </div>
                                 </div>
                             </div>
@@ -777,14 +792,14 @@ export const DriversPage: React.FC = () => {
 
                         <div className="p-6 border-t border-slate-100 flex gap-3 shrink-0">
                             <button
-                                onClick={() => { setShowAddModal(false); setAddForm({ name: '', phone: '', email: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' }); }}
+                                onClick={() => { setShowAddModal(false); setAddForm({ name: '', phone: '', email: '', password: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' }); }}
                                 className="flex-1 py-3.5 bg-slate-50 hover:bg-slate-100 text-slate-600 font-bold rounded-xl transition-colors text-sm"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={handleAddDriver}
-                                disabled={isAdding || !addForm.name || !addForm.phone}
+                                disabled={isAdding || !addForm.name || !addForm.phone || !addForm.password}
                                 className="flex-1 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-black/10 transition-all active:scale-95 text-sm flex items-center justify-center disabled:opacity-70 disabled:pointer-events-none"
                             >
                                 {isAdding ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Create Driver'}

@@ -16,8 +16,10 @@ def check():
             print(f"- {u['email']} (Role: {u['role']}, ID: {u['id']})")
             
         # Also check what auth users exist
-        # res_auth = supabase.auth.admin.list_users()
-        # print(f"Auth users found: {len(res_auth.users)}")
+        res_auth = supabase.auth.admin.list_users()
+        print(f"Auth users found: {len(res_auth)}")
+        for u in res_auth:
+             print(f"- Auth: {u.email} (ID: {u.id}, Metadata: {u.user_metadata})")
     except Exception as e:
         print(f"Error checking users: {e}")
 

@@ -17,7 +17,7 @@ async def get_orders():
     # To keep it simple and aligned with the "no SQL" requirement from the prompt (it said "use Supabase"),
     # we'll use the JS/Python client which returns JSON.
     
-    response = supabase.table("orders").select("*").execute()
+    response = supabase.table("orders").select("*, order_items(*)").order("dueTime", desc=False).execute()
     return response.data
 
 @router.get("/{order_id:path}", response_model=Order)
@@ -72,6 +72,23 @@ async def create_order(order: OrderCreate):
             
             # GoEasy Notification
             await notify_order_update(response.data[0], action="create")
+            
+            # Sync items to order_items table for granular production tracking
+            items = order_data.get("items", [])
+            if items:
+                prep_items = []
+                for item in items:
+                    prep_items.append({
+                        "order_id": response.data[0]["id"],
+                        "name": item["name"],
+                        "quantity": item["quantity"],
+                        "status": "pending",
+                        "note": item.get("note")
+                    })
+                try:
+                    supabase.table("order_items").insert(prep_items).execute()
+                except Exception as e:
+                    print(f"Failed to sync items to order_items: {e}")
             
             return response.data[0]
         except HTTPException:

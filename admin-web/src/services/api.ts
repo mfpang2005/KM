@@ -106,6 +106,9 @@ export const AdminOrderService = {
     delete: async (id: string): Promise<void> => {
         await api.delete(`/orders/${id}`);
     },
+    updateOrderItemStatus: async (itemId: string, status: string): Promise<void> => {
+        await api.patch(`/orders/items/${itemId}/status?status=${status}`);
+    }
 }
 
 export const ProductService = {

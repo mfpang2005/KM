@@ -1,28 +1,59 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AdminOrderService } from '../services/api';
-import type { Order } from '../types';
+import 'react-datepicker/dist/react-datepicker.css';
+import { AdminOrderService, SuperAdminService } from '../services/api';
+import { supabase } from '../lib/supabase';
+import type { Order, User } from '../types';
 import { OrderStatus } from '../types';
 
 const KitchenCalendarPage: React.FC = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState<Order[]>([]);
+    const [drivers, setDrivers] = useState<User[]>([]);
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
     const [viewMonth, setViewMonth] = useState(new Date());
 
+    const loadOrders = async () => {
+        try {
+            const data = await AdminOrderService.getAll();
+            setOrders(data);
+        } catch (error) {
+            console.error("Failed to load orders for calendar:", error);
+        }
+    };
+
+    const loadDrivers = async () => {
+        try {
+            const data = await SuperAdminService.getUsers();
+            setDrivers(data.filter((u: User) => u.role === 'driver'));
+        } catch (error) {
+            console.error("Failed to load drivers:", error);
+        }
+    };
+
     useEffect(() => {
-        const loadOrders = async () => {
-            try {
-                const data = await AdminOrderService.getAll();
-                setOrders(data);
-            } catch (error) {
-                console.error("Failed to load orders for calendar:", error);
-            } finally {
-                setLoading(false);
-            }
+        setLoading(true);
+        // NOTE: Promise.all 配合单独的 catch，记录失败但不阻塞 Promise.all 的完成
+        Promise.all([
+            loadOrders().catch(e => console.error("Orders load failed", e)),
+            loadDrivers().catch(e => console.error("Drivers load failed", e))
+        ]).finally(() => setLoading(false));
+
+        // NOTE: Supabase Realtime 监听，实现日历实时同步
+        const channel = supabase.channel('calendar-sync')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'orders' },
+                () => {
+                    loadOrders();
+                }
+            )
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
         };
-        loadOrders();
     }, []);
 
     // ── 数据转换：将订单按日期分组 ──────────────────────────────────────────
@@ -38,9 +69,6 @@ const KitchenCalendarPage: React.FC = () => {
         return groups;
     }, [orders]);
 
-    // ── 统计数据 ─────────────────────────────────────────────────────────────
-    // ... stats calculation removed as it was not used or used for load index
-
     // ── 日历生成逻辑 ─────────────────────────────────────────────────────────
     const renderCalendar = () => {
         const year = viewMonth.getFullYear();
@@ -49,12 +77,10 @@ const KitchenCalendarPage: React.FC = () => {
         const daysInMonth = new Date(year, month + 1, 0).getDate();
 
         const days = [];
-        // 填充上月空白
         for (let i = 0; i < firstDayOfMonth; i++) {
             days.push(<div key={`empty-${i}`} className="h-24 bg-slate-50/30 rounded-2xl border border-transparent"></div>);
         }
 
-        // 填充本月日期
         for (let day = 1; day <= daysInMonth; day++) {
             const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
             const dateOrders = groupedOrders[dateStr] || [];
@@ -82,13 +108,10 @@ const KitchenCalendarPage: React.FC = () => {
                                 {o.customerName}
                             </div>
                         ))}
-                        {dateOrders.length > 2 && (
-                            <span className="text-[7px] font-black text-slate-400 ml-1">+{dateOrders.length - 2} more</span>
-                        )}
                     </div>
                     {dateOrders.length > 0 && (
                         <div className="absolute top-2 right-2 flex gap-0.5">
-                            <div className="w-1 h-1 rounded-full bg-blue-500"></div>
+                            <div className="w-1.5 h-1.5 rounded-full bg-blue-500"></div>
                         </div>
                     )}
                 </button>
@@ -110,8 +133,8 @@ const KitchenCalendarPage: React.FC = () => {
             {/* Header / Month Selector */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Kitchen Schedule</h2>
-                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Plan and monitor catering delivery flows</p>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Calendar Monitoring</h2>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Real-time catering order & dispatch schedule</p>
                 </div>
                 <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
                     <button
@@ -150,48 +173,49 @@ const KitchenCalendarPage: React.FC = () => {
                         ) : renderCalendar()}
                     </div>
 
-                    {/* AI Insights (移植自 KitchenSummary) */}
-                    <div className="bg-slate-900 rounded-[32px] p-8 text-white relative overflow-hidden group">
-                        <div className="absolute top-[-20%] right-[-10%] w-64 h-64 bg-blue-500/20 rounded-full blur-[80px] group-hover:bg-blue-500/30 transition-colors duration-500"></div>
-                        <div className="flex items-center gap-4 mb-6 relative z-10">
-                            <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/30">
-                                <span className="material-icons-round text-2xl">auto_awesome</span>
-                            </div>
-                            <div>
-                                <h3 className="text-base font-black tracking-tight">AI Kitchen Insights</h3>
-                                <p className="text-[10px] text-blue-400 font-bold uppercase tracking-widest mt-0.5">Automated Resource Forecasting</p>
+                    {/* Driver & Vehicle Monitoring Section */}
+                    <div className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm">
+                        <div className="flex items-center justify-between mb-6">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-teal-500 flex items-center justify-center text-white">
+                                    <span className="material-icons-round">local_shipping</span>
+                                </div>
+                                <div>
+                                    <h3 className="text-sm font-black text-slate-800">Vehicle & Driver Dispatch</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Real-time Availability</p>
+                                </div>
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 relative z-10">
-                            <div className="space-y-4">
-                                <p className="text-xs text-slate-300 leading-relaxed font-medium">
-                                    Based on the <span className="text-white font-black">{orders.length}</span> active orders for this period, our AI predicts a production peak around <span className="text-blue-400 font-bold">W{Math.ceil(new Date().getDate() / 7)}</span>.
-                                    Suggested to pre-order <span className="text-blue-400">20% extra</span> protein stock for upcoming weekend events.
-                                </p>
-                                <div className="flex items-center gap-3">
-                                    <div className="px-3 py-1.5 bg-white/5 rounded-xl border border-white/10">
-                                        <p className="text-[8px] text-slate-400 font-black uppercase">Load Index</p>
-                                        <p className="text-sm font-black text-white">Moderate (64%)</p>
-                                    </div>
-                                    <div className="px-3 py-1.5 bg-white/5 rounded-xl border border-white/10">
-                                        <p className="text-[8px] text-slate-400 font-black uppercase">Staff Requirement</p>
-                                        <p className="text-sm font-black text-white">Full Team</p>
-                                    </div>
-                                </div>
-                            </div>
-                            <div className="space-y-3">
-                                <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest">Monthly Trend</p>
-                                <div className="flex items-end gap-1.5 h-20">
-                                    {[30, 45, 80, 50, 65, 40, 90, 75, 45, 60, 55, 30].map((v, i) => (
-                                        <div key={i} className="flex-1 bg-white/10 rounded-t-sm h-full flex items-end">
-                                            <div
-                                                className={`w-full ${v > 80 ? 'bg-blue-500' : 'bg-white/40'} transition-all`}
-                                                style={{ height: `${v}%` }}
-                                            ></div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                            {drivers.map(driver => {
+                                const activeOrders = orders.filter(o => o.driverId === driver.id && o.status !== OrderStatus.COMPLETED && o.status !== OrderStatus.READY);
+                                const isBusy = activeOrders.length > 0;
+                                return (
+                                    <div key={driver.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 hover:shadow-md transition-all">
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="relative">
+                                                <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center overflow-hidden">
+                                                    {driver.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover" alt="" /> : <span className="material-icons-round text-slate-400">person</span>}
+                                                </div>
+                                                <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${isBusy ? 'bg-orange-500' : 'bg-green-500'}`}></span>
+                                            </div>
+                                            <div className="min-w-0">
+                                                <p className="text-xs font-black text-slate-800 truncate">{driver.name || driver.email}</p>
+                                                <p className={`text-[9px] font-bold ${isBusy ? 'text-orange-500' : 'text-green-600'}`}>
+                                                    {isBusy ? 'In Delivery' : 'Available'}
+                                                </p>
+                                            </div>
                                         </div>
-                                    ))}
-                                </div>
-                            </div>
+                                        {isBusy && (
+                                            <div className="px-2 py-1 bg-white rounded-lg border border-slate-100">
+                                                <p className="text-[8px] font-black text-slate-400 uppercase">Assigned Order</p>
+                                                <p className="text-[9px] font-bold text-slate-700 truncate">{activeOrders[0].customerName}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
@@ -231,8 +255,8 @@ const KitchenCalendarPage: React.FC = () => {
                                                 {new Date(order.dueTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                             </p>
                                             <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1.5">
-                                                <span className="material-icons-round text-[12px]">restaurant</span>
-                                                {order.items.length} dishes
+                                                <span className="material-icons-round text-[12px]">local_shipping</span>
+                                                {order.driverId ? drivers.find(d => d.id === order.driverId)?.name || 'Assigned' : 'Unassigned'}
                                             </p>
                                         </div>
                                         <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
@@ -242,7 +266,7 @@ const KitchenCalendarPage: React.FC = () => {
                                                 }`}>
                                                 {order.status}
                                             </span>
-                                            <p className="text-[10px] font-black text-slate-900">RM {order.amount.toFixed(2)}</p>
+                                            <p className="text-[10px] font-black text-slate-900">RM {order.amount?.toFixed(2) || '0.00'}</p>
                                         </div>
                                     </div>
                                 ))
@@ -252,7 +276,6 @@ const KitchenCalendarPage: React.FC = () => {
                                         <span className="material-icons-round text-3xl">event_available</span>
                                     </div>
                                     <p className="text-xs font-black uppercase tracking-widest text-slate-400">No events scheduled</p>
-                                    <p className="text-[10px] font-bold mt-2">Try selecting another date to view the production plan.</p>
                                 </div>
                             )}
                         </div>

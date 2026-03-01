@@ -62,6 +62,7 @@ class OrderBase(BaseModel):
     delivery_photos: Optional[List[str]] = []
     equipments: Optional[dict] = {}
     calendar_event_id: Optional[str] = None
+    order_items: Optional[List[dict]] = []
 
 
 class OrderCreate(OrderBase):

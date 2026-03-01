@@ -10,6 +10,7 @@ key: str = os.environ.get("SUPABASE_KEY")
 supabase: Client = create_client(url, key)
 
 accounts = [
+    {"email": "super_admin1@example.com", "password": "password123", "role": "super_admin", "name": "Super Admin Tester"},
     {"email": "test_admin1@example.com", "password": "password123", "role": "admin", "name": "Admin Tester"},
     {"email": "test_kitchen1@example.com", "password": "password123", "role": "kitchen", "name": "Kitchen Tester"},
     {"email": "test_driver1@example.com", "password": "password123", "role": "driver", "name": "Driver Tester"}
@@ -47,8 +48,7 @@ for acc in accounts:
             "id": user_id,
             "email": acc["email"],
             "role": acc["role"],
-            "name": acc["name"],
-            "status": "active"
+            "name": acc["name"]
         }).execute()
         print(f"Successfully synced {acc['email']} to public.users")
         

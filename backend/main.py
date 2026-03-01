@@ -11,10 +11,16 @@ app = FastAPI(title="Kim Long Smart Catering System API")
 
 # NOTE: 配置 CORS，允许前端开发服务器的所有可能端口
 origins = [
-    "http://localhost:5173",
-    "http://localhost:5174",
     "http://localhost:3000",
     "http://localhost:3001",
+    "http://localhost:5173",
+    "http://localhost:5174",
+    "http://localhost:5175",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:3001",
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
+    "http://127.0.0.1:5175",
 ]
 
 app.add_middleware(
