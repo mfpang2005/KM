@@ -24,7 +24,7 @@ async def create_internal_user(
     """
     try:
         # 1. 在 Supabase Auth 中创建账号
-        auth_response = supabase.auth.admin.create_user({
+        auth_attributes = {
             "email": user_data.email,
             "password": user_data.password,
             "email_confirm": True,
@@ -32,53 +32,76 @@ async def create_internal_user(
                 "role": user_data.role.value,
                 "name": user_data.name
             }
-        })
-        
-        if not auth_response.user:
-            raise Exception("Failed to create auth user")
-
-        # 2. 同步到业务表 users (采用弹性字段插入)
-        db_data = {
-            "id": auth_response.user.id,
-            "email": user_data.email,
-            "role": user_data.role.value,
-            "name": user_data.name
         }
         
-        # 尝试添加可选字段，如果数据库报错则忽略
+        # 如果提供了电话且不为空，同步到 Auth
+        if user_data.phone and user_data.phone.strip():
+            auth_attributes["phone"] = user_data.phone.strip()
+            auth_attributes["phone_confirm"] = True
+
+        # 调用 Supabase Admin API
+        auth_res = supabase.auth.admin.create_user(auth_attributes)
+        
+        # 兼容性处理：检查错误 (不同版本的 supabase-py 处理方式不同)
+        error = getattr(auth_res, "error", None)
+        if error:
+            error_msg = getattr(error, "message", str(error))
+            raise Exception(f"Auth Admin Error: {error_msg}")
+            
+        user = getattr(auth_res, "user", None)
+        if not user:
+            # 如果是字典格式则尝试从 dict 获取
+            if isinstance(auth_res, dict) and "user" in auth_res:
+                user_obj = auth_res["user"]
+                user_id = user_obj.get("id") if isinstance(user_obj, dict) else getattr(user_obj, "id", None)
+            else:
+                raise Exception(f"Failed to create auth user: No user returned. Response type: {type(auth_res)}")
+        else:
+            user_id = user.id
+
+        if not user_id:
+            raise Exception("Failed to retrieve User ID from Auth response")
+
+        # 2. 同步到业务表 users
+        db_data = {
+            "id": user_id,
+            "email": user_data.email,
+            "role": user_data.role.value,
+            "name": user_data.name,
+            "phone": user_data.phone
+        }
+        
+        # 尝试插入 (包含可选字段，如果表结构不支持则回退)
         try:
-            temp_db_data = db_data.copy()
-            temp_db_data["status"] = UserStatus.ACTIVE.value
-            temp_db_data["employee_id"] = user_data.employee_id
-            response = supabase.table("users").insert(temp_db_data).execute()
+            full_data = {
+                **db_data,
+                "status": UserStatus.ACTIVE.value,
+                "is_disabled": False,
+                "employee_id": user_data.employee_id
+            }
+            # 过滤掉值为 None 的字段以增加兼容性
+            insert_data = {k: v for k, v in full_data.items() if v is not None}
+            response = supabase.table("users").insert(insert_data).execute()
         except Exception as db_err:
-            logger.warning(f"Failed to insert with extended fields, falling back to basic: {db_err}")
-            # 回退到最简基础字段插入
-            response = supabase.table("users").insert(db_data).execute()
+            logger.warning(f"Failed full insert, falling back to basic: {db_err}")
+            # 仅保留核心字段
+            basic_data = {k: v for k, v in db_data.items() if v is not None}
+            response = supabase.table("users").insert(basic_data).execute()
         
-        # 3. 记录审计日志 (如果审计表不存在也会跳过)
-        try:
-            supabase.table("audit_logs").insert({
-                "actor_id": current_user.get("id"),
-                "actor_role": current_user.get("role"),
-                "action": "create_internal_user",
-                "target": user_data.email,
-                "detail": {
-                    "role": user_data.role.value, 
-                    "employee_id": user_data.employee_id,
-                    "auth_id": auth_response.user.id
-                }
-            }).execute()
-        except Exception:
-            logger.warning("Failed to record audit log, likely table missing.")
-        
+        if not response.data:
+             logger.warning("DB Insert succeeded but returned no data.")
+             return {**db_data, "id": user_id}
+             
         return response.data[0]
+
     except Exception as e:
-        logger.error(f"Failed to create user: {e}")
-        # 如果是邮箱已存在
-        if "already registered" in str(e).lower():
+        logger.error(f"Critical error in create_internal_user: {str(e)}", exc_info=True)
+        # 尝试抓取具体的 400 提示（如邮件已存在）
+        error_msg = str(e)
+        if "already registered" in error_msg.lower() or "already exists" in error_msg.lower():
              raise HTTPException(status_code=400, detail="User with this email already exists.")
-        raise HTTPException(status_code=500, detail=f"Failed to create user: {str(e)}")
+             
+        raise HTTPException(status_code=500, detail=f"Creation failed: {str(e)}")
 
 
 @router.patch("/{user_id}/status", response_model=User)

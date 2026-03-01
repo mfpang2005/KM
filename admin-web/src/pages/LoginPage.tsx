@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { UserRole } from '../types';
 
 const LoginPage: React.FC = () => {
     const [email, setEmail] = useState('');
@@ -24,30 +23,12 @@ const LoginPage: React.FC = () => {
             if (error) throw error;
 
             if (data.user) {
-                // SECURITY: 从 public.users 验证真实角色，不信任 metadata 的自动提权逻辑
-                const { data: userData, error: userError } = await supabase
-                    .from('users')
-                    .select('role')
-                    .eq('id', data.user.id)
-                    .single();
-
-                if (userError || !userData) {
-                    await supabase.auth.signOut();
-                    throw new Error('User record not found. Please contact support.');
-                }
-
-                const role = userData.role;
-
-                if (role !== UserRole.SUPER_ADMIN && role !== UserRole.ADMIN) {
-                    await supabase.auth.signOut();
-                    throw new Error('Access Denied. Admin level required.');
-                }
-
-                navigate('/');
+                console.log("[LoginPage] Login success, navigating...");
+                navigate('/', { replace: true });
             }
         } catch (err: any) {
+            console.error("[LoginPage] Login Error:", err.message);
             setError(err.message || 'Login failed');
-        } finally {
             setLoading(false);
         }
     };
@@ -70,9 +51,12 @@ const LoginPage: React.FC = () => {
 
                 <form onSubmit={handleLogin} className="space-y-4">
                     <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Email</label>
+                        <label htmlFor="email" className="block text-xs font-bold text-slate-700 mb-1">Email</label>
                         <input
+                            id="email"
+                            name="email"
                             type="email"
+                            autoComplete="email"
                             required
                             value={email}
                             onChange={e => setEmail(e.target.value)}
@@ -81,9 +65,12 @@ const LoginPage: React.FC = () => {
                         />
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-slate-700 mb-1">Password</label>
+                        <label htmlFor="password" className="block text-xs font-bold text-slate-700 mb-1">Password</label>
                         <input
+                            id="password"
+                            name="password"
                             type="password"
+                            autoComplete="current-password"
                             required
                             value={password}
                             onChange={e => setPassword(e.target.value)}

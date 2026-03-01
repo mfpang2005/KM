@@ -35,13 +35,23 @@ export const DriversPage: React.FC = () => {
     const [isAssigning, setIsAssigning] = useState(false);
 
     const loadData = useCallback(async () => {
+        console.log("DriversPage: loadData started");
         try {
-            const [usersRes, ordersRes, vehiclesData, assignmentsRes] = await Promise.all([
-                api.get('/super-admin/users'),
-                api.get('/orders'),
-                VehicleService.getAll(),
-                supabase.from('driver_assignments').select('*').eq('status', 'active')
-            ]);
+            console.log("DriversPage: Fetching users...");
+            const usersRes = await api.get('/super-admin/users');
+            console.log("DriversPage: Users fetched:", usersRes.data?.length);
+
+            console.log("DriversPage: Fetching orders...");
+            const ordersRes = await api.get('/orders');
+            console.log("DriversPage: Orders fetched:", ordersRes.data?.length);
+
+            console.log("DriversPage: Fetching vehicles...");
+            const vehiclesData = await VehicleService.getAll();
+            console.log("DriversPage: Vehicles fetched:", vehiclesData?.length);
+
+            console.log("DriversPage: Fetching assignments...");
+            const assignmentsRes = await supabase.from('driver_assignments').select('*').eq('status', 'active');
+            console.log("DriversPage: Assignments fetched:", assignmentsRes.data?.length);
 
             const allDrivers: User[] = usersRes.data.filter((u: any) => u.role === 'driver');
             const allOrders: Order[] = ordersRes.data;
@@ -231,24 +241,24 @@ export const DriversPage: React.FC = () => {
     };
 
     const handleAddDriver = async () => {
-        if (!addForm.name || !addForm.phone) {
-            alert('Name and Phone are required.');
+        if (!addForm.name || !addForm.email || !addForm.password) {
+            alert('Email, Name, and Password are required.');
             return;
         }
         setIsAdding(true);
         try {
             // Create user via admin endpoint
             const res = await api.post('/admin/users/', {
-                email: addForm.email || `driver_${Date.now()}@system.local`,
+                email: addForm.email,
                 name: addForm.name,
                 password: addForm.password,
+                phone: addForm.phone || null, // handle empty string as null
                 role: 'driver'
             });
             const newDriverId = res.data.id;
 
-            // Update additional driver specific info via super-admin patch
+            // Update additional driver specific info via super-admin patch (excluding phone as it's handled in create)
             await api.patch(`/super-admin/users/${newDriverId}`, {
-                phone: addForm.phone,
                 vehicle_model: addForm.vehicle_model,
                 vehicle_plate: addForm.vehicle_plate,
                 vehicle_type: addForm.vehicle_type,
@@ -258,9 +268,10 @@ export const DriversPage: React.FC = () => {
             setShowAddModal(false);
             setAddForm({ name: '', phone: '', email: '', password: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
             loadData();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to create new driver', error);
-            alert('Failed to create new driver. Please try again.');
+            const detail = error.response?.data?.detail || error.message || 'Unknown error';
+            alert(`Failed to create new driver: ${detail}`);
         } finally {
             setIsAdding(false);
         }
@@ -715,7 +726,7 @@ export const DriversPage: React.FC = () => {
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
-                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Phone Number *</label>
+                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Phone Number (Optional)</label>
                                             <input
                                                 type="text"
                                                 value={addForm.phone}
@@ -736,13 +747,14 @@ export const DriversPage: React.FC = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Email (Optional)</label>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Email *</label>
                                         <input
                                             type="email"
                                             value={addForm.email}
+                                            required
                                             onChange={e => setAddForm({ ...addForm, email: e.target.value })}
                                             className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                            placeholder="e.g. driver@local"
+                                            placeholder="e.g. driver@kimlong.com"
                                         />
                                     </div>
                                 </div>
@@ -799,7 +811,7 @@ export const DriversPage: React.FC = () => {
                             </button>
                             <button
                                 onClick={handleAddDriver}
-                                disabled={isAdding || !addForm.name || !addForm.phone || !addForm.password}
+                                disabled={isAdding || !addForm.name || !addForm.email || !addForm.password}
                                 className="flex-1 py-3.5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl shadow-lg shadow-black/10 transition-all active:scale-95 text-sm flex items-center justify-center disabled:opacity-70 disabled:pointer-events-none"
                             >
                                 {isAdding ? <span className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span> : 'Create Driver'}

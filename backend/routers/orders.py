@@ -9,15 +9,24 @@ router = APIRouter(
 )
 
 @router.get("", response_model=List[Order])
-async def get_orders():
-    # In a real app, we would join with order_items table. 
-    # For now, assuming 'items' is stored as a JSONB column or similar for simplicity, 
-    # OR we fetch items separately. 
-    # Let's assume a flat structure for now or that Supabase returns the joined data if configured.
-    # To keep it simple and aligned with the "no SQL" requirement from the prompt (it said "use Supabase"),
-    # we'll use the JS/Python client which returns JSON.
+async def get_orders(
+    status: Optional[str] = None, 
+    sort_by: str = "created_at", 
+    order: str = "desc"
+):
+    from fastapi.concurrency import run_in_threadpool
+    query = supabase.table("orders").select("*")
+    if status and status != 'all':
+        query = query.eq("status", status)
     
-    response = supabase.table("orders").select("*, order_items(*)").order("dueTime", desc=False).execute()
+    # Map 'asc'/'desc' to boolean for supabase-py (if needed) or use string
+    is_desc = order.lower() == "desc"
+    
+    response = await run_in_threadpool(
+        query.order(sort_by, desc=is_desc)
+        .limit(200)  # Increase limit to 200 for better visibility
+        .execute
+    )
     return response.data
 
 @router.get("/{order_id:path}", response_model=Order)
@@ -40,6 +49,9 @@ async def create_order(order: OrderCreate):
     from services.goeasy import publish_message, notify_order_update
 
     order_data = order.model_dump(mode='json', exclude_none=True)
+    # Ensure status is set to pending if missing
+    if 'status' not in order_data or not order_data['status']:
+        order_data['status'] = 'pending'
     # Generate custom order ID: KM-YY/MM/DD/000
     if 'id' not in order_data or not order_data['id']:
         from datetime import datetime

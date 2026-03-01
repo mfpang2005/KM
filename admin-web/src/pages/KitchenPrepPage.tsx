@@ -70,7 +70,7 @@ const KitchenPrepPage: React.FC = () => {
 
     const fetchOrders = async () => {
         try {
-            const orders = await AdminOrderService.getAll();
+            const orders = await AdminOrderService.getAll({ sort_by: 'dueTime', order: 'asc' });
 
             if (!Array.isArray(orders)) {
                 console.error("Orders is not an array:", orders);

@@ -55,7 +55,7 @@ const HealthCheck: React.FC = () => {
 
     useEffect(() => {
         check();
-        const timer = setInterval(check, 30_000); // 每 30s 自动检查
+        const timer = setInterval(check, 120_000); // 120s
         return () => clearInterval(timer);
     }, [check]);
 
@@ -134,17 +134,21 @@ const AdminLayout: React.FC = () => {
     const [unread, setUnread] = useState(0);
 
     const loadNotifs = async () => {
-        const lastSeen = parseInt(localStorage.getItem('last_seen_notifs') || '0');
-        const { data } = await supabase
-            .from('orders')
-            .select('id, customerName, amount, created_at')
-            .eq('status', 'pending')
-            .order('created_at', { ascending: false })
-            .limit(10);
-        if (data) {
-            const unseen = data.filter(n => new Date(n.created_at).getTime() > lastSeen);
-            setNotifs(unseen);
-            setUnread(unseen.length);
+        try {
+            const lastSeen = parseInt(localStorage.getItem('last_seen_notifs') || '0');
+            const { data } = await supabase
+                .from('orders')
+                .select('id, customerName, amount, created_at')
+                .eq('status', 'pending')
+                .order('created_at', { ascending: false })
+                .limit(10);
+            if (data) {
+                const unseen = data.filter(n => new Date(n.created_at).getTime() > lastSeen);
+                setNotifs(unseen);
+                setUnread(unseen.length);
+            }
+        } catch (e) {
+            // Silently fail or log sparingly
         }
     };
 

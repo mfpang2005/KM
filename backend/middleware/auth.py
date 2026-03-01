@@ -25,16 +25,30 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     if authorization and authorization.startswith("Bearer "):
         token = authorization.replace("Bearer ", "")
         try:
-            # NOTE: 使用 Supabase auth.get_user 验证 token 的有效性
-            user_response = supabase.auth.get_user(token)
+            from fastapi.concurrency import run_in_threadpool
+            # NOTE: 使用 run_in_threadpool 避免同步调用阻塞 FastAPI 事件循环
+            user_response = await run_in_threadpool(supabase.auth.get_user, token)
             if not user_response or not user_response.user:
                 raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-            user_id = user_response.user.id
-            user_metadata = user_response.user.user_metadata or {}
-            role = user_metadata.get("role", "admin")
+            user_id = str(user_response.user.id)
+            
+            # 優先從数据库 users 表獲取角色以確保數據一致性 (Metadata 容易過期)
+            try:
+                db_response = await run_in_threadpool(
+                    supabase.table("users").select("role").eq("id", user_id).single().execute
+                )
+                if db_response.data:
+                    role = db_response.data.get("role", "user")
+                else:
+                    role = "user"
+            except Exception as e:
+                logger.warning("Failed to fetch role from DB for %s: %s", user_id, str(e))
+                # Fallback to metadata
+                user_metadata = user_response.user.user_metadata or {}
+                role = user_metadata.get("role", "user")
 
-            return {"id": str(user_id), "role": role}
+            return {"id": user_id, "role": role}
         except HTTPException:
             raise
         except Exception as e:

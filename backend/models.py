@@ -137,6 +137,7 @@ class UserCreateInternal(BaseModel):
     role: UserRole
     name: Optional[str] = None
     employee_id: Optional[str] = None
+    phone: Optional[str] = None
 
 
 class SystemConfig(BaseModel):

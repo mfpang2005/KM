@@ -28,14 +28,15 @@ async def _log_audit(actor: dict, action: str, target: str, detail: Optional[dic
     """
     将 Super Admin 的操作写入审计日志表
     """
+    from fastapi.concurrency import run_in_threadpool
     try:
-        supabase.table("audit_logs").insert({
+        await run_in_threadpool(supabase.table("audit_logs").insert({
             "actor_id": actor.get("id"),
             "actor_role": actor.get("role"),
             "action": action,
             "target": target,
             "detail": detail or {},
-        }).execute()
+        }).execute)
     except Exception as e:
         # NOTE: 审计日志写入失败不应阻断主流程
         logger.error("Failed to write audit log: %s", str(e))
@@ -52,31 +53,47 @@ async def get_stats_overview(
     """
     获取全局统计数据：订单总数、总营收、用户总数、各状态订单占比
     """
-    # 拉取所有订单
-    orders_resp = supabase.table("orders").select("*").execute()
-    orders = orders_resp.data or []
-
-    # 拉取所有用户
-    users_resp = supabase.table("users").select("id").execute()
-    users = users_resp.data or []
-
-    # 按状态分组统计
+    from fastapi.concurrency import run_in_threadpool
+    
+    # 获取所有订单的状态和金额以计算总量
+    all_orders_resp = await run_in_threadpool(
+        supabase.table("orders")
+        .select("status, amount")
+        .execute
+    )
+    all_orders_data = all_orders_resp.data or []
+    
+    total_orders = len(all_orders_data)
+    total_revenue = sum(float(o.get("amount", 0)) for o in all_orders_data)
+    
     status_counts: dict[str, int] = {}
-    total_revenue = 0.0
-    for order in orders:
-        status = order.get("status", "unknown")
-        status_counts[status] = status_counts.get(status, 0) + 1
-        total_revenue += float(order.get("amount", 0))
+    for o in all_orders_data:
+        s = o.get("status", "unknown")
+        status_counts[s] = status_counts.get(s, 0) + 1
 
-    # 最近 5 条订单
-    recent = sorted(orders, key=lambda o: o.get("created_at", ""), reverse=True)[:5]
+    # 拉取最近 200 条完整订单用于业务逻辑 (如 Recent Activity 的子集等)
+    recent_resp = await run_in_threadpool(
+        supabase.table("orders")
+        .select("*")
+        .order("created_at", desc=True)
+        .limit(200)
+        .execute
+    )
+    recent_orders = recent_resp.data or []
+
+    # 拉取用户总数
+    users_resp = await run_in_threadpool(supabase.table("users").select("id", count="exact").execute)
+    total_users = users_resp.count if hasattr(users_resp, "count") else len(users_resp.data or [])
+
+    # 最近 5 条订单用于前端小组件
+    recent_5 = recent_orders[:5]
 
     return StatsOverview(
-        total_orders=len(orders),
+        total_orders=total_orders,
         total_revenue=total_revenue,
-        total_users=len(users),
+        total_users=total_users,
         orders_by_status=status_counts,
-        recent_orders=recent,
+        recent_orders=recent_5,
     )
 
 
@@ -91,7 +108,8 @@ async def list_all_users(
     """
     获取所有用户列表
     """
-    response = supabase.table("users").select("*").execute()
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(supabase.table("users").select("*").execute)
     return response.data or []
 
 
@@ -113,7 +131,8 @@ async def update_user(
     if "role" in update_data:
         update_data["role"] = update_data["role"].value if hasattr(update_data["role"], "value") else update_data["role"]
 
-    response = supabase.table("users").update(update_data).eq("id", user_id).execute()
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(supabase.table("users").update(update_data).eq("id", user_id).execute)
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -148,7 +167,8 @@ async def delete_user(
     if user_id == current_user.get("id"):
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
-    response = supabase.table("users").delete().eq("id", user_id).execute()
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(supabase.table("users").delete().eq("id", user_id).execute)
 
     await _log_audit(
         actor=current_user,
@@ -170,7 +190,8 @@ async def get_all_config(
     """
     读取所有系统配置项
     """
-    response = supabase.table("system_config").select("*").execute()
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(supabase.table("system_config").select("*").execute)
     return response.data or []
 
 
@@ -188,7 +209,8 @@ async def upsert_config(
         "value": config.value,
         "updated_by": current_user.get("id"),
     }
-    response = supabase.table("system_config").upsert(data).execute()
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(supabase.table("system_config").upsert(data).execute)
 
     await _log_audit(
         actor=current_user,
@@ -217,16 +239,17 @@ async def get_audit_logs(
     """
     offset = (page - 1) * page_size
 
-    response = (
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(
         supabase.table("audit_logs")
         .select("*")
         .order("created_at", desc=True)
         .range(offset, offset + page_size - 1)
-        .execute()
+        .execute
     )
 
     # 获取总数用于分页
-    count_resp = supabase.table("audit_logs").select("id", count="exact").execute()
+    count_resp = await run_in_threadpool(supabase.table("audit_logs").select("id", count="exact").execute)
     total = count_resp.count if hasattr(count_resp, "count") and count_resp.count else 0
 
     return {
@@ -253,7 +276,8 @@ async def get_all_orders(
     if status:
         query = query.eq("status", status)
         
-    response = query.execute()
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(query.execute)
     return response.data or []
 
 
@@ -265,8 +289,9 @@ async def approve_order(
     """
     审批订单：将状态从 pending 修改为 preparing
     """
+    from fastapi.concurrency import run_in_threadpool
     # 验证订单当前状态
-    order_resp = supabase.table("orders").select("*").eq("id", order_id).execute()
+    order_resp = await run_in_threadpool(supabase.table("orders").select("*").eq("id", order_id).execute)
     if not order_resp.data:
         raise HTTPException(status_code=404, detail="Order not found")
         
@@ -276,7 +301,7 @@ async def approve_order(
         
     # 更新状态为 preparing
     update_data = {"status": "preparing"}
-    response = supabase.table("orders").update(update_data).eq("id", order_id).execute()
+    response = await run_in_threadpool(supabase.table("orders").update(update_data).eq("id", order_id).execute)
     
     # 记录审计日志
     await _log_audit(

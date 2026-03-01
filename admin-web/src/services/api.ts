@@ -2,7 +2,8 @@ import axios from 'axios';
 import { supabase } from '../lib/supabase';
 import type { Order, OrderStatus, OrderCreate, User, StatsOverview, AuditLog, SystemConfig, Product, Vehicle, DriverAssignment } from '../types';
 // 使用完整的后端地址避免跨域问题，如果配置了 CORS 的话。
-const API_URL = 'http://localhost:8000';
+// 使用相对路径以触发 Vite 代理，避免跨域和硬编码主机问题
+const API_URL = '/api';
 
 export const api = axios.create({
     baseURL: API_URL,
@@ -82,8 +83,8 @@ export const SuperAdminService = {
 
 // 后续扩展 Order 接口
 export const AdminOrderService = {
-    getAll: async (): Promise<Order[]> => {
-        const response = await api.get('/orders');
+    getAll: async (params?: { status?: string; sort_by?: string; order?: string }): Promise<Order[]> => {
+        const response = await api.get('/orders', { params });
         return response.data;
     },
     getById: async (id: string): Promise<Order> => {

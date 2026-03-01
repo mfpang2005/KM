@@ -29,6 +29,7 @@ interface ConfirmedOrderSnapshot {
     driverName: string;
     dueTime: string;
     createdAt: string;
+    status: OrderStatus;
 }
 
 /** 格式化订单号：ORD-YYYYMMDD-三位序号 */
@@ -114,8 +115,10 @@ export const CreateOrderPage: React.FC = () => {
     // 筛选菜单
     const filteredProducts = useMemo(() => products.filter(p => {
         const matchCat = activeCategory === '全部' || p.category === activeCategory;
-        const q = searchQuery.toLowerCase();
-        const matchSearch = p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q);
+        const q = (searchQuery || '').toLowerCase();
+        const name = (p.name || '').toLowerCase();
+        const code = (p.code || '').toLowerCase();
+        const matchSearch = name.includes(q) || code.includes(q);
         return matchCat && matchSearch;
     }), [products, activeCategory, searchQuery]);
 
@@ -206,6 +209,7 @@ export const CreateOrderPage: React.FC = () => {
                 driverName: assignedDriver?.name || assignedDriver?.email || '未指派',
                 dueTime: payload.dueTime,
                 createdAt: new Date().toLocaleString('zh-MY', { hour12: false }),
+                status: payload.status,
             });
         } catch (err) {
             console.error('Failed to create order', err);
@@ -356,6 +360,11 @@ export const CreateOrderPage: React.FC = () => {
                             <div className="text-right text-xs text-slate-500 font-medium shrink-0">
                                 <p>创建时间: <span className="font-bold text-slate-700">{confirmedOrder.createdAt}</span></p>
                                 <p>预计交付: <span className="font-bold text-slate-700">{confirmedOrder.dueTime}</span></p>
+                                <div className="mt-2 flex justify-end">
+                                    <span className="px-3 py-1 bg-yellow-50 text-yellow-600 border border-yellow-200 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                        {confirmedOrder.status}
+                                    </span>
+                                </div>
                             </div>
                         </div>
 
@@ -490,20 +499,27 @@ export const CreateOrderPage: React.FC = () => {
                         </div>
 
                         {/* 操作按钮 */}
-                        <div className="flex gap-3 no-print-area">
+                        <div className="flex flex-col sm:flex-row gap-3 no-print-area mt-4">
                             <button
                                 onClick={() => window.print()}
                                 className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
                             >
                                 <span className="material-icons-round text-[18px]">print</span>
-                                打印收据
+                                打印单据 (Print)
+                            </button>
+                            <button
+                                onClick={() => window.location.href = '/orders'}
+                                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"
+                            >
+                                <span className="material-icons-round text-[18px]">list_alt</span>
+                                查看订单 (Orders)
                             </button>
                             <button
                                 onClick={handleReset}
                                 className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-indigo-500/20 transition-all"
                             >
                                 <span className="material-icons-round text-[18px]">add_shopping_cart</span>
-                                再次下单
+                                再次下单 (Next)
                             </button>
                         </div>
                     </div>
@@ -540,7 +556,10 @@ export const CreateOrderPage: React.FC = () => {
                             </h3>
                             <div className="relative mt-3">
                                 <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">search</span>
+                                <label htmlFor="menu-search" className="sr-only">搜索产品</label>
                                 <input
+                                    id="menu-search"
+                                    name="menu-search"
                                     type="text"
                                     className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                                     placeholder="搜索产品名或编号..."
@@ -715,28 +734,36 @@ export const CreateOrderPage: React.FC = () => {
                         </div>
                         <div className="p-5 space-y-3">
                             <div>
-                                <label className="block text-xs font-black text-slate-400 mb-1.5">客户姓名 *</label>
+                                <label htmlFor="customer-name" className="block text-xs font-black text-slate-400 mb-1.5">客户姓名 *</label>
                                 <input
+                                    id="customer-name"
+                                    name="customer-name"
                                     type="text"
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
                                     placeholder="e.g. 陈大明"
+                                    autoComplete="name"
                                     value={customerName}
                                     onChange={e => setCustomerName(e.target.value)}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 mb-1.5">联系电话 *</label>
+                                <label htmlFor="customer-phone" className="block text-xs font-black text-slate-400 mb-1.5">联系电话 *</label>
                                 <input
-                                    type="text"
+                                    id="customer-phone"
+                                    name="customer-phone"
+                                    type="tel"
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
                                     placeholder="+60123456789"
+                                    autoComplete="tel"
                                     value={customerPhone}
                                     onChange={e => setCustomerPhone(e.target.value)}
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 mb-1.5">配送地址（选填）</label>
+                                <label htmlFor="delivery-address" className="block text-xs font-black text-slate-400 mb-1.5">配送地址（选填）</label>
                                 <textarea
+                                    id="delivery-address"
+                                    name="delivery-address"
                                     rows={2}
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium resize-none"
                                     placeholder="留空视为到店自取..."
@@ -753,7 +780,10 @@ export const CreateOrderPage: React.FC = () => {
                                 </label>
                                 <div className="relative">
                                     <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">link</span>
+                                    <label htmlFor="maps-link" className="sr-only">Google Maps 链接</label>
                                     <input
+                                        id="maps-link"
+                                        name="maps-link"
                                         type="url"
                                         className="w-full pl-9 pr-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 font-medium"
                                         placeholder="粘贴 Google Maps 链接..."

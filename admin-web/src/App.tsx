@@ -17,15 +17,23 @@ import KitchenCalendarPage from './pages/KitchenCalendarPage';
 import KitchenPrepPage from './pages/KitchenPrepPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, loading } = useAuth();
+  const { user, loading, logout } = useAuth();
   const location = useLocation();
 
   // NOTE: /walkie-talkie 使用 GoEasy 自带 AppKey 鉴权，无需 Supabase session
   if (location.pathname === '/walkie-talkie') return <>{children}</>;
 
-  if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-b-2 border-primary rounded-full"></div></div>;
 
-  if (!user) return <Navigate to="/login" replace />;
+  if (loading) return (
+    <div className="h-screen w-screen flex flex-col items-center justify-center bg-slate-50 text-slate-400">
+      <div className="h-8 w-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin mb-4"></div>
+      <p className="text-[10px] font-black uppercase tracking-widest animate-pulse">Authenticating</p>
+    </div>
+  );
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
 
   // SECURITY CHECK: 拦截非管理员访问后台
   if (user.role !== 'admin' && user.role !== 'super_admin') {
@@ -34,12 +42,16 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 max-w-sm text-center">
           <span className="material-icons-round text-5xl text-red-500 mb-4 tracking-tighter">gpp_maybe</span>
           <h2 className="text-xl font-bold text-slate-800 mb-2">权限不足 (Access Denied)</h2>
-          <p className="text-sm text-slate-400 mb-6">您的账号权限级别（{user.role}）不足以访问后台。请联系系统管理员。</p>
+          <p className="text-sm text-slate-500 mb-2">您的账号：<b>{user.email}</b></p>
+          <p className="text-xs text-slate-400 mb-6">级别（{user.role}）不足以访问总后台。请联系系统管理员通过 SuperAdmin 后台提升您的权限。</p>
           <button
-            onClick={() => window.location.href = '/login'}
-            className="w-full py-3 bg-slate-900 text-white rounded-xl font-bold text-sm"
+            onClick={async () => {
+              await logout();
+              window.location.href = '/login';
+            }}
+            className="w-full py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-sm transition-colors"
           >
-            返回登录
+            退出并返回重新登录
           </button>
         </div>
       </div>
@@ -49,8 +61,8 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-
 const App: React.FC = () => {
+  console.log("App: Rendering...");
   return (
     <BrowserRouter>
       <Routes>

@@ -12,7 +12,8 @@ router = APIRouter(
 @router.get("/", response_model=List[Vehicle])
 async def get_vehicles():
     """获取所有车辆信息"""
-    response = supabase.table("vehicles").select("*").execute()
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(supabase.table("vehicles").select("*").execute)
     return response.data
 
 @router.post("/", response_model=Vehicle)
