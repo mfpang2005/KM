@@ -34,11 +34,6 @@ async def create_internal_user(
             }
         }
         
-        # 如果提供了电话且不为空，同步到 Auth
-        if user_data.phone and user_data.phone.strip():
-            auth_attributes["phone"] = user_data.phone.strip()
-            auth_attributes["phone_confirm"] = True
-
         # 调用 Supabase Admin API
         auth_res = supabase.auth.admin.create_user(auth_attributes)
         

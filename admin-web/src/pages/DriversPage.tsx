@@ -724,6 +724,17 @@ export const DriversPage: React.FC = () => {
                                             placeholder="e.g. Ali Bin Abu"
                                         />
                                     </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Email Address (Login ID) *</label>
+                                        <input
+                                            type="email"
+                                            required
+                                            value={addForm.email}
+                                            onChange={e => setAddForm({ ...addForm, email: e.target.value })}
+                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
+                                            placeholder="e.g. driver@kimlong.com"
+                                        />
+                                    </div>
                                     <div className="grid grid-cols-2 gap-3">
                                         <div>
                                             <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Phone Number (Optional)</label>
@@ -732,30 +743,20 @@ export const DriversPage: React.FC = () => {
                                                 value={addForm.phone}
                                                 onChange={e => setAddForm({ ...addForm, phone: e.target.value })}
                                                 className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                                placeholder="e.g. 0123456789"
+                                                placeholder="e.g. 012345678"
                                             />
                                         </div>
                                         <div>
                                             <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Initial Password *</label>
                                             <input
                                                 type="password"
+                                                required
                                                 value={addForm.password}
                                                 onChange={e => setAddForm({ ...addForm, password: e.target.value })}
                                                 className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
                                                 placeholder="e.g. SecurePass123"
                                             />
                                         </div>
-                                    </div>
-                                    <div>
-                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Email *</label>
-                                        <input
-                                            type="email"
-                                            value={addForm.email}
-                                            required
-                                            onChange={e => setAddForm({ ...addForm, email: e.target.value })}
-                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                            placeholder="e.g. driver@kimlong.com"
-                                        />
                                     </div>
                                 </div>
                             </div>
