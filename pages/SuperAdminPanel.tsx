@@ -119,21 +119,47 @@ const SuperAdminPanel: React.FC = () => {
 const OverviewSection: React.FC = () => {
     const [stats, setStats] = useState<StatsData | null>(null);
     const [loading, setLoading] = useState(true);
+    const [isResetting, setIsResetting] = useState(false);
     const navigate = useNavigate();
 
+    const loadStats = async () => {
+        try {
+            setLoading(true);
+            const data = await SuperAdminService.getStats();
+            setStats(data);
+        } catch (error) {
+            console.error('Failed to load stats:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
     useEffect(() => {
-        const loadStats = async () => {
-            try {
-                const data = await SuperAdminService.getStats();
-                setStats(data);
-            } catch (error) {
-                console.error('Failed to load stats:', error);
-            } finally {
-                setLoading(false);
-            }
-        };
         loadStats();
     }, []);
+
+    const handleReset = async () => {
+        const confirm1 = window.confirm('⚠ 警告：此操作将删除所有订单记录并重置司机状态。此操作不可撤销！确认继续？');
+        if (!confirm1) return;
+
+        const confirm2 = window.prompt('请输入 "RESET" 以确认重置操作：');
+        if (confirm2 !== 'RESET') {
+            alert('输入错误，重置已取消。');
+            return;
+        }
+
+        try {
+            setIsResetting(true);
+            await SuperAdminService.resetData();
+            alert('系统数据已重置到初始状态。');
+            await loadStats();
+        } catch (error) {
+            console.error('Reset failed:', error);
+            alert('重置失败，请检查服务器日志。');
+        } finally {
+            setIsResetting(false);
+        }
+    };
 
     const statusLabels: Record<string, string> = {
         pending: '待处理',
@@ -237,6 +263,27 @@ const OverviewSection: React.FC = () => {
                             </div>
                         </button>
                     ))}
+                </div>
+            </div>
+
+            {/* 危险操作区 */}
+            <div className="bg-red-50/30 rounded-2xl p-5 shadow-sm border border-red-100/50">
+                <div className="flex items-center gap-2 mb-4">
+                    <span className="material-icons-round text-red-500 text-lg">warning</span>
+                    <h3 className="text-xs font-black text-red-600 uppercase tracking-wider">危险区域 (DANGER ZONE)</h3>
+                </div>
+                <div className="bg-white rounded-xl p-4 border border-red-100 flex items-center justify-between gap-4">
+                    <div>
+                        <p className="text-sm font-bold text-slate-800">重置全系统数据</p>
+                        <p className="text-[10px] text-slate-400 mt-1">清空所有订单、交易记录，并将所有司机状态设为空闲 (Idle)。</p>
+                    </div>
+                    <button
+                        onClick={handleReset}
+                        disabled={isResetting}
+                        className="px-6 py-3 bg-red-500 text-white rounded-xl font-black text-xs uppercase shadow-lg shadow-red-200 active:scale-95 transition-all disabled:opacity-50"
+                    >
+                        {isResetting ? '正在重置...' : '执行重置'}
+                    </button>
                 </div>
             </div>
         </div>

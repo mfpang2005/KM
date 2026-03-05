@@ -1,6 +1,8 @@
 
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { SuperAdminService } from '../src/services/api';
+import { useEffect } from 'react';
 
 interface FinancialData {
     grossSales: number;
@@ -12,40 +14,49 @@ interface FinancialData {
     hourlySales: { hour: string; amount: number }[];
 }
 
-const MOCK_FINANCE: FinancialData = {
-    grossSales: 12840.50,
-    discounts: 340.00,
-    tax: 750.00,
-    netSales: 13250.50,
-    collections: [
-        { method: 'Cash (现金)', amount: 4500.00, count: 42 },
-        { method: 'TNG eWallet', amount: 5200.50, count: 55 },
-        { method: 'GrabPay', amount: 1850.00, count: 18 },
-        { method: 'Bank Transfer', amount: 1700.00, count: 5 }
-    ],
-    categorySales: [
-        { category: '主食 (Mains)', amount: 8400.00 },
-        { category: '小吃 (Snacks)', amount: 2200.00 },
-        { category: '饮料 (Drinks)', amount: 1200.00 },
-        { category: '配送费 (Delivery)', amount: 1040.50 }
-    ],
-    hourlySales: [
-        { hour: '11AM', amount: 1200 },
-        { hour: '12PM', amount: 4500 },
-        { hour: '01PM', amount: 3200 },
-        { hour: '02PM', amount: 800 },
-        { hour: '05PM', amount: 1100 },
-        { hour: '06PM', amount: 2450 }
-    ]
+const INITIAL_FINANCE: FinancialData = {
+    grossSales: 0,
+    discounts: 0,
+    tax: 0,
+    netSales: 0,
+    collections: [],
+    categorySales: [],
+    hourlySales: []
 };
 
 const FinancialSummary: React.FC = () => {
     const navigate = useNavigate();
     const [timeRange, setTimeRange] = useState<'today' | 'yesterday' | 'week'>('today');
+    const [finance, setFinance] = useState<FinancialData>(INITIAL_FINANCE);
+    const [loading, setLoading] = useState(true);
+
+    const loadFinance = async () => {
+        try {
+            setLoading(true);
+            const data = await SuperAdminService.getFinancials(timeRange);
+            setFinance(data);
+        } catch (error) {
+            console.error('Failed to load financials:', error);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadFinance();
+    }, [timeRange]);
 
     const handlePrint = () => {
         window.print();
     };
+
+    if (loading && finance.grossSales === 0) {
+        return (
+            <div className="flex flex-col h-full bg-slate-900 items-center justify-center">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
+        );
+    }
 
     return (
         <div className="flex flex-col h-full bg-slate-900 text-slate-200">
@@ -61,16 +72,16 @@ const FinancialSummary: React.FC = () => {
                     <div className="grid grid-cols-2 gap-8 mb-8">
                         <div className="space-y-2">
                             <h4 className="font-black text-xs uppercase border-b-2 border-black pb-1">Sales Summary</h4>
-                            <div className="flex justify-between text-sm"><span>Gross Sales:</span> <span>RM {MOCK_FINANCE.grossSales.toFixed(2)}</span></div>
-                            <div className="flex justify-between text-sm"><span>Discounts:</span> <span>- RM {MOCK_FINANCE.discounts.toFixed(2)}</span></div>
-                            <div className="flex justify-between text-sm"><span>Tax (SST 6%):</span> <span>RM {MOCK_FINANCE.tax.toFixed(2)}</span></div>
-                            <div className="flex justify-between text-base font-black border-t-2 border-black pt-1"><span>NET SALES:</span> <span>RM {MOCK_FINANCE.netSales.toFixed(2)}</span></div>
+                            <div className="flex justify-between text-sm"><span>Gross Sales:</span> <span>RM {finance.grossSales.toFixed(2)}</span></div>
+                            <div className="flex justify-between text-sm"><span>Discounts:</span> <span>- RM {finance.discounts.toFixed(2)}</span></div>
+                            <div className="flex justify-between text-sm"><span>Tax (SST 6%):</span> <span>RM {finance.tax.toFixed(2)}</span></div>
+                            <div className="flex justify-between text-base font-black border-t-2 border-black pt-1"><span>NET SALES:</span> <span>RM {finance.netSales.toFixed(2)}</span></div>
                         </div>
                         <div className="space-y-2">
                             <h4 className="font-black text-xs uppercase border-b-2 border-black pb-1">Collection Summary</h4>
-                            {MOCK_FINANCE.collections.map(c => (
+                            {finance.collections.map(c => (
                                 <div key={c.method} className="flex justify-between text-sm">
-                                    <span>{c.method} ({c.count}):</span> 
+                                    <span>{c.method} ({c.count}):</span>
                                     <span>RM {c.amount.toFixed(2)}</span>
                                 </div>
                             ))}
@@ -88,10 +99,10 @@ const FinancialSummary: React.FC = () => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {MOCK_FINANCE.categorySales.map(cat => (
+                                {finance.categorySales.map(cat => (
                                     <tr key={cat.category} className="border-b border-slate-100">
                                         <td className="py-2">{cat.category}</td>
-                                        <td className="text-right py-2">{((cat.amount / MOCK_FINANCE.netSales) * 100).toFixed(1)}%</td>
+                                        <td className="text-right py-2">{finance.netSales > 0 ? ((cat.amount / finance.netSales) * 100).toFixed(1) : 0}%</td>
                                         <td className="text-right py-2 font-bold">RM {cat.amount.toFixed(2)}</td>
                                     </tr>
                                 ))}
@@ -129,9 +140,8 @@ const FinancialSummary: React.FC = () => {
                         <button
                             key={t}
                             onClick={() => setTimeRange(t as any)}
-                            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${
-                                timeRange === t ? 'bg-primary text-white shadow-xl' : 'text-slate-500'
-                            }`}
+                            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${timeRange === t ? 'bg-primary text-white shadow-xl' : 'text-slate-500'
+                                }`}
                         >
                             {t === 'today' ? '今日结算' : t === 'yesterday' ? '昨日' : '近7天'}
                         </button>
@@ -148,17 +158,17 @@ const FinancialSummary: React.FC = () => {
                         </div>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">今日实收净额 (Net Collected)</p>
                         <div className="flex items-baseline gap-2">
-                            <span className="text-4xl font-black text-white tracking-tighter">RM {MOCK_FINANCE.netSales.toLocaleString()}</span>
-                            <span className="text-green-500 text-xs font-bold">+12.5%</span>
+                            <span className="text-4xl font-black text-white tracking-tighter">RM {finance.netSales.toLocaleString()}</span>
+                            <span className="text-green-500 text-xs font-bold">+0%</span>
                         </div>
                         <div className="mt-4 flex gap-4">
                             <div className="flex flex-col">
                                 <span className="text-[8px] font-bold text-slate-500 uppercase">毛销售额</span>
-                                <span className="text-xs font-black text-slate-300">RM {MOCK_FINANCE.grossSales.toFixed(2)}</span>
+                                <span className="text-xs font-black text-slate-300">RM {finance.grossSales.toFixed(2)}</span>
                             </div>
                             <div className="flex flex-col border-l border-white/10 pl-4">
                                 <span className="text-[8px] font-bold text-slate-500 uppercase">折扣 & 冲正</span>
-                                <span className="text-xs font-black text-red-400">-RM {MOCK_FINANCE.discounts.toFixed(2)}</span>
+                                <span className="text-xs font-black text-red-400">-RM {finance.discounts.toFixed(2)}</span>
                             </div>
                         </div>
                     </div>
@@ -177,16 +187,17 @@ const FinancialSummary: React.FC = () => {
                 <section className="bg-white/5 p-6 rounded-[40px] border border-white/5">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">支付渠道分布 (Channel Mix)</h3>
                     <div className="space-y-4">
-                        {MOCK_FINANCE.collections.map(c => (
+                        {finance.collections.length === 0 && <p className="text-xs text-slate-500 text-center py-4">暂无收款记录</p>}
+                        {finance.collections.map(c => (
                             <div key={c.method} className="space-y-1.5">
                                 <div className="flex justify-between text-[11px] font-bold">
                                     <span className="text-slate-300">{c.method}</span>
                                     <span className="text-white">RM {c.amount.toFixed(2)}</span>
                                 </div>
                                 <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                                    <div 
+                                    <div
                                         className="h-full bg-gold-accent shadow-[0_0_10px_rgba(212,175,55,0.4)] rounded-full transition-all duration-1000"
-                                        style={{ width: `${(c.amount / MOCK_FINANCE.netSales) * 100}%` }}
+                                        style={{ width: `${finance.netSales > 0 ? (c.amount / finance.netSales) * 100 : 0}%` }}
                                     ></div>
                                 </div>
                             </div>
@@ -201,11 +212,11 @@ const FinancialSummary: React.FC = () => {
                         <span className="text-[9px] font-black bg-primary text-white px-2 py-0.5 rounded uppercase">Peak: 12PM</span>
                     </div>
                     <div className="flex items-end justify-between h-32 gap-1.5 px-2">
-                        {MOCK_FINANCE.hourlySales.map((h, i) => (
+                        {finance.hourlySales.map((h, i) => (
                             <div key={i} className="flex-1 flex flex-col items-center gap-3 group">
                                 <div className="w-full bg-white/5 rounded-t-xl h-full flex items-end overflow-hidden">
-                                    <div 
-                                        className={`w-full transition-all duration-1000 ${h.amount > 3000 ? 'bg-primary' : 'bg-gold-accent/40'} group-hover:bg-primary shadow-lg`} 
+                                    <div
+                                        className={`w-full transition-all duration-1000 ${h.amount > 3000 ? 'bg-primary' : 'bg-gold-accent/40'} group-hover:bg-primary shadow-lg`}
                                         style={{ height: `${(h.amount / 4500) * 100}%` }}
                                     ></div>
                                 </div>
@@ -219,11 +230,11 @@ const FinancialSummary: React.FC = () => {
                 <section className="bg-white/5 p-6 rounded-[40px] border border-white/5">
                     <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">类目营收占比 (Product Mix)</h3>
                     <div className="grid grid-cols-2 gap-4">
-                        {MOCK_FINANCE.categorySales.map(cat => (
+                        {finance.categorySales.map(cat => (
                             <div key={cat.category} className="bg-slate-900/50 p-4 rounded-2xl border border-white/5">
                                 <p className="text-[9px] font-bold text-slate-500 uppercase truncate">{cat.category}</p>
                                 <p className="text-sm font-black text-white mt-1">RM {cat.amount.toFixed(2)}</p>
-                                <p className="text-[8px] font-bold text-gold-accent mt-0.5">占比 {((cat.amount / MOCK_FINANCE.netSales) * 100).toFixed(1)}%</p>
+                                <p className="text-[8px] font-bold text-gold-accent mt-0.5">占比 {finance.netSales > 0 ? ((cat.amount / finance.netSales) * 100).toFixed(1) : 0}%</p>
                             </div>
                         ))}
                     </div>

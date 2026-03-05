@@ -156,6 +156,18 @@ export const SuperAdminService = {
         const response = await api.get(`/super-admin/audit-logs?page=${page}&page_size=${pageSize}`);
         return response.data;
     },
+
+    /** 重置全系统交易数据（危险操作） */
+    resetData: async () => {
+        const response = await api.post('/super-admin/reset-data');
+        return response.data;
+    },
+
+    /** 获取财务统计 */
+    getFinancials: async (range: string = 'today'): Promise<any> => {
+        const response = await api.get(`/super-admin/financials?range=${range}`);
+        return response.data;
+    },
 };
 
 export const VehicleService = {
