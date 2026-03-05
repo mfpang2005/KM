@@ -31,6 +31,12 @@ export const ProductsPage: React.FC = () => {
     const [editingProduct, setEditingProduct] = useState<Product | null>(null);
     const [form, setForm] = useState<ProductForm>({ code: '', name: '', price: '', category: '', image_url: '' });
 
+    // 双重确认弹窗状态
+    const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [confirmDeleteInfo, setConfirmDeleteInfo] = useState<{ id: string; name: string } | null>(null);
+    const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     // NOTE: 将提交状态与列表加载状态分离，避免表单 submit 按钮被列表 loading 影响
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [imageUploading, setImageUploading] = useState(false);
@@ -55,14 +61,25 @@ export const ProductsPage: React.FC = () => {
         loadProducts();
     }, []);
 
-    const handleDelete = async (id: string, name: string) => {
-        if (!window.confirm(`Are you sure you want to delete "${name}"?`)) return;
+    const handleDelete = (id: string, name: string) => {
+        setConfirmDeleteInfo({ id, name });
+        setDeleteStep(1);
+        setDeleteModalOpen(true);
+    };
+
+    const executeDelete = async () => {
+        if (!confirmDeleteInfo) return;
+        setIsDeleting(true);
         try {
-            await ProductService.delete(id);
+            await ProductService.delete(confirmDeleteInfo.id);
             await loadProducts();
+            setDeleteModalOpen(false);
+            setConfirmDeleteInfo(null);
         } catch (error) {
             console.error('Failed to delete product', error);
             alert('Delete failed.');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -394,6 +411,65 @@ export const ProductsPage: React.FC = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Modal for Add / Edit Product ... */}
+
+            {/* 双重删除确认弹窗 */}
+            {isDeleteModalOpen && confirmDeleteInfo && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden relative border border-slate-100">
+                        <div className="p-8 text-center">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <span className={`material-icons-round text-red-500 text-4xl ${deleteStep === 2 ? 'animate-pulse' : ''}`}>
+                                    {deleteStep === 1 ? 'help_outline' : 'report_problem'}
+                                </span>
+                            </div>
+
+                            <h3 className="text-2xl font-black text-slate-800 mb-2">
+                                {deleteStep === 1 ? 'Confirm Delete?' : 'Final Warning!'}
+                            </h3>
+
+                            <p className="text-slate-500 font-bold leading-relaxed mb-8 px-4">
+                                {deleteStep === 1 ? (
+                                    <>Are you sure you want to remove <span className="text-slate-900 font-black">"{confirmDeleteInfo.name}"</span>?</>
+                                ) : (
+                                    <span className="text-red-500">This action is permanent and will remove this product from all active menus. Click again to confirm.</span>
+                                )}
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                {deleteStep === 1 ? (
+                                    <button
+                                        onClick={() => setDeleteStep(2)}
+                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-slate-900/20"
+                                    >
+                                        Yes, I'm Sure
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={executeDelete}
+                                        disabled={isDeleting}
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-red-600/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isDeleting && <span className="material-icons-round animate-spin">autorenew</span>}
+                                        Confirm Permanent Delete
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        setDeleteModalOpen(false);
+                                        setConfirmDeleteInfo(null);
+                                    }}
+                                    disabled={isDeleting}
+                                    className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

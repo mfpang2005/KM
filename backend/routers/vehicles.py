@@ -16,24 +16,50 @@ async def get_vehicles():
     response = await run_in_threadpool(supabase.table("vehicles").select("*").execute)
     return response.data
 
+def clean_vehicle_data(data: dict) -> dict:
+    """将空字符串转换为 None，以适配数据库的 Date/Numeric 类型"""
+    return {k: (None if v == "" else v) for k, v in data.items()}
+
 @router.post("/", response_model=Vehicle)
 async def create_vehicle(vehicle: VehicleCreate):
     """添加新车辆"""
-    data = vehicle.model_dump()
-    response = supabase.table("vehicles").insert(data).execute()
-    if not response.data:
-        raise HTTPException(status_code=400, detail="Failed to create vehicle")
-    return response.data[0]
+    data = clean_vehicle_data(vehicle.model_dump())
+    try:
+        response = supabase.table("vehicles").insert(data).execute()
+        if not response.data:
+            raise HTTPException(status_code=400, detail="Failed to create vehicle")
+        return response.data[0]
+    except Exception as e:
+        error_msg = str(e)
+        if "23505" in error_msg or "duplicate key" in error_msg:
+            raise HTTPException(status_code=400, detail=f"车牌号 {data.get('plate_no')} 已存在，请勿重复添加。")
+        if "22007" in error_msg:
+            raise HTTPException(status_code=400, detail="日期格式不正确，预计格式为 YYYY-MM-DD")
+        if "22P02" in error_msg:
+            raise HTTPException(status_code=400, detail="载重能力字段请输入有效的数字")
+        raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
 
 @router.put("/{vehicle_id}", response_model=Vehicle)
 async def update_vehicle(vehicle_id: str, vehicle_update: VehicleUpdate):
     """更新车辆状态或信息"""
-    data = vehicle_update.model_dump(exclude_unset=True)
+    data = clean_vehicle_data(vehicle_update.model_dump(exclude_unset=True))
     data["updated_at"] = datetime.datetime.utcnow().isoformat()
-    response = supabase.table("vehicles").update(data).eq("id", vehicle_id).execute()
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Vehicle not found")
-    return response.data[0]
+    try:
+        response = supabase.table("vehicles").update(data).eq("id", vehicle_id).execute()
+        if not response.data:
+            raise HTTPException(status_code=404, detail="Vehicle not found")
+        return response.data[0]
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        if "23505" in error_msg or "duplicate key" in error_msg:
+            raise HTTPException(status_code=400, detail=f"车牌号 {data.get('plate_no')} 已被其他车辆占用。")
+        if "22007" in error_msg:
+            raise HTTPException(status_code=400, detail="日期格式不正确，预计格式为 YYYY-MM-DD")
+        if "22P02" in error_msg:
+            raise HTTPException(status_code=400, detail="载重能力字段请输入有效的数字")
+        raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
 
 @router.delete("/{vehicle_id}")
 async def delete_vehicle(vehicle_id: str):

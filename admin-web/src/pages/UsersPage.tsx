@@ -27,6 +27,12 @@ export const UsersPage: React.FC = () => {
         phone: ''
     });
 
+    // 双重确认弹窗状态
+    const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [confirmDeleteInfo, setConfirmDeleteInfo] = useState<{ id: string; email: string } | null>(null);
+    const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+    const [isDeleting, setIsDeleting] = useState(false);
+
     const loadUsers = useCallback(async () => {
         setLoading(true);
         try {
@@ -57,14 +63,25 @@ export const UsersPage: React.FC = () => {
         }
     };
 
-    const handleDeleteUser = async (userId: string, email: string) => {
-        if (!window.confirm(`Are you sure you want to delete ${email}?`)) return;
+    const handleDeleteUser = (userId: string, email: string) => {
+        setConfirmDeleteInfo({ id: userId, email });
+        setDeleteStep(1);
+        setDeleteModalOpen(true);
+    };
+
+    const executeDelete = async () => {
+        if (!confirmDeleteInfo) return;
+        setIsDeleting(true);
         try {
-            await SuperAdminService.deleteUser(userId);
+            await SuperAdminService.deleteUser(confirmDeleteInfo.id);
             await loadUsers();
+            setDeleteModalOpen(false);
+            setConfirmDeleteInfo(null);
         } catch (error) {
             console.error('Failed to delete user', error);
             alert('Delete failed, please try again.');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -393,6 +410,65 @@ export const UsersPage: React.FC = () => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+            {/* Add User Modal ... */}
+
+            {/* 双重删除确认弹窗 */}
+            {isDeleteModalOpen && confirmDeleteInfo && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden relative border border-slate-100">
+                        <div className="p-8 text-center">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <span className={`material-icons-round text-red-500 text-4xl ${deleteStep === 2 ? 'animate-pulse' : ''}`}>
+                                    {deleteStep === 1 ? 'person_remove' : 'gpp_maybe'}
+                                </span>
+                            </div>
+
+                            <h3 className="text-2xl font-black text-slate-800 mb-2">
+                                {deleteStep === 1 ? 'Delete User?' : 'Absolute Warning!'}
+                            </h3>
+
+                            <p className="text-slate-500 font-bold leading-relaxed mb-8 px-4 text-sm">
+                                {deleteStep === 1 ? (
+                                    <>Are you sure you want to permanently delete account <span className="text-slate-900 font-black">"{confirmDeleteInfo.email}"</span>?</>
+                                ) : (
+                                    <span className="text-red-500 font-black">This will disable their login and remove all associated records. This process is IRREVERSIBLE.</span>
+                                )}
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                {deleteStep === 1 ? (
+                                    <button
+                                        onClick={() => setDeleteStep(2)}
+                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-slate-900/20"
+                                    >
+                                        Yes, I'm Sure
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={executeDelete}
+                                        disabled={isDeleting}
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-red-600/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isDeleting && <span className="material-icons-round animate-spin">autorenew</span>}
+                                        Confirm Final Deletion
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        setDeleteModalOpen(false);
+                                        setConfirmDeleteInfo(null);
+                                    }}
+                                    disabled={isDeleting}
+                                    className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

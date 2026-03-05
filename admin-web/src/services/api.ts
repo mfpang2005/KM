@@ -109,6 +109,25 @@ export const AdminOrderService = {
     },
     updateOrderItemStatus: async (itemId: string, status: string): Promise<void> => {
         await api.patch(`/orders/items/${itemId}/status?status=${status}`);
+    },
+    /**
+     * 获取指定订单的所有 order_items
+     */
+    getOrderItems: async (orderId: string): Promise<any[]> => {
+        const response = await api.get(`/orders/items/${orderId}`);
+        return response.data;
+    },
+    /**
+     * 厨房逐项勾选 — 更新单个 order_item 的 is_prepared 状态
+     */
+    markItemPrepared: async (itemId: string, isPrepared: boolean): Promise<void> => {
+        await api.patch(`/orders/items/${itemId}/prepared`, { is_prepared: isPrepared });
+    },
+    /**
+     * 厨房完成整张订单 — 将 orders.status 更新为 ready 并触发 GoEasy 通知
+     */
+    kitchenComplete: async (orderId: string): Promise<void> => {
+        await api.post(`/orders/${orderId}/kitchen-complete`);
     }
 }
 

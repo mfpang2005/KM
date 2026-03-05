@@ -100,7 +100,9 @@ async def create_order(order: OrderCreate):
                 try:
                     supabase.table("order_items").insert(prep_items).execute()
                 except Exception as e:
-                    print(f"Failed to sync items to order_items: {e}")
+                    # NOTE: If order_items table is missing (PGRST205), we log it but don't fail the order creation
+                    # as orders table insertion was already successful.
+                    print(f"WARNING: Failed to sync items to order_items (Table may be missing): {e}")
             
             return response.data[0]
         except HTTPException:

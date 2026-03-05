@@ -50,6 +50,8 @@ export const OrdersPage: React.FC = () => {
     // Delete Confirmation Modal State
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteOrderId, setDeleteOrderId] = useState<string | null>(null);
+    const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Create Order Modal state
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -251,20 +253,32 @@ export const OrdersPage: React.FC = () => {
         }
     };
 
-    const handleRejectDelete = (orderId: string) => {
-        setDeleteOrderId(orderId);
+    const handleDeleteClick = (id: string) => {
+        setDeleteOrderId(id);
+        setDeleteStep(1);
         setShowDeleteModal(true);
+    };
+
+    const handleRejectDelete = () => {
+        setShowDeleteModal(false);
+        setDeleteOrderId(null);
+        setDeleteStep(1);
     };
 
     const confirmDelete = async () => {
         if (!deleteOrderId) return;
+        setIsDeleting(true);
         try {
             await api.delete(`/orders/${deleteOrderId}`);
             await loadOrders();
-            setShowDeleteModal(false);
-            setDeleteOrderId(null);
-        } catch (error) {
+            handleRejectDelete(); // Close modal and reset state
+            alert("Order deleted successfully.");
+        } catch (error: any) {
             console.error('Failed to delete order', error);
+            const detail = error.response?.data?.detail || "Delete operation failed. Please try again.";
+            alert(detail);
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -485,7 +499,7 @@ export const OrdersPage: React.FC = () => {
                                                 </button>
                                                 <button
                                                     type="button"
-                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleRejectDelete(order.id); }}
+                                                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); handleDeleteClick(order.id); }}
                                                     title="Delete Order"
                                                     className="w-8 h-8 inline-flex items-center justify-center bg-red-50 text-red-600 rounded-lg hover:bg-red-100 hover:scale-110 transition-all shadow-sm group cursor-pointer"
                                                 >
@@ -871,32 +885,54 @@ export const OrdersPage: React.FC = () => {
 
             {/* Delete Confirmation Modal */}
             {showDeleteModal && (
-                <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden flex flex-col items-center p-8 border border-red-100 relative scale-in-center">
-                        <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mb-5 ring-8 ring-red-50">
-                            <span className="material-icons-round text-3xl">delete_forever</span>
-                        </div>
-                        <h3 className="text-xl font-black text-slate-800 text-center mb-2">Delete Order?</h3>
-                        <p className="text-sm text-slate-500 text-center mb-1">
-                            Are you absolutely sure you want to delete this order?
-                        </p>
-                        <p className="text-xs font-bold text-red-500 bg-red-50 px-3 py-1 pb-1.5 rounded-lg text-center mb-8 break-all max-w-[280px]">
-                            ID: {deleteOrderId}
-                        </p>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden relative border border-slate-100">
+                        <div className="p-8 text-center">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <span className={`material-icons-round text-red-500 text-4xl ${deleteStep === 2 ? 'animate-pulse' : ''}`}>
+                                    {deleteStep === 1 ? 'delete_sweep' : 'report_problem'}
+                                </span>
+                            </div>
 
-                        <div className="flex gap-3 w-full">
-                            <button
-                                onClick={() => { setShowDeleteModal(false); setDeleteOrderId(null); }}
-                                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-xl transition-colors text-sm"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                className="flex-1 py-3 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl transition-all shadow-lg hover:-translate-y-0.5 shadow-red-500/30 text-sm"
-                            >
-                                Delete
-                            </button>
+                            <h3 className="text-2xl font-black text-slate-800 mb-2">
+                                {deleteStep === 1 ? 'Delete Order?' : 'Final Warning!'}
+                            </h3>
+
+                            <p className="text-slate-500 font-bold leading-relaxed mb-8 px-4 text-sm">
+                                {deleteStep === 1 ? (
+                                    <>Are you sure you want to delete order <span className="text-slate-900 font-black">"{deleteOrderId}"</span>?</>
+                                ) : (
+                                    <span className="text-red-500 font-black">This will permanently remove the order, its preparation status, and GoEasy notifications. Data recovery is NOT possible.</span>
+                                )}
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                {deleteStep === 1 ? (
+                                    <button
+                                        onClick={() => setDeleteStep(2)}
+                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-slate-900/20"
+                                    >
+                                        Yes, Continue
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={confirmDelete}
+                                        disabled={isDeleting}
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-red-600/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                                    >
+                                        {isDeleting && <span className="material-icons-round animate-spin">autorenew</span>}
+                                        Confirm Final Delete
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={handleRejectDelete}
+                                    disabled={isDeleting}
+                                    className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-lg transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -990,9 +1026,9 @@ export const OrdersPage: React.FC = () => {
                                 <div className="text-center pb-6 border-b-2 border-slate-800 flex flex-col items-center">
                                     {/* 公司 Logo */}
                                     <img
-                                        src="/logo.jpg"
+                                        src="/print-logo.png"
                                         alt="Kim Long Logo"
-                                        className="w-20 h-20 print:w-16 print:h-16 rounded-full object-cover border border-slate-200 mb-3 shadow-sm"
+                                        className="w-48 h-auto print:w-40 mb-3 shadow-sm"
                                         onError={(e) => {
                                             (e.target as HTMLImageElement).style.display = 'none';
                                         }}

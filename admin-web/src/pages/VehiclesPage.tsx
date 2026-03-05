@@ -9,6 +9,11 @@ export const VehiclesPage: React.FC = () => {
     const [editingVehicle, setEditingVehicle] = useState<Partial<Vehicle> | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
 
+    // 双重确认弹窗状态
+    const [isDeleteModalOpen, setDeleteModalOpen] = useState(false);
+    const [confirmDeleteInfo, setConfirmDeleteInfo] = useState<{ id: string; plateNo: string } | null>(null);
+    const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
+
     const loadVehicles = async () => {
         try {
             setLoading(true);
@@ -37,22 +42,37 @@ export const VehiclesPage: React.FC = () => {
             }
             setEditModalOpen(false);
             loadVehicles();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to save vehicle', error);
-            alert('Failed to save vehicle');
+            const detail = error.response?.data?.detail;
+            const message = typeof detail === 'string' ? detail : 'Failed to save vehicle';
+            alert(message);
         }
     };
 
-    /** 删除车辆 */
-    const handleDelete = async (id: string, plateNo: string) => {
-        if (!window.confirm(`确定要删除车辆 ${plateNo} 吗？此操作不可撤销。`)) return;
+    /** 打开删除确认弹窗 */
+    const handleDelete = (id: string, plateNo: string) => {
+        setConfirmDeleteInfo({ id, plateNo });
+        setDeleteStep(1);
+        setDeleteModalOpen(true);
+    };
+
+    /** 执行最终删除 */
+    const executeDelete = async () => {
+        if (!confirmDeleteInfo) return;
+        const { id } = confirmDeleteInfo;
+
         setDeletingId(id);
         try {
             await VehicleService.delete(id);
             setVehicles(prev => prev.filter(v => v.id !== id));
-        } catch (error) {
+            setDeleteModalOpen(false);
+            setConfirmDeleteInfo(null);
+        } catch (error: any) {
             console.error('Failed to delete vehicle', error);
-            alert('删除失败，请重试');
+            const detail = error.response?.data?.detail;
+            const message = typeof detail === 'string' ? detail : '删除失败，请联系管理员';
+            alert(message);
         } finally {
             setDeletingId(null);
         }
@@ -166,9 +186,9 @@ export const VehiclesPage: React.FC = () => {
                                 </div>
 
                                 {/* 操作按钮组：悬停时出现 */}
-                                <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="absolute top-3 right-3 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity z-20">
                                     {/* 编辑 */}
-                                    <div className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-colors">
+                                    <div className="w-8 h-8 bg-white/90 backdrop-blur-sm rounded-full flex items-center justify-center text-slate-400 border border-slate-100 shadow-sm hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer">
                                         <span className="material-icons-round text-[16px]">edit</span>
                                     </div>
                                     {/* 删除 */}
@@ -192,7 +212,62 @@ export const VehiclesPage: React.FC = () => {
                 </div>
             )}
 
-            {/* 编辑/新增弹窗 */}
+            {/* 编辑/新增弹窗 ... */}
+
+            {/* 双重删除确认弹窗 */}
+            {isDeleteModalOpen && confirmDeleteInfo && (
+                <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+                    <div className="bg-white rounded-[2.5rem] w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200 border border-slate-100">
+                        <div className="p-8 text-center">
+                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <span className="material-icons-round text-red-500 text-4xl animate-bounce">
+                                    {deleteStep === 1 ? 'help_outline' : 'warning_amber'}
+                                </span>
+                            </div>
+
+                            <h3 className="text-2xl font-black text-slate-800 mb-2">
+                                {deleteStep === 1 ? '确认删除？' : '危险操作！'}
+                            </h3>
+
+                            <p className="text-slate-500 font-bold leading-relaxed mb-8 px-4">
+                                {deleteStep === 1 ? (
+                                    <>确定要移除车牌号为 <span className="text-slate-900">{confirmDeleteInfo.plateNo}</span> 的车辆吗？</>
+                                ) : (
+                                    <span className="text-red-500">此操作不可撤销。如果该车辆仍有待处理订单，可能会导致系统异常。请再次点击确认删除。</span>
+                                )}
+                            </p>
+
+                            <div className="flex flex-col gap-3">
+                                {deleteStep === 1 ? (
+                                    <button
+                                        onClick={() => setDeleteStep(2)}
+                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-slate-900/20"
+                                    >
+                                        是的，我确定
+                                    </button>
+                                ) : (
+                                    <button
+                                        onClick={executeDelete}
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-red-600/20"
+                                    >
+                                        确认彻底删除
+                                    </button>
+                                )}
+
+                                <button
+                                    onClick={() => {
+                                        setDeleteModalOpen(false);
+                                        setConfirmDeleteInfo(null);
+                                    }}
+                                    className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-lg transition-colors"
+                                >
+                                    返回
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
             {isEditModalOpen && editingVehicle && (
                 <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
                     <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
@@ -291,7 +366,6 @@ export const VehiclesPage: React.FC = () => {
                                             setEditModalOpen(false);
                                             handleDelete(editingVehicle.id!, editingVehicle.plate_no || '');
                                         }}
-                                        disabled={deletingId === editingVehicle.id}
                                         className="px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 border border-red-100 rounded-2xl font-black text-sm transition-colors flex items-center gap-1"
                                     >
                                         <span className="material-icons-round text-[16px]">delete</span>

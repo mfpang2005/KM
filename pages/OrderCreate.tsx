@@ -24,12 +24,12 @@ const EQUIPMENTS_LIST = ['汤匙', '烤鸡网', '叉子', '垃圾袋', 'Food Ton
  * 将后端 Product 格式转换为组件内部 LocalProduct 格式
  */
 const mapApiProduct = (p: ApiProduct): LocalProduct => ({
-    id: p.id,
-    code: p.code,
-    name: p.name,
-    category: p.category || '其他',
-    price: p.price,
-    img: p.image_url || '',
+    id: p?.id || '',
+    code: p?.code || 'UNKNOWN',
+    name: p?.name || '未命名商品',
+    category: p?.category || '其他',
+    price: typeof p?.price === 'number' ? p.price : 0,
+    img: p?.image_url || '',
 });
 
 const OrderCreate: React.FC = () => {
@@ -68,14 +68,18 @@ const OrderCreate: React.FC = () => {
 
     // 从产品数据中动态生成分类列表
     const CATEGORIES = useMemo(() => {
+        if (!apiProducts || !Array.isArray(apiProducts)) return ['全部'];
         const cats = Array.from(new Set(apiProducts.map(p => p.category).filter(Boolean)));
         return ['全部', ...cats];
     }, [apiProducts]);
 
     const filteredMenu = useMemo(() => {
+        if (!apiProducts || !Array.isArray(apiProducts)) return [];
         return apiProducts.filter(p => {
             const matchesCat = activeCategory === '全部' || p.category === activeCategory;
-            const matchesSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase()) || p.code.toLowerCase().includes(searchQuery.toLowerCase());
+            const name = p.name || '';
+            const code = p.code || '';
+            const matchesSearch = name.toLowerCase().includes(searchQuery.toLowerCase()) || code.toLowerCase().includes(searchQuery.toLowerCase());
             return matchesCat && matchesSearch;
         });
     }, [apiProducts, activeCategory, searchQuery]);
@@ -439,7 +443,7 @@ const OrderCreate: React.FC = () => {
                                 <div className="p-3">
                                     <h3 className="text-[10px] font-bold text-slate-800 truncate mb-2">{p.name}</h3>
                                     <div className="flex justify-between items-center">
-                                        <span className="text-[11px] font-black text-primary">RM {p.price.toFixed(2)}</span>
+                                        <span className="text-[11px] font-black text-primary">RM {(p.price || 0).toFixed(2)}</span>
                                         <button onClick={() => addToCart(p)} className="active:scale-125 transition-transform">
                                             <span className="material-icons-round text-primary text-lg">add_circle</span>
                                         </button>

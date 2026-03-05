@@ -28,7 +28,7 @@ const AdminDashboard: React.FC = () => {
     const stats = useMemo(() => {
         const today = new Date().toLocaleDateString();
         // For demo/simplicity, we consider all fetched orders as "Current"
-        const totalAmount = orders.reduce((sum, o) => sum + o.amount, 0);
+        const totalAmount = orders.reduce((sum, o) => sum + (o.amount || 0), 0);
         const latestOrders = [...orders].reverse().slice(0, 3);
         return {
             totalAmount,
@@ -147,7 +147,7 @@ const AdminDashboard: React.FC = () => {
                                             </span>
                                         </div>
                                         <p className="text-[10px] text-slate-500 truncate">
-                                            {order.items.map(i => `${i.name} x${i.quantity}`).join(', ')}
+                                            {(order.items || []).map(i => `${i?.name || '未知菜品'} x${i?.quantity || 0}`).join(', ')}
                                         </p>
                                     </div>
                                 </div>
