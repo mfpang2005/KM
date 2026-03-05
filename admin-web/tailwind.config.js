@@ -7,7 +7,7 @@ export default {
     theme: {
         extend: {
             colors: {
-                primary: '#1A365D', // Deep blue example
+                primary: '#ec1313', // Matches App root 
             }
         },
     },

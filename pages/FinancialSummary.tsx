@@ -3,6 +3,7 @@ import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { SuperAdminService } from '../src/services/api';
 import { useEffect } from 'react';
+import PullToRefresh from '../src/components/PullToRefresh';
 
 interface FinancialData {
     grossSales: number;
@@ -26,14 +27,15 @@ const INITIAL_FINANCE: FinancialData = {
 
 const FinancialSummary: React.FC = () => {
     const navigate = useNavigate();
-    const [timeRange, setTimeRange] = useState<'today' | 'yesterday' | 'week'>('today');
+    const [timeRange, setTimeRange] = useState<'today' | 'month' | 'all'>('today');
+    const [paymentStatus, setPaymentStatus] = useState<'all' | 'paid' | 'unpaid'>('all');
     const [finance, setFinance] = useState<FinancialData>(INITIAL_FINANCE);
     const [loading, setLoading] = useState(true);
 
     const loadFinance = async () => {
         try {
             setLoading(true);
-            const data = await SuperAdminService.getFinancials(timeRange);
+            const data = await SuperAdminService.getFinancials(timeRange, paymentStatus);
             setFinance(data);
         } catch (error) {
             console.error('Failed to load financials:', error);
@@ -44,7 +46,7 @@ const FinancialSummary: React.FC = () => {
 
     useEffect(() => {
         loadFinance();
-    }, [timeRange]);
+    }, [timeRange, paymentStatus]);
 
     const handlePrint = () => {
         window.print();
@@ -135,123 +137,139 @@ const FinancialSummary: React.FC = () => {
                     </button>
                 </div>
 
-                <div className="flex p-1 bg-white/5 rounded-2xl border border-white/5">
-                    {['today', 'yesterday', 'week'].map((t) => (
-                        <button
-                            key={t}
-                            onClick={() => setTimeRange(t as any)}
-                            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${timeRange === t ? 'bg-primary text-white shadow-xl' : 'text-slate-500'
-                                }`}
-                        >
-                            {t === 'today' ? '今日结算' : t === 'yesterday' ? '昨日' : '近7天'}
-                        </button>
-                    ))}
+                <div className="flex flex-col gap-3">
+                    <div className="flex p-1 bg-white/5 rounded-2xl border border-white/5">
+                        {['today', 'month', 'all'].map((t) => (
+                            <button
+                                key={t}
+                                onClick={() => setTimeRange(t as any)}
+                                className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${timeRange === t ? 'bg-primary text-white shadow-xl' : 'text-slate-500'}`}
+                            >
+                                {t === 'today' ? '今日结算' : t === 'month' ? '这月' : '全部'}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="flex p-1 bg-white/5 rounded-2xl border border-white/5">
+                        {['all', 'paid', 'unpaid'].map((status) => (
+                            <button
+                                key={status}
+                                onClick={() => setPaymentStatus(status as any)}
+                                className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all ${paymentStatus === status ? 'bg-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.5)]' : 'text-slate-500'}`}
+                            >
+                                {status === 'all' ? '全部状态' : status === 'paid' ? '已收 (PAID)' : '未收 (UNPAID)'}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-32 no-print">
-                {/* 核心 KPI 网格 */}
-                <section className="grid grid-cols-2 gap-4">
-                    <div className="bg-slate-800 p-5 rounded-[32px] border border-white/5 shadow-xl col-span-2 relative overflow-hidden">
-                        <div className="absolute -right-4 -top-4 opacity-5">
-                            <span className="material-icons-round text-9xl">payments</span>
-                        </div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">今日实收净额 (Net Collected)</p>
-                        <div className="flex items-baseline gap-2">
-                            <span className="text-4xl font-black text-white tracking-tighter">RM {finance.netSales.toLocaleString()}</span>
-                            <span className="text-green-500 text-xs font-bold">+0%</span>
-                        </div>
-                        <div className="mt-4 flex gap-4">
-                            <div className="flex flex-col">
-                                <span className="text-[8px] font-bold text-slate-500 uppercase">毛销售额</span>
-                                <span className="text-xs font-black text-slate-300">RM {finance.grossSales.toFixed(2)}</span>
-                            </div>
-                            <div className="flex flex-col border-l border-white/10 pl-4">
-                                <span className="text-[8px] font-bold text-slate-500 uppercase">折扣 & 冲正</span>
-                                <span className="text-xs font-black text-red-400">-RM {finance.discounts.toFixed(2)}</span>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="bg-slate-800/50 p-5 rounded-[32px] border border-white/5">
-                        <p className="text-[9px] font-black text-slate-500 uppercase mb-2">订单总量</p>
-                        <h4 className="text-2xl font-black text-white">128 <span className="text-[10px] font-bold text-slate-400">单</span></h4>
-                    </div>
-                    <div className="bg-slate-800/50 p-5 rounded-[32px] border border-white/5">
-                        <p className="text-[9px] font-black text-slate-500 uppercase mb-2">客单价 (AOV)</p>
-                        <h4 className="text-2xl font-black text-white">RM 103</h4>
-                    </div>
-                </section>
-
-                {/* 支付方式分布 */}
-                <section className="bg-white/5 p-6 rounded-[40px] border border-white/5">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">支付渠道分布 (Channel Mix)</h3>
-                    <div className="space-y-4">
-                        {finance.collections.length === 0 && <p className="text-xs text-slate-500 text-center py-4">暂无收款记录</p>}
-                        {finance.collections.map(c => (
-                            <div key={c.method} className="space-y-1.5">
-                                <div className="flex justify-between text-[11px] font-bold">
-                                    <span className="text-slate-300">{c.method}</span>
-                                    <span className="text-white">RM {c.amount.toFixed(2)}</span>
+            <main className="flex-1 overflow-hidden relative no-print bg-slate-900 pb-32">
+                <PullToRefresh onRefresh={loadFinance}>
+                    <div className="p-4 space-y-6 min-h-full">
+                        {/* 核心 KPI 网格 */}
+                        <section className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-800 p-5 rounded-[32px] border border-white/5 shadow-xl col-span-2 relative overflow-hidden">
+                                <div className="absolute -right-4 -top-4 opacity-5">
+                                    <span className="material-icons-round text-9xl">payments</span>
                                 </div>
-                                <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-gold-accent shadow-[0_0_10px_rgba(212,175,55,0.4)] rounded-full transition-all duration-1000"
-                                        style={{ width: `${finance.netSales > 0 ? (c.amount / finance.netSales) * 100 : 0}%` }}
-                                    ></div>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">今日实收净额 (Net Collected)</p>
+                                <div className="flex items-baseline gap-2">
+                                    <span className="text-4xl font-black text-white tracking-tighter">RM {finance.netSales.toLocaleString()}</span>
+                                    <span className="text-green-500 text-xs font-bold">+0%</span>
+                                </div>
+                                <div className="mt-4 flex gap-4">
+                                    <div className="flex flex-col">
+                                        <span className="text-[8px] font-bold text-slate-500 uppercase">毛销售额</span>
+                                        <span className="text-xs font-black text-slate-300">RM {finance.grossSales.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex flex-col border-l border-white/10 pl-4">
+                                        <span className="text-[8px] font-bold text-slate-500 uppercase">折扣 & 冲正</span>
+                                        <span className="text-xs font-black text-red-400">-RM {finance.discounts.toFixed(2)}</span>
+                                    </div>
                                 </div>
                             </div>
-                        ))}
-                    </div>
-                </section>
 
-                {/* 时段销售看板 */}
-                <section className="bg-slate-800 p-6 rounded-[40px] border border-white/5">
-                    <div className="flex justify-between items-center mb-6">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">时段销售压力分析</h3>
-                        <span className="text-[9px] font-black bg-primary text-white px-2 py-0.5 rounded uppercase">Peak: 12PM</span>
-                    </div>
-                    <div className="flex items-end justify-between h-32 gap-1.5 px-2">
-                        {finance.hourlySales.map((h, i) => (
-                            <div key={i} className="flex-1 flex flex-col items-center gap-3 group">
-                                <div className="w-full bg-white/5 rounded-t-xl h-full flex items-end overflow-hidden">
-                                    <div
-                                        className={`w-full transition-all duration-1000 ${h.amount > 3000 ? 'bg-primary' : 'bg-gold-accent/40'} group-hover:bg-primary shadow-lg`}
-                                        style={{ height: `${(h.amount / 4500) * 100}%` }}
-                                    ></div>
-                                </div>
-                                <span className="text-[8px] font-bold text-slate-500 group-hover:text-white transition-colors">{h.hour}</span>
+                            <div className="bg-slate-800/50 p-5 rounded-[32px] border border-white/5">
+                                <p className="text-[9px] font-black text-slate-500 uppercase mb-2">订单总量</p>
+                                <h4 className="text-2xl font-black text-white">128 <span className="text-[10px] font-bold text-slate-400">单</span></h4>
                             </div>
-                        ))}
-                    </div>
-                </section>
-
-                {/* 菜品类目占比 */}
-                <section className="bg-white/5 p-6 rounded-[40px] border border-white/5">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">类目营收占比 (Product Mix)</h3>
-                    <div className="grid grid-cols-2 gap-4">
-                        {finance.categorySales.map(cat => (
-                            <div key={cat.category} className="bg-slate-900/50 p-4 rounded-2xl border border-white/5">
-                                <p className="text-[9px] font-bold text-slate-500 uppercase truncate">{cat.category}</p>
-                                <p className="text-sm font-black text-white mt-1">RM {cat.amount.toFixed(2)}</p>
-                                <p className="text-[8px] font-bold text-gold-accent mt-0.5">占比 {finance.netSales > 0 ? ((cat.amount / finance.netSales) * 100).toFixed(1) : 0}%</p>
+                            <div className="bg-slate-800/50 p-5 rounded-[32px] border border-white/5">
+                                <p className="text-[9px] font-black text-slate-500 uppercase mb-2">客单价 (AOV)</p>
+                                <h4 className="text-2xl font-black text-white">RM 103</h4>
                             </div>
-                        ))}
-                    </div>
-                </section>
+                        </section>
 
-                {/* AI 深度洞察 */}
-                <section className="p-6 bg-gold-accent/10 border border-gold-accent/20 rounded-[40px] flex items-start gap-4">
-                    <div className="w-10 h-10 bg-gold-accent/20 rounded-2xl flex items-center justify-center text-gold-accent shrink-0">
-                        <span className="material-icons-round">auto_awesome</span>
+                        {/* 支付方式分布 */}
+                        <section className="bg-white/5 p-6 rounded-[40px] border border-white/5">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">支付渠道分布 (Channel Mix)</h3>
+                            <div className="space-y-4">
+                                {finance.collections.length === 0 && <p className="text-xs text-slate-500 text-center py-4">暂无收款记录</p>}
+                                {finance.collections.map(c => (
+                                    <div key={c.method} className="space-y-1.5">
+                                        <div className="flex justify-between text-[11px] font-bold">
+                                            <span className="text-slate-300">{c.method}</span>
+                                            <span className="text-white">RM {c.amount.toFixed(2)}</span>
+                                        </div>
+                                        <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-gold-accent shadow-[0_0_10px_rgba(212,175,55,0.4)] rounded-full transition-all duration-1000"
+                                                style={{ width: `${finance.netSales > 0 ? (c.amount / finance.netSales) * 100 : 0}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* 时段销售看板 */}
+                        <section className="bg-slate-800 p-6 rounded-[40px] border border-white/5">
+                            <div className="flex justify-between items-center mb-6">
+                                <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">时段销售压力分析</h3>
+                                <span className="text-[9px] font-black bg-primary text-white px-2 py-0.5 rounded uppercase">Peak: 12PM</span>
+                            </div>
+                            <div className="flex items-end justify-between h-32 gap-1.5 px-2">
+                                {finance.hourlySales.map((h, i) => (
+                                    <div key={i} className="flex-1 flex flex-col items-center gap-3 group">
+                                        <div className="w-full bg-white/5 rounded-t-xl h-full flex items-end overflow-hidden">
+                                            <div
+                                                className={`w-full transition-all duration-1000 ${h.amount > 3000 ? 'bg-primary' : 'bg-gold-accent/40'} group-hover:bg-primary shadow-lg`}
+                                                style={{ height: `${(h.amount / 4500) * 100}%` }}
+                                            ></div>
+                                        </div>
+                                        <span className="text-[8px] font-bold text-slate-500 group-hover:text-white transition-colors">{h.hour}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* 菜品类目占比 */}
+                        <section className="bg-white/5 p-6 rounded-[40px] border border-white/5">
+                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">类目营收占比 (Product Mix)</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                {finance.categorySales.map(cat => (
+                                    <div key={cat.category} className="bg-slate-900/50 p-4 rounded-2xl border border-white/5">
+                                        <p className="text-[9px] font-bold text-slate-500 uppercase truncate">{cat.category}</p>
+                                        <p className="text-sm font-black text-white mt-1">RM {cat.amount.toFixed(2)}</p>
+                                        <p className="text-[8px] font-bold text-gold-accent mt-0.5">占比 {finance.netSales > 0 ? ((cat.amount / finance.netSales) * 100).toFixed(1) : 0}%</p>
+                                    </div>
+                                ))}
+                            </div>
+                        </section>
+
+                        {/* AI 深度洞察 */}
+                        <section className="p-6 bg-gold-accent/10 border border-gold-accent/20 rounded-[40px] flex items-start gap-4">
+                            <div className="w-10 h-10 bg-gold-accent/20 rounded-2xl flex items-center justify-center text-gold-accent shrink-0">
+                                <span className="material-icons-round">auto_awesome</span>
+                            </div>
+                            <div className="space-y-1">
+                                <h4 className="text-xs font-black text-gold-accent uppercase tracking-widest">Gemini 财务分析建议</h4>
+                                <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
+                                    今日午间（12PM-1PM）营收占全天 58%，但饮料转化率仅为 14%，建议在午餐时段推出“套餐升级加购”活动。此外，配送费支出环比增长 8%，需关注物流成本控制。
+                                </p>
+                            </div>
+                        </section>
                     </div>
-                    <div className="space-y-1">
-                        <h4 className="text-xs font-black text-gold-accent uppercase tracking-widest">Gemini 财务分析建议</h4>
-                        <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
-                            今日午间（12PM-1PM）营收占全天 58%，但饮料转化率仅为 14%，建议在午餐时段推出“套餐升级加购”活动。此外，配送费支出环比增长 8%，需关注物流成本控制。
-                        </p>
-                    </div>
-                </section>
+                </PullToRefresh>
             </main>
         </div>
     );

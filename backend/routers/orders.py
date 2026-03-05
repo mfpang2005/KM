@@ -29,6 +29,66 @@ async def get_orders(
     )
     return response.data
 
+# ─── Finance Summary (Public for Admin Role) ──────────────────────────────────
+
+@router.get("/finance-summary")
+async def get_finance_summary():
+    """
+    公开的财务汇总端点，供前端 Admin 首页使用（无需 super_admin 权限）。
+    返回今日和本月已完成订单的总金额。
+    """
+    from fastapi.concurrency import run_in_threadpool
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+
+    # 今日开始时间
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    # 本月开始时间
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+
+    # 本月已完成订单
+    monthly_resp = await run_in_threadpool(
+        supabase.table("orders")
+        .select("amount, created_at")
+        .eq("status", "completed")
+        .gte("created_at", month_start)
+        .execute
+    )
+    monthly_orders = monthly_resp.data or []
+
+    daily_total = sum(
+        (o.get("amount") or 0) for o in monthly_orders
+        if o.get("created_at", "") >= today_start
+    )
+    monthly_total = sum(o.get("amount") or 0 for o in monthly_orders)
+
+    # 读取月度目标配置（可选）
+    goal = 0
+    try:
+        cfg_resp = supabase.table("system_config").select("value").eq("key", "finance_goal").execute()
+        if cfg_resp.data:
+            goal = cfg_resp.data[0].get("value", {}).get("amount", 0)
+    except Exception:
+        pass
+
+    # 读取财务显示开关配置
+    show_finance = True
+    try:
+        disp_resp = supabase.table("system_config").select("value").eq("key", "finance_display").execute()
+        if disp_resp.data:
+            show_finance = disp_resp.data[0].get("value", {}).get("enabled", True)
+    except Exception:
+        pass
+
+    return {
+        "daily": daily_total,
+        "monthly": monthly_total,
+        "monthlyGoal": goal,
+        "showFinance": show_finance,
+    }
+
+
 @router.get("/{order_id:path}", response_model=Order)
 async def get_order(order_id: str):
     response = supabase.table("orders").select("*").eq("id", order_id).execute()
@@ -360,63 +420,3 @@ async def kitchen_complete(order_id: str):
     await notify_kitchen_complete(order_data)
 
     return {"message": "Order marked as ready", "orderId": order_id, "status": "ready"}
-
-
-# ─── Finance Summary (Public for Admin Role) ──────────────────────────────────
-
-@router.get("/finance-summary")
-async def get_finance_summary():
-    """
-    公开的财务汇总端点，供前端 Admin 首页使用（无需 super_admin 权限）。
-    返回今日和本月已完成订单的总金额。
-    """
-    from fastapi.concurrency import run_in_threadpool
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc)
-
-    # 今日开始时间
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    # 本月开始时间
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-    # 本月已完成订单
-    monthly_resp = await run_in_threadpool(
-        supabase.table("orders")
-        .select("amount, created_at")
-        .eq("status", "completed")
-        .gte("created_at", month_start)
-        .execute
-    )
-    monthly_orders = monthly_resp.data or []
-
-    daily_total = sum(
-        (o.get("amount") or 0) for o in monthly_orders
-        if o.get("created_at", "") >= today_start
-    )
-    monthly_total = sum(o.get("amount") or 0 for o in monthly_orders)
-
-    # 读取月度目标配置（可选）
-    goal = 0
-    try:
-        cfg_resp = supabase.table("system_config").select("value").eq("key", "finance_goal").execute()
-        if cfg_resp.data:
-            goal = cfg_resp.data[0].get("value", {}).get("amount", 0)
-    except Exception:
-        pass
-
-    # 读取财务显示开关配置
-    show_finance = True
-    try:
-        disp_resp = supabase.table("system_config").select("value").eq("key", "finance_display").execute()
-        if disp_resp.data:
-            show_finance = disp_resp.data[0].get("value", {}).get("enabled", True)
-    except Exception:
-        pass
-
-    return {
-        "daily": daily_total,
-        "monthly": monthly_total,
-        "monthlyGoal": goal,
-        "showFinance": show_finance,
-    }

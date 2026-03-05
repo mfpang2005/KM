@@ -8,15 +8,14 @@ export interface NavItem {
 
 export const NAV_CONFIG: Record<UserRole, NavItem[]> = {
     [UserRole.ADMIN]: [
-        { label: '控制台', path: '/admin', icon: 'dashboard' },
-        { label: '订单管理', path: '/admin/orders', icon: 'list_alt' },
-        { label: '创建订单', path: '/admin/create-order', icon: 'add_shopping_cart' },
-        { label: '商品管理', path: '/admin/products', icon: 'inventory_2' },
-        { label: '司机调度', path: '/admin/drivers', icon: 'local_shipping' },
-        { label: '财务报表', path: '/admin/finance', icon: 'analytics' },
-        { label: '后厨汇总', path: '/admin/kitchen-summary', icon: 'kitchen' },
-        { label: '消息中心', path: '/admin/notifications', icon: 'notifications' },
-        { label: '个人中心', path: '/admin/profile', icon: 'person' },
+        { label: '控制台 (Dashboard)', path: '/admin', icon: 'dashboard' },
+        { label: '订单追踪 (Orders)', path: '/admin/orders', icon: 'list_alt' },
+        { label: '后厨排期 (Kitchen)', path: '/admin/kitchen-summary', icon: 'kitchen' },
+        { label: '财务报表 (Finance)', path: '/admin/finance', icon: 'analytics' },
+        { label: '司机调度 (Drivers)', path: '/admin/drivers', icon: 'local_shipping' },
+        { label: '商品管理 (Products)', path: '/admin/products', icon: 'inventory_2' },
+        { label: '人工建单 (Create)', path: '/admin/create-order', icon: 'add_shopping_cart' },
+        { label: '个人中心 (Profile)', path: '/admin/profile', icon: 'person' },
     ],
     [UserRole.KITCHEN]: [
         { label: '后厨备餐', path: '/kitchen', icon: 'kitchen' },

@@ -58,11 +58,12 @@ const AdminDashboard: React.FC = () => {
     };
 
     const statusColors: Record<string, string> = {
-        [OrderStatus.PENDING]: 'text-slate-400',
-        [OrderStatus.PREPARING]: 'text-blue-500',
-        [OrderStatus.READY]: 'text-purple-500',
-        [OrderStatus.DELIVERING]: 'text-yellow-600',
-        [OrderStatus.COMPLETED]: 'text-green-500',
+        [OrderStatus.PENDING]: 'bg-yellow-50 text-yellow-600 border border-yellow-200',
+        [OrderStatus.PREPARING]: 'bg-blue-50 text-blue-600 border border-blue-200',
+        [OrderStatus.READY]: 'bg-cyan-50 text-cyan-600 border border-cyan-200',
+        [OrderStatus.DELIVERING]: 'bg-purple-50 text-purple-600 border border-purple-200',
+        [OrderStatus.COMPLETED]: 'bg-green-50 text-green-600 border border-green-200',
+        delayed: 'bg-red-50 text-red-600 border border-red-200',
     };
 
     return (
@@ -118,7 +119,18 @@ const AdminDashboard: React.FC = () => {
                     </div>
                     <div className="p-4 space-y-4">
                         {isLoading ? (
-                            <p className="text-center text-[10px] text-slate-300">加载中...</p>
+                            <div className="space-y-4 animate-pulse">
+                                {Array.from({ length: 3 }).map((_, i) => (
+                                    <div key={i} className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-slate-200"></div>
+                                        <div className="flex-1 space-y-2.5">
+                                            <div className="w-1/3 h-3.5 bg-slate-200 rounded"></div>
+                                            <div className="w-1/2 h-3 bg-slate-200 rounded"></div>
+                                        </div>
+                                        <div className="w-12 h-5 bg-slate-200 rounded-lg"></div>
+                                    </div>
+                                ))}
+                            </div>
                         ) : stats.latestOrders.length === 0 ? (
                             <p className="text-center text-[10px] text-slate-300">暂无订单</p>
                         ) : (
@@ -134,7 +146,7 @@ const AdminDashboard: React.FC = () => {
                                     <div className="flex-1">
                                         <div className="flex justify-between">
                                             <h4 className="text-xs font-bold text-slate-900">{order.customerName}</h4>
-                                            <span className={`text-[10px] font-bold ${statusColors[order.status]}`}>
+                                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-lg ${statusColors[order.status] || 'bg-slate-100 text-slate-600'}`}>
                                                 {statusLabels[order.status]}
                                             </span>
                                         </div>

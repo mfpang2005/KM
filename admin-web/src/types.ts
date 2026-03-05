@@ -141,3 +141,14 @@ export interface DriverAssignment {
     returned_at?: string;
     status: 'active' | 'completed';
 }
+export interface FinanceSummary {
+    daily: number;
+    monthly: number;
+    monthlyGoal: number;
+    showFinance: boolean;
+}
+
+export interface FinanceSettings {
+    enabled: boolean;
+    goal: number;
+}

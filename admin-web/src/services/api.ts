@@ -138,10 +138,20 @@ export const AdminOrderService = {
     /**
      * 厨房完成整张订单 — 将 orders.status 更新为 ready 并触发 GoEasy 通知
      */
+    /**
+     * 厨房完成整张订单 — 将 orders.status 更新为 ready 并触发 GoEasy 通知
+     */
     kitchenComplete: async (orderId: string): Promise<void> => {
         await api.post(`/orders/${orderId}/kitchen-complete`);
-    }
-}
+    },
+    /**
+     * 获取财务汇总（今日/本月已完成订单总额）
+     */
+    getFinanceSummary: async (): Promise<{ daily: number; monthly: number; monthlyGoal: number; showFinance: boolean }> => {
+        const response = await api.get('/orders/finance-summary');
+        return response.data;
+    },
+};
 
 export const ProductService = {
     getAll: async (): Promise<Product[]> => {

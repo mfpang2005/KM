@@ -59,9 +59,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             try {
                 const { data: { session } } = await supabase.auth.getSession();
                 if (session?.user) {
-                    console.log("[AuthContext] Session found, unblocking UI early with empty role.");
-                    // Set a baseline user immediately to unblock ProtectedRoute
-                    setUser({ id: session.user.id, email: session.user.email || '', role: '' });
+                    // Set a baseline user immediately using metadata role to unblock ProtectedRoute
+                    const role = session.user.user_metadata?.role || '';
+                    setUser({ id: session.user.id, email: session.user.email || '', role });
                     setLoading(false);
                     // Then fetch the real role in background
                     fetchUserData(session.user.id, session.user.email || '');
@@ -82,8 +82,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
             if (session?.user) {
                 if (event === 'SIGNED_IN') {
-                    // On sign in, give them a baseline user and unblock
-                    setUser({ id: session.user.id, email: session.user.email || '', role: '' });
+                    // On sign in, give them a baseline user from metadata and unblock
+                    const role = session.user.user_metadata?.role || '';
+                    setUser({ id: session.user.id, email: session.user.email || '', role });
                     setLoading(false);
                 }
                 fetchUserData(session.user.id, session.user.email || '');

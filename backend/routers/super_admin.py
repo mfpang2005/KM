@@ -363,10 +363,11 @@ async def reset_all_data(
 @router.get("/financials")
 async def get_financials(
     range: str = "today",
+    payment_status: str = "all",
     current_user: dict = Depends(require_super_admin),
 ):
     """
-    获取财务汇总数据，支持 range=today/month/all 过滤
+    获取财务汇总数据，支持 range=today/month/all 和 payment_status=all/paid/unpaid 过滤
     """
     from fastapi.concurrency import run_in_threadpool
     from datetime import datetime, timezone
@@ -374,6 +375,11 @@ async def get_financials(
     now = datetime.now(timezone.utc)
 
     query = supabase.table("orders").select("*").eq("status", "completed")
+
+    if payment_status == "paid":
+        query = query.eq("paymentStatus", "paid")
+    elif payment_status == "unpaid":
+        query = query.eq("paymentStatus", "unpaid")
 
     if range == "today":
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()

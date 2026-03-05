@@ -25,6 +25,8 @@ const INITIAL_ORDERS: Order[] = [
 
 import { OrderService } from '../src/services/api';
 import { getGoogleMapsUrl } from '../src/utils/maps';
+import { supabase } from '../src/lib/supabase';
+import PullToRefresh from '../src/components/PullToRefresh';
 
 const OrderManagement: React.FC = () => {
     const navigate = useNavigate();
@@ -33,19 +35,32 @@ const OrderManagement: React.FC = () => {
 
     useEffect(() => {
         loadOrders();
-        const timer = setInterval(loadOrders, 5000);
-        return () => clearInterval(timer);
+
+        const channel = supabase
+            .channel('app-order-management')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                loadOrders(); // Auto-refresh when an order is updated in SuperAdmin
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
+                loadOrders();
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     }, []);
 
     const loadOrders = async () => {
         try {
             setIsLoading(true);
             const data = await OrderService.getAll();
-            setOrders(data);
+            const sorted = data.sort((a: any, b: any) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
+            setOrders(sorted as any);
         } catch (error) {
             console.error("Failed to load orders", error);
             // Fallback to initial mock data if backend fails/empty for demo purposes
-            // setOrders(INITIAL_ORDERS); 
+            if (orders.length === 0) setOrders(INITIAL_ORDERS as any);
         } finally {
             setIsLoading(false);
         }
@@ -63,12 +78,13 @@ const OrderManagement: React.FC = () => {
     const [scanCode, setScanCode] = useState('');
     const [scanError, setScanError] = useState(false);
 
-    const statusColors: Record<OrderStatus, string> = {
-        [OrderStatus.PENDING]: 'text-slate-500 bg-slate-100',
-        [OrderStatus.PREPARING]: 'text-blue-600 bg-blue-50',
-        [OrderStatus.READY]: 'text-purple-600 bg-purple-50',
-        [OrderStatus.DELIVERING]: 'text-orange-600 bg-orange-100/50',
-        [OrderStatus.COMPLETED]: 'text-green-600 bg-green-50',
+    const statusColors: Record<string, string> = {
+        [OrderStatus.PENDING]: 'bg-yellow-50 text-yellow-600 border border-yellow-200',
+        [OrderStatus.PREPARING]: 'bg-blue-50 text-blue-600 border border-blue-200',
+        [OrderStatus.READY]: 'bg-cyan-50 text-cyan-600 border border-cyan-200',
+        [OrderStatus.DELIVERING]: 'bg-purple-50 text-purple-600 border border-purple-200',
+        [OrderStatus.COMPLETED]: 'bg-green-50 text-green-600 border border-green-200',
+        delayed: 'bg-red-50 text-red-600 border border-red-200',
     };
 
     const statusLabels: Record<OrderStatus, string> = {
@@ -264,92 +280,132 @@ const OrderManagement: React.FC = () => {
             </div>
 
             {/* List */}
-            <main className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar pb-32 no-print">
-                {filteredOrders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-slate-200">
-                        <span className="material-icons-round text-6xl">receipt_long</span>
-                        <p className="text-sm font-bold mt-2">暂无订单</p>
-                    </div>
-                ) : (
-                    filteredOrders.map(order => (
-                        <div
-                            key={order.id}
-                            className="bg-white p-5 rounded-[32px] shadow-sm flex flex-col gap-4 animate-in fade-in duration-300 border border-slate-100/50"
-                        >
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <h3 className="text-[17px] font-black text-slate-900">{order.customerName}</h3>
-                                    <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest mt-0.5">{order.id}</p>
-                                    <div className="flex items-center gap-1 mt-1.5">
-                                        <span className="material-icons-round text-[12px] text-slate-300">place</span>
-                                        <a
-                                            href={getGoogleMapsUrl(order.address)}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="text-[11px] font-bold text-slate-500 hover:text-blue-600 hover:underline truncate max-w-[220px]"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            {order.address}
-                                        </a>
-                                    </div>
-                                </div>
-                                <span className={`text - [10px] font - black uppercase px - 2.5 py - 1 rounded - lg ${statusColors[order.status]} `}>
-                                    {statusLabels[order.status]}
-                                </span>
-                            </div>
-
-                            <div className="bg-[#f1f3f5]/60 p-5 rounded-[24px] space-y-3">
-                                {order.items.map((item, idx) => (
-                                    <div key={idx} className="flex justify-between items-center text-[13px] font-bold text-slate-700">
-                                        <span>{item.name}</span>
-                                        <span className="text-slate-400 font-black">x{item.quantity}</span>
-                                    </div>
-                                ))}
-                            </div>
-
-                            <div className="flex items-center justify-between mt-1">
-                                <div className="flex flex-col">
-                                    <span className="text-2xl font-black text-primary leading-none tracking-tight">RM {order.amount.toFixed(2)}</span>
-                                    {order.driverId && (
-                                        <div className="flex items-center gap-1.5 mt-2">
-                                            <span className="material-icons-round text-[12px] text-slate-300">local_shipping</span>
-                                            <span className="text-[10px] font-bold text-slate-400">{MOCK_DRIVERS.find(d => d.id === order.driverId)?.name}</span>
+            <main className="flex-1 relative overflow-hidden pb-32 no-print bg-[#f8f6f6]">
+                <PullToRefresh onRefresh={loadOrders}>
+                    <div className="p-4 space-y-4 min-h-full">
+                        {isLoading ? (
+                            Array.from({ length: 3 }).map((_, i) => (
+                                <div key={i} className="bg-white p-5 rounded-[32px] shadow-sm flex flex-col gap-4 border border-slate-100/50 animate-pulse">
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-3 h-3 rounded-full bg-slate-200"></div>
+                                                <div className="w-32 h-5 bg-slate-200 rounded-lg"></div>
+                                            </div>
+                                            <div className="w-20 h-3 bg-slate-200 rounded-md ml-5"></div>
+                                            <div className="w-48 h-3 bg-slate-200 rounded-md ml-5 mt-1"></div>
                                         </div>
-                                    )}
+                                        <div className="w-16 h-6 bg-slate-200 rounded-lg"></div>
+                                    </div>
+
+                                    <div className="bg-slate-50 p-5 rounded-[24px] space-y-3">
+                                        <div className="w-full h-3 bg-slate-200 rounded-md"></div>
+                                        <div className="w-2/3 h-3 bg-slate-200 rounded-md"></div>
+                                    </div>
+
+                                    <div className="flex items-center justify-between mt-1">
+                                        <div className="flex flex-col gap-2">
+                                            <div className="w-24 h-6 bg-slate-200 rounded-lg"></div>
+                                            <div className="w-16 h-3 bg-slate-200 rounded-md"></div>
+                                        </div>
+                                        <div className="flex gap-2.5">
+                                            <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
+                                            <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
+                                            <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="flex gap-2.5">
-                                    {order.status === OrderStatus.PENDING && (
-                                        <button
-                                            onClick={() => handleUpdateStatus(order.id, OrderStatus.PREPARING)}
-                                            className="px-4 h-10 bg-primary text-white rounded-full flex items-center justify-center text-[11px] font-black active:scale-90 transition-transform shadow-md gap-1"
-                                        >
-                                            <span className="material-icons-round text-sm">check_circle</span>
-                                            确认并制作
-                                        </button>
-                                    )}
-                                    <button
-                                        onClick={() => handleOpenEdit(order)}
-                                        className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-transform shadow-sm"
-                                    >
-                                        <span className="material-icons-round text-[18px]">edit</span>
-                                    </button>
-                                    <button
-                                        onClick={() => handleDownloadPDF(order)}
-                                        className="w-10 h-10 bg-red-50 border border-red-100 rounded-full flex items-center justify-center text-primary active:scale-90 transition-transform shadow-sm"
-                                    >
-                                        <span className="material-icons-round text-[18px]">picture_as_pdf</span>
-                                    </button>
-                                    <button
-                                        onClick={() => setOrderToDelete(order.id)}
-                                        className="w-10 h-10 bg-white border border-slate-100 rounded-full flex items-center justify-center text-red-500 active:scale-90 transition-transform shadow-sm"
-                                    >
-                                        <span className="material-icons-round text-[18px]">delete_outline</span>
-                                    </button>
-                                </div>
+                            ))
+                        ) : filteredOrders.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-slate-200">
+                                <span className="material-icons-round text-6xl">receipt_long</span>
+                                <p className="text-sm font-bold mt-2">暂无订单</p>
                             </div>
-                        </div>
-                    ))
-                )}
+                        ) : (
+                            filteredOrders.map(order => (
+                                <div
+                                    key={order.id}
+                                    className="bg-white p-5 rounded-[32px] shadow-sm flex flex-col gap-4 animate-in fade-in duration-300 border border-slate-100/50"
+                                >
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex flex-col gap-0.5">
+                                            <div className="flex items-center gap-2">
+                                                <div className={`w-3 h-3 rounded-full shrink-0 ${['completed', 'ready'].includes(order.status) ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : ['preparing', 'delivering'].includes(order.status) ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)] animate-pulse' : 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]'}`} />
+                                                <h3 className="text-[17px] font-black text-slate-900">{order.customerName}</h3>
+                                            </div>
+                                            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest pl-5">{order.id}</p>
+                                            <div className="flex items-center gap-1 mt-1.5 pl-5">
+                                                <span className="material-icons-round text-[12px] text-slate-300">place</span>
+                                                <a
+                                                    href={getGoogleMapsUrl(order.address)}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="text-[11px] font-bold text-slate-500 hover:text-blue-600 hover:underline truncate max-w-[220px]"
+                                                    onClick={(e) => e.stopPropagation()}
+                                                >
+                                                    {order.address}
+                                                </a>
+                                            </div>
+                                        </div>
+                                        <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${statusColors[order.status] || 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
+                                            {statusLabels[order.status]}
+                                        </span>
+                                    </div>
+
+                                    <div className="bg-[#f1f3f5]/60 p-5 rounded-[24px] space-y-3">
+                                        {order.items.map((item, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-[13px] font-bold text-slate-700">
+                                                <span>{item.name}</span>
+                                                <span className="text-slate-400 font-black">x{item.quantity}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+
+                                    <div className="flex items-center justify-between mt-1">
+                                        <div className="flex flex-col">
+                                            <span className="text-2xl font-black text-primary leading-none tracking-tight">RM {order.amount.toFixed(2)}</span>
+                                            {order.driverId && (
+                                                <div className="flex items-center gap-1.5 mt-2">
+                                                    <span className="material-icons-round text-[12px] text-slate-300">local_shipping</span>
+                                                    <span className="text-[10px] font-bold text-slate-400">{MOCK_DRIVERS.find(d => d.id === order.driverId)?.name}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="flex gap-2.5">
+                                            {order.status === OrderStatus.PENDING && (
+                                                <button
+                                                    onClick={() => handleUpdateStatus(order.id, OrderStatus.PREPARING)}
+                                                    className="px-4 h-10 bg-primary text-white rounded-full flex items-center justify-center text-[11px] font-black active:scale-90 transition-transform shadow-md gap-1"
+                                                >
+                                                    <span className="material-icons-round text-sm">check_circle</span>
+                                                    确认并制作
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={() => handleOpenEdit(order)}
+                                                className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-transform shadow-sm"
+                                            >
+                                                <span className="material-icons-round text-[18px]">edit</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleDownloadPDF(order)}
+                                                className="w-10 h-10 bg-red-50 border border-red-100 rounded-full flex items-center justify-center text-primary active:scale-90 transition-transform shadow-sm"
+                                            >
+                                                <span className="material-icons-round text-[18px]">picture_as_pdf</span>
+                                            </button>
+                                            <button
+                                                onClick={() => setOrderToDelete(order.id)}
+                                                className="w-10 h-10 bg-white border border-slate-100 rounded-full flex items-center justify-center text-red-500 active:scale-90 transition-transform shadow-sm"
+                                            >
+                                                <span className="material-icons-round text-[18px]">delete_outline</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                    </div>
+                </PullToRefresh>
             </main>
 
             {/* Confirm Deletion Popup */}

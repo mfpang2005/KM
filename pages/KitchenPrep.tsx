@@ -4,6 +4,7 @@ import type { Order } from '../types';
 import { OrderStatus } from '../types';
 import { supabase } from '../src/lib/supabase';
 import * as XLSX from 'xlsx';
+import PullToRefresh from '../src/components/PullToRefresh';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -592,121 +593,125 @@ const KitchenPrepPage: React.FC = () => {
                 </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar bg-slate-50">
+            <main className="flex-1 overflow-hidden relative bg-slate-50">
+                <PullToRefresh onRefresh={fetchOrders}>
+                    <div className="p-6 space-y-8 min-h-full pb-32">
 
-                {/* ── Production Tab ── */}
-                {activeTab === 'production' && (
-                    <div className="space-y-8 animate-in fade-in duration-500">
-                        {Object.keys(groupedOrders).length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-32 text-slate-300">
-                                <span className="material-icons-round text-7xl mb-4">check_circle_outline</span>
-                                <p className="text-xs font-black uppercase tracking-widest">所有订单已完成！</p>
+                        {/* ── Production Tab ── */}
+                        {activeTab === 'production' && (
+                            <div className="space-y-8 animate-in fade-in duration-500">
+                                {Object.keys(groupedOrders).length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center py-32 text-slate-300">
+                                        <span className="material-icons-round text-7xl mb-4">check_circle_outline</span>
+                                        <p className="text-xs font-black uppercase tracking-widest">所有订单已完成！</p>
+                                    </div>
+                                ) : (
+                                    Object.entries(groupedOrders as Record<string, KitchenOrder[]>).map(([date, orders]) => (
+                                        <section key={date} className="space-y-3">
+                                            <div className="flex items-center gap-4">
+                                                <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">{date} Schedule</h2>
+                                                <div className="h-px w-full bg-slate-200" />
+                                                <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 whitespace-nowrap">{orders.length} 单</span>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                {orders.map(order => (
+                                                    <OrderCard
+                                                        key={order.id}
+                                                        order={order}
+                                                        onToggle={handleToggle}
+                                                        onCheck={handleItemCheck}
+                                                        onConfirm={handleKitchenComplete}
+                                                        loading={loadingItems}
+                                                        confirming={confirmingOrders}
+                                                    />
+                                                ))}
+                                            </div>
+                                        </section>
+                                    ))
+                                )}
                             </div>
-                        ) : (
-                            Object.entries(groupedOrders as Record<string, KitchenOrder[]>).map(([date, orders]) => (
-                                <section key={date} className="space-y-3">
-                                    <div className="flex items-center gap-4">
-                                        <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] whitespace-nowrap">{date} Schedule</h2>
-                                        <div className="h-px w-full bg-slate-200" />
-                                        <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 whitespace-nowrap">{orders.length} 单</span>
-                                    </div>
-
-                                    <div className="space-y-3">
-                                        {orders.map(order => (
-                                            <OrderCard
-                                                key={order.id}
-                                                order={order}
-                                                onToggle={handleToggle}
-                                                onCheck={handleItemCheck}
-                                                onConfirm={handleKitchenComplete}
-                                                loading={loadingItems}
-                                                confirming={confirmingOrders}
-                                            />
-                                        ))}
-                                    </div>
-                                </section>
-                            ))
                         )}
-                    </div>
-                )}
 
-                {/* ── History Tab ── */}
-                {activeTab === 'history' && (
-                    <div className="space-y-4 animate-in fade-in duration-500 max-w-2xl mx-auto">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Completed Orders</h2>
-                            <span className="text-[10px] font-black text-green-600 bg-green-50 px-3 py-1 rounded-full">Total: {completedOrders.length}</span>
-                        </div>
-                        {completedOrders.length === 0 ? (
-                            <div className="text-center py-20 text-slate-300">
-                                <p className="text-xs font-black uppercase tracking-widest">No completed orders yet</p>
-                            </div>
-                        ) : (
-                            completedOrders.map(order => (
-                                <div key={order.id} className="bg-white p-5 rounded-[28px] border border-slate-100 flex items-center justify-between hover:shadow-md transition-all">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-10 h-10 bg-green-50 rounded-2xl flex items-center justify-center border border-green-100">
-                                            <span className="material-icons-round text-green-600 text-sm">check_circle</span>
-                                        </div>
-                                        <div>
-                                            <h4 className="text-sm font-black text-slate-800">{order.id}</h4>
-                                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">{order.customerName} • {formatTime(order.dueTime || '')}</p>
-                                        </div>
-                                    </div>
-                                    <span className="text-[9px] font-black text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-100 uppercase">{order.status}</span>
+                        {/* ── History Tab ── */}
+                        {activeTab === 'history' && (
+                            <div className="space-y-4 animate-in fade-in duration-500 max-w-2xl mx-auto">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Completed Orders</h2>
+                                    <span className="text-[10px] font-black text-green-600 bg-green-50 px-3 py-1 rounded-full">Total: {completedOrders.length}</span>
                                 </div>
-                            ))
-                        )}
-                    </div>
-                )}
-
-                {/* ── Recipes Tab ── */}
-                {activeTab === 'recipes' && (
-                    <div className="space-y-6 animate-in fade-in duration-500">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Standard Recipe Library</h2>
-                            <div className="flex items-center gap-2">
-                                <label className="bg-emerald-50 text-emerald-600 px-4 py-2.5 rounded-2xl flex items-center gap-2 cursor-pointer hover:bg-emerald-100 transition-all active:scale-95 border border-emerald-100">
-                                    <span className="material-icons-round text-sm">upload_file</span>
-                                    <span className="text-[10px] font-black uppercase">Import Excel</span>
-                                    <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportExcel} />
-                                </label>
-                                <button onClick={handleExportExcel} className="bg-slate-100 text-slate-600 px-4 py-2.5 rounded-2xl flex items-center gap-2 hover:bg-slate-200 transition-all active:scale-95 border border-slate-200">
-                                    <span className="material-icons-round text-sm">download</span>
-                                    <span className="text-[10px] font-black uppercase">Export Excel</span>
-                                </button>
-                                <button onClick={handleOpenAddModal} className="bg-blue-600 text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-500/20">
-                                    <span className="material-icons-round text-sm">add</span>
-                                    <span className="text-[10px] font-black uppercase">Add Recipe</span>
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {recipes.map((recipe: Recipe) => (
-                                <div key={recipe.id} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col gap-4 transition-all hover:shadow-xl group relative cursor-pointer">
-                                    <div className="flex items-center gap-4" onClick={() => setSelectedRecipe(recipe)}>
-                                        <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600 border border-slate-100 shadow-inner group-hover:bg-blue-50 transition-all">
-                                            <span className="material-icons-round text-2xl">menu_book</span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm font-black text-slate-800 tracking-tight truncate">{recipe.name}</h3>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-widest">{recipe.ingredients.length} Ingredients</p>
-                                        </div>
+                                {completedOrders.length === 0 ? (
+                                    <div className="text-center py-20 text-slate-300">
+                                        <p className="text-xs font-black uppercase tracking-widest">No completed orders yet</p>
                                     </div>
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all pt-2 border-t border-slate-50">
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEditModal(recipe); }} className="flex-1 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-center gap-1.5">
-                                            <span className="material-icons-round text-sm">edit</span> Edit
+                                ) : (
+                                    completedOrders.map(order => (
+                                        <div key={order.id} className="bg-white p-5 rounded-[28px] border border-slate-100 flex items-center justify-between hover:shadow-md transition-all">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-10 h-10 bg-green-50 rounded-2xl flex items-center justify-center border border-green-100">
+                                                    <span className="material-icons-round text-green-600 text-sm">check_circle</span>
+                                                </div>
+                                                <div>
+                                                    <h4 className="text-sm font-black text-slate-800">{order.id}</h4>
+                                                    <p className="text-[10px] text-slate-400 font-bold mt-0.5">{order.customerName} • {formatTime(order.dueTime || '')}</p>
+                                                </div>
+                                            </div>
+                                            <span className="text-[9px] font-black text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-100 uppercase">{order.status}</span>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {/* ── Recipes Tab ── */}
+                        {activeTab === 'recipes' && (
+                            <div className="space-y-6 animate-in fade-in duration-500">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Standard Recipe Library</h2>
+                                    <div className="flex items-center gap-2">
+                                        <label className="bg-emerald-50 text-emerald-600 px-4 py-2.5 rounded-2xl flex items-center gap-2 cursor-pointer hover:bg-emerald-100 transition-all active:scale-95 border border-emerald-100">
+                                            <span className="material-icons-round text-sm">upload_file</span>
+                                            <span className="text-[10px] font-black uppercase">Import Excel</span>
+                                            <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportExcel} />
+                                        </label>
+                                        <button onClick={handleExportExcel} className="bg-slate-100 text-slate-600 px-4 py-2.5 rounded-2xl flex items-center gap-2 hover:bg-slate-200 transition-all active:scale-95 border border-slate-200">
+                                            <span className="material-icons-round text-sm">download</span>
+                                            <span className="text-[10px] font-black uppercase">Export Excel</span>
                                         </button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="flex-1 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center gap-1.5">
-                                            <span className="material-icons-round text-sm">delete_outline</span> Delete
+                                        <button onClick={handleOpenAddModal} className="bg-blue-600 text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-500/20">
+                                            <span className="material-icons-round text-sm">add</span>
+                                            <span className="text-[10px] font-black uppercase">Add Recipe</span>
                                         </button>
                                     </div>
                                 </div>
-                            ))}
-                        </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    {recipes.map((recipe: Recipe) => (
+                                        <div key={recipe.id} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col gap-4 transition-all hover:shadow-xl group relative cursor-pointer">
+                                            <div className="flex items-center gap-4" onClick={() => setSelectedRecipe(recipe)}>
+                                                <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600 border border-slate-100 shadow-inner group-hover:bg-blue-50 transition-all">
+                                                    <span className="material-icons-round text-2xl">menu_book</span>
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <h3 className="text-sm font-black text-slate-800 tracking-tight truncate">{recipe.name}</h3>
+                                                    <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-widest">{recipe.ingredients.length} Ingredients</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all pt-2 border-t border-slate-50">
+                                                <button onClick={(e) => { e.stopPropagation(); handleOpenEditModal(recipe); }} className="flex-1 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-center gap-1.5">
+                                                    <span className="material-icons-round text-sm">edit</span> Edit
+                                                </button>
+                                                <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="flex-1 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center gap-1.5">
+                                                    <span className="material-icons-round text-sm">delete_outline</span> Delete
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
-                )}
+                </PullToRefresh>
             </main>
 
             {/* ── Recipe Details Modal ── */}

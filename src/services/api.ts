@@ -164,8 +164,8 @@ export const SuperAdminService = {
     },
 
     /** 获取财务统计 */
-    getFinancials: async (range: string = 'today'): Promise<any> => {
-        const response = await api.get(`/super-admin/financials?range=${range}`);
+    getFinancials: async (range: string = 'today', paymentStatus: string = 'all'): Promise<any> => {
+        const response = await api.get(`/super-admin/financials?range=${range}&payment_status=${paymentStatus}`);
         return response.data;
     },
 };

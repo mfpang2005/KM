@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { SuperAdminService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { StatsOverview } from '../types';
+import { FinanceWidget } from '../components/FinanceWidget';
 
 export const DashboardPage: React.FC = () => {
     const { user: authUser, isProfileLoading } = useAuth();
@@ -57,11 +58,12 @@ export const DashboardPage: React.FC = () => {
     };
 
     const statusColors: Record<string, string> = {
-        pending: 'bg-slate-100 text-slate-600',
-        preparing: 'bg-blue-50 text-blue-600',
-        ready: 'bg-purple-50 text-purple-600',
-        delivering: 'bg-amber-50 text-amber-600',
-        completed: 'bg-green-50 text-green-600',
+        pending: 'bg-yellow-50 text-yellow-600 border border-yellow-200',
+        preparing: 'bg-blue-50 text-blue-600 border border-blue-200',
+        ready: 'bg-cyan-50 text-cyan-600 border border-cyan-200',
+        delivering: 'bg-purple-50 text-purple-600 border border-purple-200',
+        completed: 'bg-green-50 text-green-600 border border-green-200',
+        delayed: 'bg-red-50 text-red-600 border border-red-200',
     };
 
     const isSuperAdmin = authUser?.role === 'super_admin';
@@ -99,6 +101,9 @@ export const DashboardPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            <FinanceWidget />
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div
                     onClick={() => navigate('/orders?status=all&reset=true')}
