@@ -316,3 +316,46 @@ async def approve_order(
     await notify_order_update(response.data[0], action="approve")
     
     return response.data[0]
+
+# ═══════════════════════════════════════════
+# 7. 数据重置 (System Factory Reset)
+# ═══════════════════════════════════════════
+
+@router.post("/reset-data")
+async def reset_all_data(
+    current_user: dict = Depends(require_super_admin),
+):
+    """
+    重置所有交易数据到0（清除所有订单，将司机状态设为空闲）
+    """
+    from fastapi.concurrency import run_in_threadpool
+    try:
+        # Delete order items first (foreign key constraints)
+        await run_in_threadpool(supabase.table("order_items").delete().neq("id", "dummy").execute)
+        # Delete orders
+        await run_in_threadpool(supabase.table("orders").delete().neq("id", "dummy").execute)
+        
+        # Reset user vehicle statuses
+        await run_in_threadpool(supabase.table("users").update({"vehicle_status": "idle"}).neq("id", "dummy").execute)
+        
+        # Reset generic vehicles
+        await run_in_threadpool(supabase.table("vehicles").update({"status": "idle"}).neq("id", "dummy").execute)
+        
+        # Log this highly privileged action
+        await _log_audit(
+            actor=current_user,
+            action="reset_data",
+            target="all_records",
+            detail={"action": "deleted_all_orders_and_reset_status"},
+        )
+        
+        # GoEasy notification to trigger frontend reloads
+        from services.goeasy import publish_message
+        await publish_message({
+            "type": "system_reset",
+            "detail": "admin_triggered"
+        })
+        
+        return {"status": "success", "message": "All transaction data has been reset."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

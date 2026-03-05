@@ -461,6 +461,23 @@ const OrderManagement: React.FC = () => {
                                 </div>
                             </section>
 
+                            {/* 交付照片 (Delivery Photos) */}
+                            {editingOrder.delivery_photos && editingOrder.delivery_photos.length > 0 && (
+                                <section className="space-y-4">
+                                    <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">交付凭证 (Proof of Delivery)</h3>
+                                    <div className="flex gap-3 overflow-x-auto pb-2 no-scrollbar">
+                                        {editingOrder.delivery_photos.map((url, idx) => (
+                                            <a key={idx} href={url} target="_blank" rel="noopener noreferrer" className="block w-24 h-24 shrink-0 rounded-2xl overflow-hidden border-2 border-slate-100 shadow-sm hover:border-primary transition-all group relative">
+                                                <img src={url} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-300" alt="Delivery Proof" />
+                                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <span className="material-icons-round text-white">zoom_in</span>
+                                                </div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </section>
+                            )}
+
                             <section className="space-y-4">
                                 <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">指派/修改配送员</h3>
                                 <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">

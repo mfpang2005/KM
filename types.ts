@@ -44,6 +44,7 @@ export interface Order {
     // Added paymentMethod and paymentStatus to resolve property existence errors
     paymentMethod?: PaymentMethod;
     paymentStatus?: 'paid' | 'pending' | 'unpaid';
+    delivery_photos?: string[];
 }
 
 export interface OrderCreate {
@@ -85,4 +86,8 @@ export interface User {
     name?: string;
     phone?: string;
     avatar_url?: string;
+    vehicle_model?: string;
+    vehicle_plate?: string;
+    vehicle_type?: string;
+    vehicle_status?: string;
 }

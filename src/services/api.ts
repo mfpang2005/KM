@@ -2,7 +2,7 @@ import axios from 'axios';
 import { Order, OrderCreate, OrderStatus, Product, User, UserRole } from '../../types';
 import { supabase } from '../lib/supabase';
 
-const API_URL = 'http://localhost:8000';
+const API_URL = '/api';
 
 export const api = axios.create({
     baseURL: API_URL,
@@ -44,6 +44,22 @@ export const OrderService = {
     delete: async (id: string): Promise<void> => {
         await api.delete(`/orders/${id}`);
     },
+    updateOrderItemStatus: async (itemId: string, status: string): Promise<void> => {
+        await api.patch(`/orders/items/${itemId}/status?status=${status}`);
+    },
+    getOrderItems: async (orderId: string): Promise<any[]> => {
+        const response = await api.get(`/orders/items/${orderId}`);
+        return response.data;
+    },
+    markItemPrepared: async (itemId: string, isPrepared: boolean): Promise<void> => {
+        await api.patch(`/orders/items/${itemId}/prepared`, { is_prepared: isPrepared });
+    },
+    kitchenComplete: async (orderId: string): Promise<void> => {
+        await api.post(`/orders/${orderId}/kitchen-complete`);
+    },
+    updateOrderPhotos: async (orderId: string, photoUrls: string[]): Promise<void> => {
+        await api.patch(`/orders/${orderId}/photos`, { delivery_photos: photoUrls });
+    }
 };
 
 export const ProductService = {
@@ -74,8 +90,16 @@ export const ProductService = {
 };
 
 export const UserService = {
-    login: async (email: string, role: UserRole): Promise<User> => {
+    login: async (email: string, role: string): Promise<User> => {
         const response = await api.post(`/users/login?email=${email}&role=${role}`);
+        return response.data;
+    },
+    getCurrentUser: async (userId: string): Promise<User> => {
+        const response = await api.get(`/users/me/profile?user_id=${userId}`);
+        return response.data;
+    },
+    updateProfile: async (userId: string, data: Partial<User>): Promise<User> => {
+        const response = await api.patch(`/users/me/profile?user_id=${userId}`, data);
         return response.data;
     }
 };

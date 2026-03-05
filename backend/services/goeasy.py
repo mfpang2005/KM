@@ -62,3 +62,18 @@ async def notify_order_update(order_data: dict, action: str = "update"):
     }
     
     await publish_message(message)
+
+async def notify_kitchen_complete(order_data: dict):
+    """
+    快捷函数：厨房完成订单后，通知司机和管理员准备出发
+    """
+    message = {
+        "type": "kitchen_done",
+        "action": "kitchen_complete",
+        "orderId": order_data.get("id"),
+        "status": "ready",
+        "customerName": order_data.get("customerName"),
+        "driverId": order_data.get("driverId"),
+        "timestamp": datetime.now().isoformat()
+    }
+    await publish_message(message)

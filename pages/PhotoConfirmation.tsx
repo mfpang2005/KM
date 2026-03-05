@@ -84,11 +84,7 @@ const PhotoConfirmation: React.FC = () => {
         try {
             // 1. 将 Storage URL 列表写入订单 delivery_photos 字段
             const photoUrls = (Object.values(photos) as { localUrl: string; storageUrl: string }[]).map(p => p.storageUrl);
-            await fetch(`http://localhost:8000/orders/${orderId}/photos`, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ delivery_photos: photoUrls }),
-            });
+            await OrderService.updateOrderPhotos(orderId, photoUrls);
 
             // 2. 更新订单状态为 COMPLETED 并记录付款方式
             const order = await OrderService.getById(orderId);

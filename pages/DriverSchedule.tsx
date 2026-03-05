@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { OrderService } from '../src/services/api';
-import { Order, OrderStatus } from '../types';
+import { OrderService, UserService } from '../src/services/api';
+import { Order, OrderStatus, User } from '../types';
 import GoEasy from 'goeasy';
 import { supabase } from '../src/lib/supabase';
 import { getGoogleMapsUrl } from '../src/utils/maps';
@@ -39,9 +39,11 @@ const DriverSchedule: React.FC = () => {
     const [now, setNow] = useState(new Date());
 
     // Profile State
-    const [driverName, setDriverName] = useState('阿杰');
-    const [driverPhone, setDriverPhone] = useState('6012345678');
-    const [driverImg, setDriverImg] = useState('https://lh3.googleusercontent.com/aida-public/AB6AXuDZnnLYlTfkxNz0bDfw9XrL63qvDkeps9ojYKowAsW6_ibm2prNRJ9pQeAdh0jje0WmIYPEZ9gt1HJOwCgCIUQQQC1FrEvlBa6czn2RSPcTGPdqXT8wzi8TnvuNXaRXK-tpg_kicZ6JoGRysicOIiBoY_Fpn1BaE4iQ4MYOvlxb-zYTVTt_DFVBBEYCf77OjEGCfqp-8jy1yT0OHey_bJ9oNyzKucAx8rM0VX3F43wPKJqkHiFfkWPR9YVULi4S2TInyYyQTAlHTOka');
+    const [userId, setUserId] = useState<string | null>(null);
+    const [driverName, setDriverName] = useState('');
+    const [driverPhone, setDriverPhone] = useState('');
+    const [driverImg, setDriverImg] = useState('');
+    const [isSavingProfile, setIsSavingProfile] = useState(false);
 
     // Vehicle State
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -76,6 +78,25 @@ const DriverSchedule: React.FC = () => {
         }
     };
 
+    const fetchUserProfile = async (uid: string) => {
+        try {
+            const profile = await UserService.getCurrentUser(uid);
+            setDriverName(profile.name || '');
+            setDriverPhone(profile.phone || '');
+            setDriverImg(profile.avatar_url || 'https://via.placeholder.com/150');
+            if (profile.vehicle_model) {
+                setSelectedVehicle({
+                    id: 'current', model: profile.vehicle_model,
+                    plate: profile.vehicle_plate || '', type: profile.vehicle_type || '',
+                    status: profile.vehicle_status as any
+                });
+                setDeclaredTime('已保存');
+            }
+        } catch (error) {
+            console.error("Failed to fetch user profile", error);
+        }
+    };
+
     const fetchVehicles = async () => {
         try {
             const { data, error } = await supabase.from('vehicles').select('*');
@@ -99,6 +120,13 @@ const DriverSchedule: React.FC = () => {
     };
 
     useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+                setUserId(session.user.id);
+                fetchUserProfile(session.user.id);
+            }
+        });
+
         fetchOrders();
         fetchVehicles();
 
@@ -163,12 +191,42 @@ const DriverSchedule: React.FC = () => {
         } catch (e) { return false; }
     }, [activeOrder, now]);
 
-    const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            const reader = new FileReader();
-            reader.onloadend = () => setDriverImg(reader.result as string);
-            reader.readAsDataURL(file);
+        if (file && userId) {
+            try {
+                // upload to supabase
+                const fileExt = file.name.split('.').pop();
+                const fileName = `${userId}-${Math.random()}.${fileExt}`;
+                const { error: uploadError } = await supabase.storage
+                    .from('delivery-photos')
+                    .upload(`avatars/${fileName}`, file);
+                if (uploadError) throw uploadError;
+
+                const { data } = supabase.storage.from('delivery-photos').getPublicUrl(`avatars/${fileName}`);
+                if (data.publicUrl) {
+                    setDriverImg(data.publicUrl);
+                    await UserService.updateProfile(userId, { avatar_url: data.publicUrl });
+                    alert('头像更新成功');
+                }
+            } catch (error) {
+                console.error('Failed to upload avatar', error);
+                alert('头像上传失败');
+            }
+        }
+    };
+
+    const saveProfile = async () => {
+        if (!userId) return;
+        setIsSavingProfile(true);
+        try {
+            await UserService.updateProfile(userId, { name: driverName, phone: driverPhone });
+            alert('个人资料保存成功');
+        } catch (err) {
+            console.error('Failed to save profile', err);
+            alert('保存失败');
+        } finally {
+            setIsSavingProfile(false);
         }
     };
 
@@ -465,11 +523,18 @@ const DriverSchedule: React.FC = () => {
 
     const handleDeclareVehicle = async (vehicle: Vehicle) => {
         try {
-            // Update db status to busy to simulate declaration/assignment
             await supabase.from('vehicles').update({ status: 'busy' }).eq('id', vehicle.id);
             setSelectedVehicle(vehicle);
             setDeclaredTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
             setIsVehicleDeclaring(false);
+            if (userId) {
+                await UserService.updateProfile(userId, {
+                    vehicle_model: vehicle.model,
+                    vehicle_plate: vehicle.plate,
+                    vehicle_type: vehicle.type,
+                    vehicle_status: 'busy'
+                });
+            }
         } catch (error) {
             console.error("Failed to declare vehicle", error);
         }
@@ -665,6 +730,13 @@ const DriverSchedule: React.FC = () => {
                                     <label className="text-[9px] font-black text-slate-300 uppercase ml-2 tracking-widest">电话号码 (PHONE)</label>
                                     <input value={driverPhone} onChange={e => setDriverPhone(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:bg-white focus:border-primary/20 transition-all outline-none" placeholder="输入电话号码" />
                                 </div>
+                                <button
+                                    onClick={saveProfile}
+                                    disabled={isSavingProfile}
+                                    className="w-full py-4 bg-primary text-white rounded-xl font-black text-xs uppercase shadow-md active:scale-95 transition-all disabled:opacity-50"
+                                >
+                                    {isSavingProfile ? '保存中...' : '保存资料'}
+                                </button>
                             </div>
                         </div>
 

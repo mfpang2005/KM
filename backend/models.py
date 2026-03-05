@@ -1,6 +1,6 @@
 from typing import List, Optional
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from datetime import datetime
 
 
@@ -203,6 +203,13 @@ class VehicleBase(BaseModel):
     capacity: Optional[float] = None
     notes: Optional[str] = None
 
+    @field_validator('capacity', 'road_tax_expiry', mode='before')
+    @classmethod
+    def empty_string_to_none(cls, v):
+        if v == "":
+            return None
+        return v
+
 class VehicleCreate(VehicleBase):
     pass
 
@@ -214,6 +221,13 @@ class VehicleUpdate(BaseModel):
     road_tax_expiry: Optional[str] = None
     capacity: Optional[float] = None
     notes: Optional[str] = None
+
+    @field_validator('capacity', 'road_tax_expiry', mode='before')
+    @classmethod
+    def empty_string_to_none(cls, v):
+        if v == "":
+            return None
+        return v
 
 class Vehicle(VehicleBase):
     id: str

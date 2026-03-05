@@ -24,39 +24,9 @@ interface PendingOrder {
     time: string;
 }
 
-const MOCK_DRIVERS: Driver[] = [
-    { 
-        id: '1', 
-        name: '阿杰 (Ah Jack)', 
-        phone: '60123456789', 
-        status: 'On Duty', 
-        currentOrderId: 'KL-468167', 
-        currentOrderDetails: { customer: 'Alice Wong', address: 'KL Sentral, Kuala Lumpur' },
-        taskCount: 5, 
-        vehicle: 'Toyota Hiace (VNZ 8821)', 
-        img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDZnnLYlTfkxNz0bDfw9XrL63qvDkeps9ojYKowAsW6_ibm2prNRJ9pQeAdh0jje0WmIYPEZ9gt1HJOwCgCIUQQQC1FrEvlBa6czn2RSPcTGPdqXT8wzi8TnvuNXaRXK-tpg_kicZ6JoGRysicOIiBoY_Fpn1BaE4iQ4MYOvlxb-zYTVTt_DFVBBEYCf77OjEGCfqp-8jy1yT0OHey_bJ9oNyzKucAx8rM0VX3F43wPKJqkHiFfkWPR9YVULi4S2TInyYyQTAlHTOka' 
-    },
-    { 
-        id: '2', 
-        name: 'Ali Ahmad', 
-        phone: '60198765432', 
-        status: 'Available', 
-        currentOrderId: null, 
-        taskCount: 2, 
-        vehicle: 'Lorry 3-Ton (BCC 4492)', 
-        img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDCr1A0UkYD47bPyjINVhOMMiB-pdO6Vk9GkIst7TGBPcENh6mor-beIE0m-zai1jb8ISvg0dfAHur75hz38kljvdLDYDhZL-2ExznnuKSVz_DC0ZJEAL2uTdFO5HUVg3AYRyECUgerFv4RSqf8DUrKNHpID4Dd5JhD0TnTCZbd2A9ZDW4MCHQT65EjZTHjvSdZf_OqT0CAh_1IQOS7JVmm59EG9tT5QDfeexTdpUkUFKHXXnZwE66rkmWOuJ0Q7WWSPtN1nUcxBxRf' 
-    },
-    { 
-        id: '3', 
-        name: 'Tan Wei', 
-        phone: '60172233445', 
-        status: 'Offline', 
-        currentOrderId: null, 
-        taskCount: 0, 
-        vehicle: 'Van (WWR 1102)', 
-        img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDLlyYiZxjedNYrM_16MJem_-z8phukD8Y0feARWqrmek1SnFPW4HVi7sm7VddsZtD-UU756Kogt_EUqpzfEUqXDDKMI3s2g6IxxLz3NBeqHkMSSCG0Cf-z3HYu02DWkNOFWb-bA9YVclQyaW35kBs0WTXA2ImEqpPqbRazqVCsx-z2c2OHILM7zBpNigWz9_gIcnizGf9SOcVa0elsIXsnl6J_ZOWF6G9MeORyCWaoUvIAua6w0WMg-Z4HRcPizWY5q-0CMfhjjIz8' 
-    },
-];
+import { supabase } from '../src/lib/supabase';
+import { OrderService } from '../src/services/api';
+import { OrderStatus } from '../types';
 
 const MOCK_PENDING: PendingOrder[] = [
     { id: 'KL-99201', customer: 'Bangsar Office', address: 'Bangsar South, KL', time: '02:30 PM' },
@@ -65,10 +35,66 @@ const MOCK_PENDING: PendingOrder[] = [
 
 const DriverList: React.FC = () => {
     const navigate = useNavigate();
-    const [drivers, setDrivers] = useState<Driver[]>(MOCK_DRIVERS);
-    const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>(MOCK_PENDING);
+    const [drivers, setDrivers] = useState<Driver[]>([]);
+    const [pendingOrders, setPendingOrders] = useState<PendingOrder[]>([]);
     const [filter, setFilter] = useState<'All' | 'Available' | 'Busy'>('All');
     const [assigningOrder, setAssigningOrder] = useState<PendingOrder | null>(null);
+
+    const fetchData = async () => {
+        try {
+            // 1. 获取所有的司机数据
+            const { data: usersData } = await supabase.from('users').select('*').eq('role', 'driver');
+
+            // 2. 获取所有的订单及关联关系
+            const allOrders = await OrderService.getAll();
+
+            if (usersData) {
+                const mappedDrivers: Driver[] = usersData.map(u => {
+                    // 找出当前司机正在配送的订单 (状态为 DELIVERING)
+                    const activeOrder = allOrders.find(o => o.driverId === u.id && o.status === OrderStatus.DELIVERING);
+                    // 找出当前司机已指派的当天任务总数
+                    const taskCount = allOrders.filter(o => o.driverId === u.id).length;
+
+                    return {
+                        id: u.id,
+                        name: u.name || '未命名司机',
+                        phone: u.phone || '',
+                        status: activeOrder ? 'On Duty' : (u.vehicle_status === 'busy' ? 'Available' : 'Offline'), // 若申报了车辆即可接单
+                        currentOrderId: activeOrder ? activeOrder.id : null,
+                        currentOrderDetails: activeOrder ? { customer: activeOrder.customerName, address: activeOrder.address } : undefined,
+                        taskCount,
+                        vehicle: u.vehicle_model ? `${u.vehicle_model} (${u.vehicle_plate})` : '未申报车辆',
+                        img: u.avatar_url || 'https://via.placeholder.com/150'
+                    };
+                });
+                setDrivers(mappedDrivers);
+            }
+
+            // 3. 找出所有已打包完毕(READY)但还未被接单的订单，作为待调度列表
+            // 或者：即使已经被分配了 driverId，只要状态还是 READY 的，也可以调度？
+            // 按照业务逻辑，如果是 READY 且还需要调度，就放入 pending。
+            const pending = allOrders
+                .filter(o => o.status === OrderStatus.READY && !o.driverId)
+                .map(o => ({
+                    id: o.id,
+                    customer: o.customerName,
+                    address: o.address,
+                    time: o.dueTime || '-'
+                }));
+            setPendingOrders(pending);
+        } catch (error) {
+            console.error('Failed to fetch drivers and orders data', error);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchData();
+        const ch = supabase.channel('driver-list-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, fetchData)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchData)
+            .subscribe();
+        return () => { supabase.removeChannel(ch); };
+    }, []);
 
     const filteredDrivers = useMemo(() => {
         if (filter === 'All') return drivers;
@@ -76,46 +102,44 @@ const DriverList: React.FC = () => {
         return drivers.filter(d => d.status === 'On Duty');
     }, [drivers, filter]);
 
-    const handleAssign = (driverId: string) => {
+    const handleAssign = async (driverId: string) => {
         if (!assigningOrder) return;
-        setDrivers(prev => prev.map(d => 
-            d.id === driverId 
-            ? { 
-                ...d, 
-                status: 'On Duty', 
-                currentOrderId: assigningOrder.id, 
-                currentOrderDetails: { customer: assigningOrder.customer, address: assigningOrder.address },
-                taskCount: d.taskCount + 1 
-            } 
-            : d
-        ));
-        setPendingOrders(prev => prev.filter(o => o.id !== assigningOrder.id));
-        setAssigningOrder(null);
+        try {
+            // Update order with driverId and change status to DELIVERING
+            // Note: in a real app, maybe driver confirms first. For now, admin forces assign
+            await supabase.from('orders').update({
+                driverId: driverId,
+                status: OrderStatus.DELIVERING
+            }).eq('id', assigningOrder.id);
+            setAssigningOrder(null);
+            fetchData();
+        } catch (error) {
+            console.error('Failed to assign driver', error);
+        }
     };
 
     const handleWhatsApp = (driver: Driver) => {
-        // WhatsApp API 要求电话号码不含 + 号或前导零，仅数字
         const cleanPhone = driver.phone.replace(/\D/g, '');
-        const message = driver.currentOrderId 
+        const message = driver.currentOrderId
             ? `[金龙餐饮调度] 你好 ${driver.name}, 请确认订单 ${driver.currentOrderId} (${driver.currentOrderDetails?.customer}) 的配送进度，预计几点到达？`
             : `[金龙餐饮调度] 你好 ${driver.name}, 有新的配送任务准备指派，请回复确认当前位置。`;
         const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
         window.open(url, '_blank');
     };
 
-    const handleReassign = (driverId: string) => {
+    const handleReassign = async (driverId: string) => {
         const driver = drivers.find(d => d.id === driverId);
         if (driver && driver.currentOrderId) {
-            setPendingOrders(prev => [
-                ...prev, 
-                { 
-                    id: driver.currentOrderId!, 
-                    customer: driver.currentOrderDetails?.customer || '未知客户', 
-                    address: driver.currentOrderDetails?.address || '重新指派中', 
-                    time: 'ASAP' 
-                }
-            ]);
-            setDrivers(prev => prev.map(d => d.id === driverId ? { ...d, status: 'Available', currentOrderId: null, currentOrderDetails: undefined } : d));
+            try {
+                // Reverse assignment
+                await supabase.from('orders').update({
+                    driverId: null,
+                    status: OrderStatus.READY
+                }).eq('id', driver.currentOrderId);
+                fetchData();
+            } catch (error) {
+                console.error('Failed to reassign driver', error);
+            }
         }
     };
 
@@ -134,9 +158,8 @@ const DriverList: React.FC = () => {
                             <button
                                 key={t}
                                 onClick={() => setFilter(t as any)}
-                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${
-                                    filter === t ? 'bg-white text-primary shadow-sm' : 'text-slate-400'
-                                }`}
+                                className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all ${filter === t ? 'bg-white text-primary shadow-sm' : 'text-slate-400'
+                                    }`}
                             >
                                 {t === 'All' ? '全部' : t === 'Available' ? '空闲' : '忙碌'}
                             </button>
@@ -164,7 +187,7 @@ const DriverList: React.FC = () => {
                                             <p className="text-[10px] truncate leading-tight">{order.address}</p>
                                         </div>
                                     </div>
-                                    <button 
+                                    <button
                                         onClick={() => setAssigningOrder(order)}
                                         className="w-full py-2.5 bg-white text-slate-900 rounded-2xl text-[10px] font-black uppercase active:scale-95 transition-transform"
                                     >
@@ -185,9 +208,8 @@ const DriverList: React.FC = () => {
                                 <div className="flex items-center gap-4">
                                     <div className="relative">
                                         <img src={d.img} className="w-16 h-16 rounded-[24px] object-cover border-2 border-slate-50 shadow-sm" alt={d.name} />
-                                        <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center ${
-                                            d.status === 'Available' ? 'bg-green-500' : d.status === 'On Duty' ? 'bg-orange-500' : 'bg-slate-300'
-                                        }`}>
+                                        <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-full border-4 border-white shadow-sm flex items-center justify-center ${d.status === 'Available' ? 'bg-green-500' : d.status === 'On Duty' ? 'bg-orange-500' : 'bg-slate-300'
+                                            }`}>
                                             <span className="material-icons-round text-white text-[12px]">
                                                 {d.status === 'Available' ? 'check' : d.status === 'On Duty' ? 'local_shipping' : 'power_settings_new'}
                                             </span>
@@ -199,7 +221,7 @@ const DriverList: React.FC = () => {
                                             <span className="text-[9px] font-black text-slate-300 uppercase">今日: {d.taskCount}单</span>
                                         </div>
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{d.vehicle}</p>
-                                        
+
                                         {/* 核心改动：显示正在执行的任务详情 */}
                                         {d.currentOrderId ? (
                                             <div className="mt-3 bg-orange-50/50 p-3 rounded-2xl border border-orange-100 animate-in zoom-in duration-300">
@@ -224,7 +246,7 @@ const DriverList: React.FC = () => {
 
                                 <div className="flex gap-2">
                                     {assigningOrder ? (
-                                        <button 
+                                        <button
                                             disabled={d.status === 'Offline'}
                                             onClick={() => handleAssign(d.id)}
                                             className="flex-1 py-3.5 bg-primary text-white rounded-2xl text-[10px] font-black uppercase shadow-lg shadow-primary/20 active:scale-95 transition-all disabled:bg-slate-200"
@@ -234,20 +256,20 @@ const DriverList: React.FC = () => {
                                     ) : (
                                         <>
                                             {d.status === 'On Duty' && (
-                                                <button 
+                                                <button
                                                     onClick={() => handleReassign(d.id)}
                                                     className="flex-1 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase active:scale-95 transition-all"
                                                 >
                                                     改派/回收
                                                 </button>
                                             )}
-                                            <button 
+                                            <button
                                                 onClick={() => window.location.href = `tel:${d.phone}`}
                                                 className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center active:scale-90 transition-transform"
                                             >
                                                 <span className="material-icons-round text-[18px]">phone</span>
                                             </button>
-                                            <button 
+                                            <button
                                                 onClick={() => handleWhatsApp(d)}
                                                 className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center active:scale-90 transition-transform"
                                             >

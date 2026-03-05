@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
-from typing import List
+from typing import List, Optional
 from database import supabase
 from models import Order, OrderCreate, OrderUpdate, OrderStatus
 
@@ -288,3 +288,73 @@ async def update_delivery_photos(order_id: str, photos: dict):
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
     return response.data[0]
+
+
+# ─── Kitchen Prep Endpoints ──────────────────────────────────────────────────
+
+@router.get("/items/{order_id}")
+async def get_order_items(order_id: str):
+    """
+    获取指定订单的所有 order_items（含 is_prepared 状态）
+    """
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(
+        supabase.table("order_items")
+        .select("*")
+        .eq("order_id", order_id)
+        .order("created_at", desc=False)
+        .execute
+    )
+    return response.data or []
+
+
+@router.patch("/items/{item_id}/prepared")
+async def mark_item_prepared(item_id: str, payload: dict):
+    """
+    厨房逐项勾选确认。接收 { "is_prepared": true/false }
+    """
+    is_prepared = payload.get("is_prepared", True)
+    from fastapi.concurrency import run_in_threadpool
+    response = await run_in_threadpool(
+        supabase.table("order_items")
+        .update({"is_prepared": is_prepared, "status": "ready" if is_prepared else "pending"})
+        .eq("id", item_id)
+        .execute
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order item not found")
+    return response.data[0]
+
+
+@router.post("/{order_id}/kitchen-complete")
+async def kitchen_complete(order_id: str):
+    """
+    厨房确认整张订单完成，将 orders.status 更新为 ready，
+    并通过 GoEasy 实时通知司机和管理员准备出发。
+    """
+    from fastapi.concurrency import run_in_threadpool
+    from services.goeasy import notify_kitchen_complete
+
+    response = await run_in_threadpool(
+        supabase.table("orders")
+        .update({"status": "ready"})
+        .eq("id", order_id)
+        .execute
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order_data = response.data[0]
+
+    # 同时将该订单下所有 order_items 标记为 ready
+    await run_in_threadpool(
+        supabase.table("order_items")
+        .update({"is_prepared": True, "status": "ready"})
+        .eq("order_id", order_id)
+        .execute
+    )
+
+    # GoEasy 通知司机和管理员
+    await notify_kitchen_complete(order_data)
+
+    return {"message": "Order marked as ready", "orderId": order_id, "status": "ready"}
