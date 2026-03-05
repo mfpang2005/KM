@@ -64,6 +64,18 @@ export const SuperAdminService = {
         return response.data;
     },
 
+    /** 获取财务汇总（今日/本月已完成订单总额），range 传 today/month/all */
+    getFinanceSummary: async (range: 'today' | 'month' | 'all' = 'month'): Promise<{
+        grossSales: number;
+        netSales: number;
+        monthlyGoal: number;
+        tax: number;
+        collections: Array<{ method: string; amount: number; count: number }>;
+    }> => {
+        const response = await api.get(`/super-admin/financials?range=${range}`);
+        return response.data;
+    },
+
     // ---- 审计日志 ----
     getAuditLogs: async (page: number = 1, pageSize: number = 20): Promise<{ data: AuditLog[], total: number, page: number, page_size: number }> => {
         const response = await api.get(`/super-admin/audit-logs?page=${page}&page_size=${pageSize}`);

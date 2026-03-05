@@ -366,37 +366,56 @@ async def get_financials(
     current_user: dict = Depends(require_super_admin),
 ):
     """
-    获取财务汇总数据
+    获取财务汇总数据，支持 range=today/month/all 过滤
     """
     from fastapi.concurrency import run_in_threadpool
-    # 获取已完成的订单用于统计
-    # NOTE: 实际应根据 range 过滤日期，此处简化为全量已完成订单
-    response = await run_in_threadpool(supabase.table("orders").select("*").eq("status", "completed").execute)
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+
+    query = supabase.table("orders").select("*").eq("status", "completed")
+
+    if range == "today":
+        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+        query = query.gte("created_at", today_start)
+    elif range == "month":
+        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+        query = query.gte("created_at", month_start)
+
+    response = await run_in_threadpool(query.execute)
     orders = response.data or []
-    
-    gross_sales = sum(o.get("amount", 0) for o in orders)
-    tax = gross_sales * 0.06 # 假设 6% SST
+
+    gross_sales = sum(o.get("amount", 0) or 0 for o in orders)
+    tax = gross_sales * 0.06  # 6% SST
     net_sales = gross_sales + tax
-    
+
     # 统计支付方式
-    pm_stats = {}
+    pm_stats: dict = {}
     for o in orders:
         method = o.get("paymentMethod") or "cash"
         if method not in pm_stats:
             pm_stats[method] = {"method": method, "amount": 0, "count": 0}
-        pm_stats[method]["amount"] += o.get("amount", 0)
+        pm_stats[method]["amount"] += o.get("amount", 0) or 0
         pm_stats[method]["count"] += 1
 
-    # 模拟类目销售压力（实际需关联 order_items）
-    # 此处返回空或静态假数据以维持 UI
+    # 获取月度目标（从 system_config 读取）
+    goal = 0
+    try:
+        cfg_resp = supabase.table("system_config").select("value").eq("key", "finance_goal").execute()
+        if cfg_resp.data:
+            goal = cfg_resp.data[0].get("value", {}).get("amount", 0)
+    except Exception:
+        pass
+
     return {
         "grossSales": gross_sales,
         "discounts": 0,
         "tax": tax,
         "netSales": net_sales,
+        "monthlyGoal": goal,
         "collections": list(pm_stats.values()),
         "categorySales": [
-             {"category": "配送订单", "amount": gross_sales}
+            {"category": "配送订单", "amount": gross_sales}
         ],
         "hourlySales": []
     }

@@ -1,12 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { OrderService } from '../src/services/api';
-import { Order, OrderStatus } from '../types';
+import { Order, OrderStatus, UserRole } from '../types';
+import FinanceWidget from '../src/components/FinanceWidget';
+import { supabase } from '../src/lib/supabase';
 
 const AdminDashboard: React.FC = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState<Order[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [userRole, setUserRole] = useState<UserRole | null>(null);
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+                const role = session.user.user_metadata?.role as UserRole | undefined;
+                setUserRole(role ?? UserRole.ADMIN);
+            }
+        });
+    }, []);
 
     const loadData = async () => {
         try {
@@ -70,28 +82,8 @@ const AdminDashboard: React.FC = () => {
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 space-y-4 no-scrollbar">
-                <div className="grid grid-cols-2 gap-4">
-                    <div
-                        onClick={() => navigate('/admin/orders')}
-                        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 h-24 flex flex-col justify-between cursor-pointer active:scale-95 transition-transform"
-                    >
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">当日订单总数</p>
-                        <div className="flex items-baseline justify-between">
-                            <span className="text-3xl font-bold text-slate-900">{stats.count}</span>
-                            <span className="text-[10px] text-green-500 font-bold">更新中</span>
-                        </div>
-                    </div>
-                    <div
-                        onClick={() => navigate('/admin/finance')}
-                        className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 h-24 flex flex-col justify-between cursor-pointer active:scale-95 transition-transform"
-                    >
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">累计营收</p>
-                        <div className="flex items-baseline gap-1">
-                            <span className="text-xs font-bold text-primary/60">RM</span>
-                            <span className="text-3xl font-bold text-primary">{stats.totalAmount.toLocaleString()}</span>
-                        </div>
-                    </div>
-                </div>
+                {/* Finance Widget — 实时财务汇总 */}
+                <FinanceWidget user={userRole} />
 
                 <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
                     <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">核心功能</h3>
