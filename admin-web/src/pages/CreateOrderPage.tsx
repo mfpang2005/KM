@@ -85,8 +85,12 @@ export const CreateOrderPage: React.FC = () => {
             SuperAdminService.getUsers()
         ])
             .then(([productsData, usersData]) => {
-                setProducts(productsData);
-                setDrivers(usersData.filter(u => u.role === 'driver'));
+                setProducts(Array.isArray(productsData) ? productsData : []);
+                if (Array.isArray(usersData)) {
+                    setDrivers(usersData.filter(u => u.role === 'driver'));
+                } else {
+                    setDrivers([]);
+                }
             })
             .catch(err => console.error('Failed to load data', err))
             .finally(() => {
@@ -427,8 +431,8 @@ export const CreateOrderPage: React.FC = () => {
                                                 <td className="px-3 py-3 text-center">
                                                     <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-indigo-50 text-indigo-700 font-black text-xs">{item.quantity}</span>
                                                 </td>
-                                                <td className="px-4 py-3 text-right text-slate-600 font-mono font-bold text-xs">RM {item.product.price.toFixed(2)}</td>
-                                                <td className="px-4 py-3 text-right font-black text-slate-800 font-mono text-xs">RM {(item.product.price * item.quantity).toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-right text-slate-600 font-mono font-bold text-xs">RM {(item.product.price || 0).toFixed(2)}</td>
+                                                <td className="px-4 py-3 text-right font-black text-slate-800 font-mono text-xs">RM {((item.product.price || 0) * item.quantity).toFixed(2)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -500,13 +504,6 @@ export const CreateOrderPage: React.FC = () => {
 
                         {/* 操作按钮 */}
                         <div className="flex flex-col sm:flex-row gap-3 no-print-area mt-4">
-                            <button
-                                onClick={() => window.print()}
-                                className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-200 transition-colors"
-                            >
-                                <span className="material-icons-round text-[18px]">print</span>
-                                打印单据 (Print)
-                            </button>
                             <button
                                 onClick={() => window.location.href = '/orders'}
                                 className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"
@@ -614,7 +611,7 @@ export const CreateOrderPage: React.FC = () => {
                                                 <div className="p-3">
                                                     <div className="text-[9px] font-black text-slate-400 uppercase mb-1">{p.code}</div>
                                                     <div className="text-xs font-bold text-slate-800 line-clamp-2 leading-tight">{p.name}</div>
-                                                    <div className="text-sm font-black text-indigo-600 mt-1">RM {p.price.toFixed(2)}</div>
+                                                    <div className="text-sm font-black text-indigo-600 mt-1">RM {(p.price || 0).toFixed(2)}</div>
                                                 </div>
                                                 {inCart && (
                                                     <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shadow-md">

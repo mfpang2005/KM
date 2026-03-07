@@ -6,6 +6,21 @@ import { supabase } from '../lib/supabase';
 import type { Order, User } from '../types';
 import { OrderStatus } from '../types';
 
+interface OrderItemDetail {
+    id: string;
+    name: string;
+    quantity: number;
+    note?: string;
+}
+
+const STATUS_STYLES: Record<string, string> = {
+    [OrderStatus.PENDING]: 'bg-amber-100 text-amber-600',
+    [OrderStatus.PREPARING]: 'bg-blue-100 text-blue-600',
+    [OrderStatus.READY]: 'bg-purple-100 text-purple-600',
+    [OrderStatus.DELIVERING]: 'bg-orange-100 text-orange-600',
+    [OrderStatus.COMPLETED]: 'bg-green-100 text-green-600',
+};
+
 const KitchenCalendarPage: React.FC = () => {
     const navigate = useNavigate();
     const [orders, setOrders] = useState<Order[]>([]);
@@ -13,6 +28,9 @@ const KitchenCalendarPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string | null>(new Date().toISOString().split('T')[0]);
     const [viewMonth, setViewMonth] = useState(new Date());
+    const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+    const [orderItems, setOrderItems] = useState<Record<string, OrderItemDetail[]>>({});
+    const [loadingItems, setLoadingItems] = useState<string | null>(null);
 
     const loadOrders = async () => {
         try {
@@ -32,6 +50,26 @@ const KitchenCalendarPage: React.FC = () => {
         }
     };
 
+    // NOTE: 按需加载订单明细，避免一次性拉取所有订单项目
+    const loadOrderItems = async (orderId: string) => {
+        if (orderItems[orderId] || loadingItems === orderId) return;
+        setLoadingItems(orderId);
+        try {
+            const items = await AdminOrderService.getOrderItems(orderId);
+            setOrderItems(prev => ({ ...prev, [orderId]: items }));
+        } catch (err) {
+            console.error('Failed to load items for order', orderId, err);
+        } finally {
+            setLoadingItems(null);
+        }
+    };
+
+    const handleSelectOrder = (orderId: string) => {
+        const next = selectedOrderId === orderId ? null : orderId;
+        setSelectedOrderId(next);
+        if (next) loadOrderItems(next);
+    };
+
     useEffect(() => {
         setLoading(true);
         // NOTE: Promise.all 配合单独的 catch，记录失败但不阻塞 Promise.all 的完成
@@ -45,15 +83,11 @@ const KitchenCalendarPage: React.FC = () => {
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
-                () => {
-                    loadOrders();
-                }
+                () => { loadOrders(); }
             )
             .subscribe();
 
-        return () => {
-            supabase.removeChannel(channel);
-        };
+        return () => { supabase.removeChannel(channel); };
     }, []);
 
     // ── 数据转换：将订单按日期分组 ──────────────────────────────────────────
@@ -127,6 +161,8 @@ const KitchenCalendarPage: React.FC = () => {
             </div>
         );
     };
+
+    const selectedDayOrders = selectedDate ? (groupedOrders[selectedDate] || []) : [];
 
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-20">
@@ -220,7 +256,7 @@ const KitchenCalendarPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* 选定日期详情 */}
+                {/* 选定日期详情侧栏 */}
                 <div className="space-y-6">
                     <div className="bg-white p-8 rounded-[32px] shadow-xl border border-slate-100 flex flex-col h-full sticky top-24">
                         <div className="flex items-center justify-between mb-8">
@@ -230,46 +266,88 @@ const KitchenCalendarPage: React.FC = () => {
                                 </h3>
                                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Daily Production Schedule</p>
                             </div>
-                            {selectedDate && groupedOrders[selectedDate] && (
+                            {selectedDayOrders.length > 0 && (
                                 <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-[10px] font-black">
-                                    {groupedOrders[selectedDate].length} Orders
+                                    {selectedDayOrders.length} Orders
                                 </span>
                             )}
                         </div>
 
-                        <div className="space-y-4 flex-1 overflow-y-auto no-scrollbar pr-2 min-h-[400px]">
-                            {selectedDate && groupedOrders[selectedDate] ? (
-                                groupedOrders[selectedDate].map((order, idx) => (
-                                    <div
-                                        key={idx}
-                                        onClick={() => navigate('/orders')}
-                                        className="bg-slate-50 p-5 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-white transition-all cursor-pointer group active:scale-95"
-                                    >
-                                        <div className="flex justify-between items-start mb-2">
-                                            <h4 className="text-sm font-black text-slate-800 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{order.customerName}</h4>
-                                            <span className="material-icons-round text-slate-300 text-sm">open_in_new</span>
+                        <div className="space-y-3 flex-1 overflow-y-auto no-scrollbar pr-1 min-h-[400px]">
+                            {selectedDayOrders.length > 0 ? (
+                                selectedDayOrders.map((order, idx) => {
+                                    const items = orderItems[order.id];
+                                    const isExpanded = selectedOrderId === order.id;
+                                    const isLoadingThis = loadingItems === order.id;
+
+                                    return (
+                                        <div
+                                            key={idx}
+                                            className="bg-slate-50 rounded-2xl border border-slate-100 hover:border-blue-200 hover:bg-white transition-all overflow-hidden"
+                                        >
+                                            {/* 订单头部：点击可展开明细 */}
+                                            <button
+                                                onClick={() => handleSelectOrder(order.id)}
+                                                className="w-full p-5 text-left group"
+                                            >
+                                                <div className="flex justify-between items-start mb-2">
+                                                    <h4 className="text-sm font-black text-slate-800 group-hover:text-blue-600 transition-colors uppercase tracking-tight">{order.customerName}</h4>
+                                                    <span className={`material-icons-round text-slate-300 text-sm transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                                                </div>
+                                                <div className="space-y-1">
+                                                    <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1.5">
+                                                        <span className="material-icons-round text-[12px]">schedule</span>
+                                                        {new Date(order.dueTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </p>
+                                                    <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1.5">
+                                                        <span className="material-icons-round text-[12px]">local_shipping</span>
+                                                        {order.driverId ? drivers.find(d => d.id === order.driverId)?.name || 'Assigned' : 'Unassigned'}
+                                                    </p>
+                                                </div>
+                                                <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
+                                                    <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${STATUS_STYLES[order.status] || 'bg-slate-100 text-slate-500'}`}>
+                                                        {order.status}
+                                                    </span>
+                                                    <p className="text-[10px] font-black text-slate-900">RM {order.amount?.toFixed(2) || '0.00'}</p>
+                                                </div>
+                                            </button>
+
+                                            {/* 展开区：订单明细 */}
+                                            {isExpanded && (
+                                                <div className="border-t border-slate-100 px-5 pb-4 animate-in fade-in duration-200">
+                                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mt-3 mb-2">订单明细</p>
+                                                    {isLoadingThis ? (
+                                                        <div className="flex items-center gap-2 text-slate-300 py-2">
+                                                            <div className="w-4 h-4 border-2 border-slate-200 border-t-blue-500 rounded-full animate-spin"></div>
+                                                            <span className="text-[10px] font-bold">加载中...</span>
+                                                        </div>
+                                                    ) : items && items.length > 0 ? (
+                                                        <div className="space-y-1.5">
+                                                            {items.map((item, i) => (
+                                                                <div key={i} className="flex items-center justify-between bg-white rounded-xl px-3 py-2 border border-slate-50">
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-[11px] font-black text-slate-700 truncate">{item.name}</p>
+                                                                        {item.note && <p className="text-[9px] text-amber-500 font-bold italic">⚠ {item.note}</p>}
+                                                                    </div>
+                                                                    <span className="ml-3 w-7 h-7 rounded-lg bg-blue-50 text-blue-700 text-xs font-black flex items-center justify-center shrink-0">×{item.quantity}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <p className="text-[10px] text-slate-400 font-bold">暂无明细数据</p>
+                                                    )}
+                                                    <button
+                                                        onClick={() => navigate('/orders')}
+                                                        className="mt-3 w-full py-2 text-[10px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors flex items-center justify-center gap-1"
+                                                    >
+                                                        <span className="material-icons-round text-[12px]">open_in_new</span>
+                                                        在订单页查看完整详情
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
-                                        <div className="space-y-1.5">
-                                            <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1.5">
-                                                <span className="material-icons-round text-[12px]">schedule</span>
-                                                {new Date(order.dueTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </p>
-                                            <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1.5">
-                                                <span className="material-icons-round text-[12px]">local_shipping</span>
-                                                {order.driverId ? drivers.find(d => d.id === order.driverId)?.name || 'Assigned' : 'Unassigned'}
-                                            </p>
-                                        </div>
-                                        <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between">
-                                            <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${order.status === OrderStatus.PENDING ? 'bg-amber-100 text-amber-600' :
-                                                order.status === OrderStatus.COMPLETED ? 'bg-green-100 text-green-600' :
-                                                    'bg-blue-100 text-blue-600'
-                                                }`}>
-                                                {order.status}
-                                            </span>
-                                            <p className="text-[10px] font-black text-slate-900">RM {order.amount?.toFixed(2) || '0.00'}</p>
-                                        </div>
-                                    </div>
-                                ))
+                                    );
+                                })
                             ) : (
                                 <div className="h-full flex flex-col items-center justify-center text-slate-300 text-center py-20 px-4">
                                     <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center mb-4">

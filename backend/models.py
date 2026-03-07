@@ -96,6 +96,7 @@ class Product(BaseModel):
     price: Optional[float] = None
     category: Optional[str] = None
     image_url: Optional[str] = None
+    stock: Optional[int] = 0
 
 
 class User(BaseModel):

@@ -62,6 +62,19 @@ export const OrderService = {
     }
 };
 
+export const PRESET_CATEGORIES = [
+    '主食 Mains',
+    '饮品 Beverages',
+    '小食 Snacks',
+    '甜点 Desserts',
+    '汤品 Soups',
+    '素食 Vegetarian',
+    '海鲜 Seafood',
+    '肉类 Meat',
+    '套餐 Set Meals',
+    '其他 Others',
+];
+
 export const ProductService = {
     getAll: async (): Promise<Product[]> => {
         const response = await api.get('/products');
@@ -77,6 +90,14 @@ export const ProductService = {
     },
     delete: async (id: string): Promise<void> => {
         await api.delete(`/products/${id}`);
+    },
+    uploadImage: async (file: File): Promise<string> => {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await api.post('/products/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data.url;
     },
     /**
      * 从产品列表中提取唯一品类列表，为前端创建订单菜单动态生成按钮

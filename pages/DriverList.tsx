@@ -7,11 +7,7 @@ interface Driver {
     name: string;
     phone: string;
     status: 'Available' | 'On Duty' | 'Offline';
-    currentOrderId: string | null;
-    currentOrderDetails?: {
-        customer: string;
-        address: string;
-    };
+    activeOrders: any[];
     taskCount: number;
     vehicle: string;
     img: string;
@@ -50,8 +46,8 @@ const DriverList: React.FC = () => {
 
             if (usersData) {
                 const mappedDrivers: Driver[] = usersData.map(u => {
-                    // 找出当前司机正在配送的订单 (状态为 DELIVERING)
-                    const activeOrder = allOrders.find(o => o.driverId === u.id && o.status === OrderStatus.DELIVERING);
+                    // 找出当前司机正在配送的活动的订单 (状态为 DELIVERING 或 READY)
+                    const activeOrders = allOrders.filter(o => o.driverId === u.id && (o.status === OrderStatus.DELIVERING || o.status === OrderStatus.READY));
                     // 找出当前司机已指派的当天任务总数
                     const taskCount = allOrders.filter(o => o.driverId === u.id).length;
 
@@ -59,9 +55,8 @@ const DriverList: React.FC = () => {
                         id: u.id,
                         name: u.name || '未命名司机',
                         phone: u.phone || '',
-                        status: activeOrder ? 'On Duty' : (u.vehicle_status === 'busy' ? 'Available' : 'Offline'), // 若申报了车辆即可接单
-                        currentOrderId: activeOrder ? activeOrder.id : null,
-                        currentOrderDetails: activeOrder ? { customer: activeOrder.customerName, address: activeOrder.address } : undefined,
+                        status: activeOrders.length > 0 ? 'On Duty' : (u.vehicle_status === 'busy' ? 'Available' : 'Offline'), // 若申报了车辆即可接单
+                        activeOrders,
                         taskCount,
                         vehicle: u.vehicle_model ? `${u.vehicle_model} (${u.vehicle_plate})` : '未申报车辆',
                         img: u.avatar_url || 'https://via.placeholder.com/150'
@@ -120,26 +115,35 @@ const DriverList: React.FC = () => {
 
     const handleWhatsApp = (driver: Driver) => {
         const cleanPhone = driver.phone.replace(/\D/g, '');
-        const message = driver.currentOrderId
-            ? `[金龙餐饮调度] 你好 ${driver.name}, 请确认订单 ${driver.currentOrderId} (${driver.currentOrderDetails?.customer}) 的配送进度，预计几点到达？`
+        const currentOrder = driver.activeOrders && driver.activeOrders.length > 0 ? driver.activeOrders[0] : null;
+        const message = currentOrder
+            ? `[金龙餐饮调度] 你好 ${driver.name}, 请确认订单 ${currentOrder.id.slice(0, 8)} (${currentOrder.customerName}) 的配送进度，预计几点到达？`
             : `[金龙餐饮调度] 你好 ${driver.name}, 有新的配送任务准备指派，请回复确认当前位置。`;
-        const url = `https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`;
+        const url = `https://wa.me/60${cleanPhone.replace(/^60/, '').replace(/^0/, '')}?text=${encodeURIComponent(message)}`;
         window.open(url, '_blank');
     };
 
-    const handleReassign = async (driverId: string) => {
-        const driver = drivers.find(d => d.id === driverId);
-        if (driver && driver.currentOrderId) {
+    const handleReassign = async (orderId: string) => {
+        if (window.confirm('确认撤回该订单重新调度吗？(Return to pending queue)')) {
             try {
                 // Reverse assignment
                 await supabase.from('orders').update({
                     driverId: null,
                     status: OrderStatus.READY
-                }).eq('id', driver.currentOrderId);
+                }).eq('id', orderId);
                 fetchData();
             } catch (error) {
                 console.error('Failed to reassign driver', error);
             }
+        }
+    };
+
+    const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
+        try {
+            await supabase.from('orders').update({ status }).eq('id', orderId);
+            fetchData();
+        } catch (error) {
+            console.error('Failed to update order status', error);
         }
     };
 
@@ -223,15 +227,47 @@ const DriverList: React.FC = () => {
                                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{d.vehicle}</p>
 
                                         {/* 核心改动：显示正在执行的任务详情 */}
-                                        {d.currentOrderId ? (
-                                            <div className="mt-3 bg-orange-50/50 p-3 rounded-2xl border border-orange-100 animate-in zoom-in duration-300">
-                                                <div className="flex items-center gap-1.5 mb-1">
-                                                    <span className="text-[9px] font-black text-orange-600 uppercase">任务进行中</span>
-                                                    <div className="h-px flex-1 bg-orange-200"></div>
-                                                </div>
-                                                <h4 className="text-[11px] font-black text-slate-800">{d.currentOrderDetails?.customer}</h4>
-                                                <p className="text-[10px] text-slate-500 truncate mt-0.5">{d.currentOrderDetails?.address}</p>
-                                                <p className="text-[9px] font-black text-primary mt-1">Order: {d.currentOrderId}</p>
+                                        {d.activeOrders && d.activeOrders.length > 0 ? (
+                                            <div className="mt-3 space-y-2">
+                                                {d.activeOrders.map(order => (
+                                                    <div key={order.id} className="bg-orange-50/50 p-2.5 rounded-2xl border border-orange-100 flex flex-col gap-2 animate-in zoom-in duration-300">
+                                                        <div>
+                                                            <div className="flex items-center gap-1.5 mb-1">
+                                                                <span className="text-[9px] font-black text-orange-600 uppercase tracking-widest leading-none bg-orange-100/50 px-1.5 py-0.5 rounded-md">{order.status === OrderStatus.DELIVERING ? '配送中 (On Route)' : '待取餐 (Ready/Prep)'}</span>
+                                                                <span className="text-[9px] font-black text-slate-400 uppercase">ID: {order.id.slice(0, 8)}</span>
+                                                            </div>
+                                                            <h4 className="text-[11px] font-black text-slate-800 mt-1.5 leading-tight">{order.customerName}</h4>
+                                                            <div className="flex items-start gap-1 mt-0.5">
+                                                                <span className="material-icons-round text-[10px] text-slate-400 mt-0.5">place</span>
+                                                                <p className="text-[10px] text-slate-500 leading-tight line-clamp-2">{order.address}</p>
+                                                            </div>
+                                                        </div>
+                                                        <div className="flex gap-1.5 mt-1">
+                                                            {order.status !== OrderStatus.DELIVERING && order.status !== OrderStatus.COMPLETED && (
+                                                                <button
+                                                                    onClick={() => handleUpdateOrderStatus(order.id, OrderStatus.DELIVERING)}
+                                                                    className="flex-1 py-2 bg-orange-500 text-white rounded-xl text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform"
+                                                                >
+                                                                    出发 Deliver
+                                                                </button>
+                                                            )}
+                                                            {order.status === OrderStatus.DELIVERING && (
+                                                                <button
+                                                                    onClick={() => handleUpdateOrderStatus(order.id, OrderStatus.COMPLETED)}
+                                                                    className="flex-1 py-2 bg-green-500 text-white rounded-xl text-[9px] font-black uppercase shadow-sm active:scale-95 transition-transform"
+                                                                >
+                                                                    完成 Done
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                onClick={() => handleReassign(order.id)}
+                                                                className="flex-1 py-2 bg-white border border-slate-200 text-slate-600 rounded-xl text-[9px] font-black uppercase hover:bg-slate-50 active:scale-95 transition-transform shadow-sm"
+                                                            >
+                                                                Recall / 退回
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
                                         ) : (
                                             <div className="mt-2 flex items-center gap-1.5">
@@ -254,28 +290,20 @@ const DriverList: React.FC = () => {
                                             指派给 {d.name.split(' ')[0]}
                                         </button>
                                     ) : (
-                                        <>
-                                            {d.status === 'On Duty' && (
-                                                <button
-                                                    onClick={() => handleReassign(d.id)}
-                                                    className="flex-1 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase active:scale-95 transition-all"
-                                                >
-                                                    改派/回收
-                                                </button>
-                                            )}
+                                        <div className="flex gap-2 w-full justify-end">
                                             <button
                                                 onClick={() => window.location.href = `tel:${d.phone}`}
-                                                className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center active:scale-90 transition-transform"
+                                                className="flex-1 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center active:scale-90 transition-transform font-bold text-xs gap-1.5"
                                             >
-                                                <span className="material-icons-round text-[18px]">phone</span>
+                                                <span className="material-icons-round text-[18px]">phone</span> Call
                                             </button>
                                             <button
                                                 onClick={() => handleWhatsApp(d)}
-                                                className="w-12 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center active:scale-90 transition-transform"
+                                                className="flex-1 h-12 bg-green-50 text-green-600 rounded-2xl flex items-center justify-center active:scale-90 transition-transform font-bold text-xs gap-1.5"
                                             >
-                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-5 h-5" alt="WA" />
+                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-[18px] h-[18px]" alt="WA" /> WhatsApp
                                             </button>
-                                        </>
+                                        </div>
                                     )}
                                 </div>
                             </div>

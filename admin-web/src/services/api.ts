@@ -83,7 +83,7 @@ export const SuperAdminService = {
     },
     /** 指派司机 */
     assignDriver: async (id: string, driverId: string): Promise<Order> => {
-        const response = await api.post(`/orders/${id}/assign`, { driver_id: driverId });
+        const response = await api.post(`/orders/${encodeURIComponent(id)}/assign`, { driver_id: driverId });
         return response.data;
     },
     /** 后台直接建单 */
@@ -100,7 +100,7 @@ export const AdminOrderService = {
         return response.data;
     },
     getById: async (id: string): Promise<Order> => {
-        const response = await api.get(`/orders/${id}`);
+        const response = await api.get(`/orders/${encodeURIComponent(id)}`);
         return response.data;
     },
     /** 后台下单，创建新订单并同步到数据库 */
@@ -109,15 +109,15 @@ export const AdminOrderService = {
         return response.data;
     },
     updateStatus: async (id: string, status: OrderStatus): Promise<Order> => {
-        const response = await api.post(`/orders/${id}/status?status=${status}`);
+        const response = await api.post(`/orders/${encodeURIComponent(id)}/status?status=${status}`);
         return response.data;
     },
     update: async (id: string, order: Partial<Order>): Promise<Order> => {
-        const response = await api.put(`/orders/${id}`, order);
+        const response = await api.put(`/orders/${encodeURIComponent(id)}`, order);
         return response.data;
     },
     delete: async (id: string): Promise<void> => {
-        await api.delete(`/orders/${id}`);
+        await api.delete(`/orders/${encodeURIComponent(id)}`);
     },
     updateOrderItemStatus: async (itemId: string, status: string): Promise<void> => {
         await api.patch(`/orders/items/${itemId}/status?status=${status}`);
@@ -126,7 +126,7 @@ export const AdminOrderService = {
      * 获取指定订单的所有 order_items
      */
     getOrderItems: async (orderId: string): Promise<any[]> => {
-        const response = await api.get(`/orders/items/${orderId}`);
+        const response = await api.get(`/orders/items/${encodeURIComponent(orderId)}`);
         return response.data;
     },
     /**
@@ -142,7 +142,7 @@ export const AdminOrderService = {
      * 厨房完成整张订单 — 将 orders.status 更新为 ready 并触发 GoEasy 通知
      */
     kitchenComplete: async (orderId: string): Promise<void> => {
-        await api.post(`/orders/${orderId}/kitchen-complete`);
+        await api.post(`/orders/${encodeURIComponent(orderId)}/kitchen-complete`);
     },
     /**
      * 获取财务汇总（今日/本月已完成订单总额）

@@ -77,6 +77,7 @@ export interface Product {
     price: number;
     category?: string;
     image_url?: string;
+    stock?: number;
 }
 
 export interface User {

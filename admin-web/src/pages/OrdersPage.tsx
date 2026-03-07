@@ -77,7 +77,7 @@ export const OrdersPage: React.FC = () => {
         try {
             // NOTE: 直接读取 /orders 端点返回全部订单，与前端 App 共用同一数据源
             const response = await api.get(`/orders${statusFilter !== 'all' ? `?status=${statusFilter}` : ''}`);
-            setOrders(response.data);
+            setOrders(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
             console.error('Failed to load orders', error);
         } finally {
@@ -88,7 +88,11 @@ export const OrdersPage: React.FC = () => {
     const fetchDrivers = useCallback(async () => {
         try {
             const users = await api.get('/super-admin/users');
-            setDrivers(users.data.filter((u: any) => u.role === 'driver'));
+            if (Array.isArray(users.data)) {
+                setDrivers(users.data.filter((u: any) => u.role === 'driver'));
+            } else {
+                setDrivers([]);
+            }
         } catch (error) {
             console.error('Failed to load drivers', error);
         }
@@ -97,7 +101,7 @@ export const OrdersPage: React.FC = () => {
     const fetchProducts = useCallback(async () => {
         try {
             const data = await ProductService.getAll();
-            setProducts(data);
+            setProducts(Array.isArray(data) ? data : []);
         } catch (error) {
             console.error('Failed to load products', error);
         }
@@ -128,7 +132,7 @@ export const OrdersPage: React.FC = () => {
     }, [loadOrders, fetchDrivers, fetchProducts]);
 
     const handleEditClick = (order: Order) => {
-        const preparedItems = order.items.map((i: any) => {
+        const preparedItems = (order.items || []).map((i: any) => {
             const product = products.find(p => p.id === i.id) || { id: i.id, name: i.name, price: i.price, code: '' } as Product;
             return { product, quantity: i.quantity };
         });
@@ -163,7 +167,7 @@ export const OrdersPage: React.FC = () => {
 
         try {
             setIsSubmitting(true);
-            const amount = newOrder.items.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+            const amount = newOrder.items.reduce((sum, item) => sum + (item.product.price || 0) * item.quantity, 0);
 
             let dueTime = editingOrder ? editingOrder.dueTime : new Date(Date.now() + 30 * 60000).toISOString();
             if (newOrder.eventDate && newOrder.eventTime) {
@@ -302,6 +306,19 @@ export const OrdersPage: React.FC = () => {
         }
     };
 
+    /**
+     * 直接在表格中更改订单状态（点击状态标签出现下拉菜单）
+     */
+    const handleInlineStatusChange = async (orderId: string, newStatus: string) => {
+        try {
+            await api.post(`/orders/${encodeURIComponent(orderId)}/status?status=${newStatus}`);
+            await loadOrders();
+        } catch (error) {
+            console.error('Failed to update order status inline', error);
+            alert('状态更新失败 / Status update failed.');
+        }
+    };
+
     const statusColors: Record<string, string> = {
         [OrderStatus.PENDING]: 'bg-yellow-50 text-yellow-600 border border-yellow-200',
         [OrderStatus.PREPARING]: 'bg-blue-50 text-blue-600 border border-blue-200',
@@ -312,10 +329,10 @@ export const OrdersPage: React.FC = () => {
     };
 
     const filteredOrders = orders.filter(o => {
-        const id = o.id || '';
-        const name = o.customerName || '';
-        const phone = o.customerPhone || '';
-        const search = (searchQuery || '').toLowerCase();
+        const id = String(o.id || '');
+        const name = String(o.customerName || '');
+        const phone = String(o.customerPhone || '');
+        const search = String(searchQuery || '').toLowerCase();
 
         const matchesSearch =
             id.toLowerCase().includes(search) ||
@@ -437,12 +454,21 @@ export const OrdersPage: React.FC = () => {
                                                 <p className="text-xs text-slate-500">{order.customerPhone}</p>
                                             </td>
                                             <td className="px-6 py-4 font-black text-slate-800 whitespace-nowrap">
-                                                <span className="text-xs font-bold text-slate-400">RM</span> {order.amount.toFixed(2)}
+                                                <span className="text-xs font-bold text-slate-400">RM</span> {(order.amount || 0).toFixed(2)}
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <span className={`px-2.5 py-1 rounded-lg text-xs font-bold ${(statusColors as any)[order.status || 'pending'] || 'bg-slate-100 text-slate-600'}`}>
-                                                    {(order.status && order.status.trim() !== '' ? order.status : 'pending').toUpperCase()}
-                                                </span>
+                                                <select
+                                                    value={order.status || 'pending'}
+                                                    onChange={(e) => handleInlineStatusChange(order.id, e.target.value)}
+                                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer outline-none appearance-none bg-no-repeat bg-right pr-6 transition-all ${(statusColors as any)[order.status || 'pending'] || 'bg-slate-100 text-slate-600'}`}
+                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundPosition: 'right 4px center' }}
+                                                >
+                                                    <option value={OrderStatus.PENDING}>PENDING</option>
+                                                    <option value={OrderStatus.PREPARING}>PREPARING</option>
+                                                    <option value={OrderStatus.READY}>READY</option>
+                                                    <option value={OrderStatus.DELIVERING}>DELIVERING</option>
+                                                    <option value={OrderStatus.COMPLETED}>COMPLETED</option>
+                                                </select>
                                             </td>
                                             <td className="px-6 py-4 text-xs text-slate-500">
                                                 {order.created_at ? new Date(order.created_at).toLocaleString() : '-'}
@@ -646,7 +672,7 @@ export const OrdersPage: React.FC = () => {
                                                         </div>
                                                         <div>
                                                             <p className="font-bold text-sm text-slate-800 line-clamp-1">{p.name}</p>
-                                                            <p className="text-xs font-black text-slate-500 mt-1">RM {p.price.toFixed(2)}</p>
+                                                            <p className="text-xs font-black text-slate-500 mt-1">RM {(p.price || 0).toFixed(2)}</p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -725,7 +751,7 @@ export const OrdersPage: React.FC = () => {
                                                     <div key={item.product.id} className="flex items-center justify-between text-sm">
                                                         <div className="flex-1 overflow-hidden pr-2">
                                                             <p className="font-bold text-slate-800 truncate">{item.product.name}</p>
-                                                            <p className="text-xs text-slate-400">RM {item.product.price.toFixed(2)}</p>
+                                                            <p className="text-xs text-slate-400">RM {(item.product.price || 0).toFixed(2)}</p>
                                                         </div>
                                                         <div className="flex items-center gap-3 bg-slate-100 px-2 py-1 rounded-lg">
                                                             <button onClick={() => updateItemQuantity(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors">
@@ -808,7 +834,7 @@ export const OrdersPage: React.FC = () => {
                                         <span className="font-bold text-slate-500">Total Amount</span>
                                         <span className="text-2xl font-black text-red-600">
                                             <span className="text-sm mr-1">RM</span>
-                                            {newOrder.items.reduce((s, i) => s + i.product.price * i.quantity, 0).toFixed(2)}
+                                            {newOrder.items.reduce((s, i) => s + (i.product.price || 0) * i.quantity, 0).toFixed(2)}
                                         </span>
                                     </div>
                                     <button

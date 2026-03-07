@@ -23,6 +23,7 @@ interface KitchenOrder {
     dueTime: string;
     status: string;
     items: OrderItem[];
+    equipments: Record<string, number>;
     /** locally loaded items */
     itemsLoaded: boolean;
     /** true = card expanded */
@@ -129,10 +130,15 @@ const OrderCard: React.FC<{
 
                 {/* Order info */}
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-black text-slate-800 tracking-tight truncate">{order.id}</span>
-                        <span className="text-[9px] font-bold text-slate-400">•</span>
-                        <span className="text-[10px] font-black text-blue-600">{formatTime(order.dueTime)}</span>
+                    <div className="flex items-center justify-between mb-1">
+                        <div className="flex items-center gap-2">
+                            <span className="text-xs font-black text-slate-800 tracking-tight truncate">{order.id}</span>
+                            <span className="text-[9px] font-bold text-slate-400">•</span>
+                            <span className="text-[10px] font-black text-blue-600">{formatTime(order.dueTime)}</span>
+                        </div>
+                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
+                            {order.status}
+                        </span>
                     </div>
                     <p className="text-[10px] font-bold text-slate-500 truncate">{order.customerName}</p>
                     {/* Progress */}
@@ -162,6 +168,22 @@ const OrderCard: React.FC<{
                         </div>
                     ) : (
                         <>
+                            {/* Equipment display */}
+                            {order.equipments && Object.keys(order.equipments).length > 0 && Object.values(order.equipments).some((q: any) => q > 0) && (
+                                <div className="mt-4 mb-2 p-3 bg-amber-50/50 border border-amber-100 rounded-xl">
+                                    <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2 flex items-center gap-1.5 shadow-sm">
+                                        <span className="material-icons-round text-[12px]">hardware</span> Assigned Equipments
+                                    </h4>
+                                    <div className="flex flex-wrap gap-2">
+                                        {Object.entries(order.equipments).filter(([_, qty]) => (qty as number) > 0).map(([name, qty]) => (
+                                            <span key={name} className="px-2 py-1 bg-white border border-amber-200 text-amber-800 text-[10px] font-bold rounded-lg shadow-sm">
+                                                {name} <span className="font-black">×{qty as number}</span>
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Item checkboxes */}
                             <div className="mt-4 space-y-2">
                                 {order.items.map(item => {
@@ -286,7 +308,7 @@ const KitchenPrepPage: React.FC = () => {
                     const existing = prev.find(k => k.id === order.id);
                     if (existing) {
                         // Preserve local expansion/items state
-                        return { ...existing, customerName: order.customerName, dueTime: order.dueTime || '', status: order.status };
+                        return { ...existing, customerName: order.customerName, dueTime: order.dueTime || '', status: order.status, equipments: order.equipments || {} };
                     }
                     return {
                         id: order.id,
@@ -294,6 +316,7 @@ const KitchenPrepPage: React.FC = () => {
                         dueTime: order.dueTime || '',
                         status: order.status,
                         items: [],
+                        equipments: order.equipments || {},
                         itemsLoaded: false,
                         expanded: false,
                         removing: false,

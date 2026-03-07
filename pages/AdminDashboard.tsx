@@ -92,8 +92,7 @@ const AdminDashboard: React.FC = () => {
                         {[
                             { icon: 'list_alt', label: '订单管理', color: 'bg-primary/5 text-primary', path: '/admin/orders' },
                             { icon: 'inventory_2', label: '商品管理', color: 'bg-orange-50 text-orange-600', path: '/admin/products' },
-                            { icon: 'local_shipping', label: '司机调度', color: 'bg-blue-50 text-blue-600', path: '/admin/drivers' },
-                            { icon: 'kitchen', label: '后厨汇总', color: 'bg-green-50 text-green-600', path: '/admin/kitchen-summary' }
+                            { icon: 'local_shipping', label: '司机调度', color: 'bg-blue-50 text-blue-600', path: '/admin/drivers' }
                         ].map((func, idx) => (
                             <button
                                 key={idx}

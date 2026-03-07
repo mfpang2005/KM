@@ -354,7 +354,7 @@ async def update_delivery_photos(order_id: str, photos: dict):
 
 # ─── Kitchen Prep Endpoints ──────────────────────────────────────────────────
 
-@router.get("/items/{order_id}")
+@router.get("/items/{order_id:path}")
 async def get_order_items(order_id: str):
     """
     获取指定订单的所有 order_items（含 is_prepared 状态）
@@ -388,7 +388,7 @@ async def mark_item_prepared(item_id: str, payload: dict):
     return response.data[0]
 
 
-@router.post("/{order_id}/kitchen-complete")
+@router.post("/{order_id:path}/kitchen-complete")
 async def kitchen_complete(order_id: str):
     """
     厨房确认整张订单完成，将 orders.status 更新为 ready，
