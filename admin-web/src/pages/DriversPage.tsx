@@ -4,6 +4,8 @@ import { supabase } from '../lib/supabase';
 import { OrderStatus } from '../types';
 import type { Order, User, Vehicle, DriverAssignment } from '../types';
 import { VehicleService } from '../services/api';
+import { PageHeader } from '../components/PageHeader';
+import { NotificationBell } from '../components/NotificationBell';
 
 interface DriverWithOrders extends User {
     activeOrders: Order[];
@@ -318,34 +320,38 @@ export const DriversPage: React.FC = () => {
     }
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500 pb-32">
-            <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-xl font-bold text-slate-800">Drivers Management / 调度中心</h1>
-                    <p className="text-slate-500 text-sm mt-1">Realtime Fleet Tracking & Dispatch Control</p>
-                </div>
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-sm hover:bg-slate-800 transition-colors"
-                    >
-                        <span className="material-icons-round text-[18px]">person_add</span>
-                        Add Driver
-                    </button>
-                    <div className="flex bg-slate-100 p-1 rounded-xl">
-                        {(['All', 'Available', 'On Duty'] as const).map((t) => (
-                            <button
-                                key={t}
-                                onClick={() => setFilter(t)}
-                                className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${filter === t ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'
-                                    }`}
-                            >
-                                {t}
-                            </button>
-                        ))}
+        <div className="pb-32">
+            <PageHeader
+                title="Drivers Management / 调度中心"
+                subtitle="Realtime Fleet Tracking & Dispatch Control"
+                showStats={false}
+                actions={
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-xl text-sm font-bold shadow-lg transition-all active:scale-95"
+                        >
+                            <span className="material-icons-round text-[18px]">person_add</span>
+                            Add Driver
+                        </button>
+
+                        <NotificationBell />
+
+                        <div className="flex bg-white/50 backdrop-blur p-1 rounded-xl border border-slate-200">
+                            {(['All', 'Available', 'On Duty'] as const).map((t) => (
+                                <button
+                                    key={t}
+                                    onClick={() => setFilter(t)}
+                                    className={`px-4 py-2 rounded-lg text-xs font-black uppercase tracking-wider transition-all ${filter === t ? 'bg-slate-900 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
+                                        }`}
+                                >
+                                    {t}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                </div>
-            </header>
+                }
+            />
 
             {/* Pending Orders Queue (Dispatch Console) */}
             <section className="space-y-3 bg-red-50/50 p-6 rounded-[32px] border border-red-100/50">

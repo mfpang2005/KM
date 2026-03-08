@@ -23,6 +23,7 @@ interface ChatMessage {
     content: string;
     timestamp: number;
     isMine: boolean;
+    type?: 'text' | 'audio';
 }
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; icon: string; bubble: string }> = {
@@ -178,7 +179,8 @@ export const WalkieTalkiePage: React.FC = () => {
                     senderId: msg.sender_id,
                     senderLabel: msg.sender_label || 'Unknown',
                     senderRole: msg.sender_role || 'guest',
-                    content: msg.type === 'audio' ? '[Voice Message]' : msg.content,
+                    type: msg.type,
+                    content: msg.content,
                     timestamp: new Date(msg.created_at).getTime(),
                     isMine: false,
                 }]);
@@ -195,6 +197,38 @@ export const WalkieTalkiePage: React.FC = () => {
 
         return () => { supabase.removeChannel(channel); };
     }, [user, playAudio]);
+
+    // ── Fetch Historical Messages ──────────────────────────────────
+    useEffect(() => {
+        if (!user) return;
+        const fetchHistory = async () => {
+            try {
+                let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(50);
+                if (selectedReceiver === 'GLOBAL') {
+                    query = query.eq('receiver_id', 'GLOBAL');
+                } else {
+                    query = query.or(`and(sender_id.eq.${user.id},receiver_id.eq.${selectedReceiver}),and(sender_id.eq.${selectedReceiver},receiver_id.eq.${user.id})`);
+                }
+                const { data, error } = await query;
+                if (error) throw error;
+                if (data) {
+                    setMessages(data.reverse().map(msg => ({
+                        id: msg.id,
+                        senderId: msg.sender_id,
+                        senderLabel: msg.sender_label || 'Unknown',
+                        senderRole: msg.sender_role || 'guest',
+                        type: msg.type,
+                        content: msg.content,
+                        timestamp: new Date(msg.created_at).getTime(),
+                        isMine: msg.sender_id === user.id
+                    })));
+                }
+            } catch (err) {
+                console.error('Failed to fetch history', err);
+            }
+        };
+        fetchHistory();
+    }, [user, selectedReceiver]);
 
     // ── Supabase Presence ───────────────────────────────────────────
     useEffect(() => {
@@ -216,7 +250,7 @@ export const WalkieTalkiePage: React.FC = () => {
     const startRecording = async () => {
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            const mr = new MediaRecorder(stream);
             audioChunksRef.current = [];
             mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
             mr.start(100);
@@ -233,7 +267,8 @@ export const WalkieTalkiePage: React.FC = () => {
         mr.stream.getTracks().forEach((t) => t.stop());
         mr.onstop = async () => {
             if (!goEasyRef.current || goEasyStatus !== 'CONNECTED') return;
-            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const mimeType = mr.mimeType || 'audio/webm';
+            const blob = new Blob(audioChunksRef.current, { type: mimeType });
             if (blob.size < 100) return;
             try {
                 const base64Audio = await blobToBase64(blob);
@@ -441,7 +476,17 @@ export const WalkieTalkiePage: React.FC = () => {
                                         <span className="text-[9px] text-slate-300">{time}</span>
                                     </div>
                                     <div className={`px-3.5 py-2 rounded-2xl text-sm font-medium shadow-sm ${msg.isMine ? 'bg-slate-800 text-white rounded-tr-sm' : 'bg-slate-100 text-slate-800 rounded-tl-sm'}`}>
-                                        {msg.content}
+                                        {msg.type === 'audio' ? (
+                                            <button
+                                                onClick={() => playAudio(base64ToArrayBuffer(msg.content))}
+                                                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all active:scale-95 ${msg.isMine ? 'bg-slate-700 hover:bg-slate-600 border-white/10' : 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm'}`}
+                                            >
+                                                <span className="material-icons-round text-[18px]">play_arrow</span>
+                                                <span className="text-[12px] font-black uppercase tracking-widest">语音回放</span>
+                                            </button>
+                                        ) : (
+                                            msg.content
+                                        )}
                                     </div>
                                 </div>
                             </div>

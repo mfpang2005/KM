@@ -113,22 +113,24 @@ export const DashboardPage: React.FC = () => {
                         <span className="material-icons-round text-3xl max-w-full truncate">receipt_long</span>
                     </div>
                     <div className="min-w-0">
-                        <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Total Orders</p>
-                        <p className="text-3xl md:text-4xl font-black text-slate-800 tracking-tighter truncate">{stats?.total_orders || 0}</p>
+                        <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Today Orders</p>
+                        <p className="text-3xl md:text-4xl font-black text-slate-800 tracking-tighter truncate">
+                            {(stats?.orders_by_status?.pending || 0) + (stats?.orders_by_status?.completed || 0)}
+                        </p>
                     </div>
                 </div>
 
                 <div
-                    onClick={() => navigate('/orders?status=completed')}
+                    onClick={() => navigate('/finance')}
                     className="bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-6 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
                 >
                     <div className="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
                         <span className="material-icons-round text-3xl max-w-full truncate">payments</span>
                     </div>
                     <div className="min-w-0">
-                        <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Total Revenue</p>
-                        <p className="text-3xl md:text-4xl font-black text-orange-500 tracking-tighter truncate">
-                            <span className="text-sm md:text-lg text-orange-400/80 mr-1">RM</span>
+                        <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Monthly Revenue</p>
+                        <p className="text-3xl md:text-4xl font-black text-orange-500 tracking-tighter truncate font-mono">
+                            <span className="text-sm md:text-lg text-orange-400/80 mr-1 font-sans">RM</span>
                             {Number(stats?.total_revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </p>
                     </div>
@@ -255,8 +257,8 @@ export const DashboardPage: React.FC = () => {
                                             <span className="material-icons-round text-lg group-hover:text-red-400 transition-colors">local_mall</span>
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-xs md:text-sm font-black text-slate-800 truncate group-hover:text-red-600 transition-colors">{order.customerName}</p>
-                                            <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 truncate">{order.id} • <span className="text-slate-600 font-black">RM {Number(order.amount).toFixed(2)}</span></p>
+                                            <p className="text-xs md:text-sm font-black text-slate-800 truncate group-hover:text-red-600 transition-colors uppercaseTracking-widest">{order.customerName}</p>
+                                            <p className="text-[9px] md:text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 truncate">{order.id} • <span className="text-slate-600 font-black font-mono">RM {Number(order.amount).toFixed(2)}</span></p>
                                         </div>
                                     </div>
                                     <span className={`shrink-0 px-3 py-1.5 rounded-xl text-[9px] md:text-[10px] font-black uppercase tracking-wider ${statusColors[order.status] || 'bg-slate-100 text-slate-600'}`}>

@@ -25,22 +25,20 @@ export const FinanceWidget: React.FC = () => {
 
     if (!summary || !summary.showFinance) return null;
 
-    const { daily, monthly, monthlyGoal } = summary;
-    const progress = monthlyGoal > 0 ? Math.min((monthly / monthlyGoal) * 100, 100) : 0;
-    const isGoalReached = monthly >= monthlyGoal && monthlyGoal > 0;
+    const { daily, monthly } = summary;
 
     return (
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8">
-            {/* Daily Revenue Card */}
-            <div className="md:col-span-4 bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(37,99,235,0.04)] border border-blue-50 relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
+            {/* Daily Revenue & Monthly Overview */}
+            <div className="md:col-span-6 bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(37,99,235,0.04)] border border-blue-50 relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] select-none pointer-events-none text-blue-600 group-hover:scale-110 transition-transform duration-500">
                     <span className="material-icons-round text-[120px] leading-none">account_balance_wallet</span>
                 </div>
                 <div className="relative z-10">
                     <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-2">Today's Revenue</p>
                     <div className="flex items-baseline gap-1">
-                        <span className="text-lg font-black text-blue-400/80">RM</span>
-                        <h2 className="text-4xl font-black text-slate-800 tracking-tighter">
+                        <span className="text-lg font-black text-blue-400/80 font-sans">RM</span>
+                        <h2 className="text-4xl font-black text-slate-800 tracking-tighter font-mono">
                             {daily.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </h2>
                     </div>
@@ -51,53 +49,21 @@ export const FinanceWidget: React.FC = () => {
                 </div>
             </div>
 
-            {/* Monthly Progress Card */}
-            <div className="md:col-span-8 bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(37,99,235,0.04)] border border-blue-50 relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
+            <div className="md:col-span-6 bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(37,99,235,0.04)] border border-blue-50 relative overflow-hidden group hover:-translate-y-1 transition-all duration-300">
                 <div className="absolute top-0 right-0 p-8 opacity-[0.03] select-none pointer-events-none text-indigo-600 group-hover:scale-110 transition-transform duration-500">
                     <span className="material-icons-round text-[120px] leading-none">insights</span>
                 </div>
-
-                <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-                    <div className="flex-1">
-                        <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-2">Monthly Performance</p>
-                        <div className="flex items-baseline gap-1 mb-6">
-                            <span className="text-lg font-black text-indigo-400/80">RM</span>
-                            <h2 className="text-4xl font-black text-slate-800 tracking-tighter">
-                                {monthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </h2>
-                            {monthlyGoal > 0 && (
-                                <span className="text-slate-400 font-bold ml-2">/ RM {monthlyGoal.toLocaleString()}</span>
-                            )}
-                        </div>
-
-                        {/* Progress Bar */}
-                        <div className="relative w-full">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Revenue Goal</span>
-                                <span className="text-xs font-black text-indigo-600">{Math.round(progress)}%</span>
-                            </div>
-                            <div className="h-4 bg-slate-50 border border-slate-100 rounded-full overflow-hidden shadow-inner p-1">
-                                <div
-                                    className={`h-full rounded-full transition-all duration-1000 ease-out relative overflow-hidden ${isGoalReached ? 'bg-gradient-to-r from-emerald-400 to-green-500' : 'bg-gradient-to-r from-indigo-500 to-blue-500'
-                                        }`}
-                                    style={{ width: `${progress}%` }}
-                                >
-                                    <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
-                                </div>
-                            </div>
-                        </div>
+                <div className="relative z-10">
+                    <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-2">Month to Date</p>
+                    <div className="flex items-baseline gap-1">
+                        <span className="text-lg font-black text-indigo-400/80 font-sans">RM</span>
+                        <h2 className="text-4xl font-black text-slate-800 tracking-tighter font-mono">
+                            {monthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </h2>
                     </div>
-
-                    <div className={`shrink-0 w-24 h-24 rounded-3xl flex flex-col items-center justify-center gap-1 border-2 transition-all duration-500 ${isGoalReached
-                            ? 'bg-green-50 border-green-200 text-green-600 scale-110 shadow-lg shadow-green-200/50'
-                            : 'bg-indigo-50 border-indigo-100 text-indigo-400'
-                        }`}>
-                        <span className="material-icons-round text-3xl">
-                            {isGoalReached ? 'auto_awesome' : 'flag'}
-                        </span>
-                        <span className="text-[10px] font-black uppercase tracking-tighter text-center px-2">
-                            {isGoalReached ? 'GOAL MET' : 'TARGET'}
-                        </span>
+                    <div className="mt-4 flex items-center gap-2 text-[11px] font-bold text-indigo-600 bg-indigo-50/50 w-fit px-3 py-1 rounded-full border border-indigo-100/50">
+                        <span className="material-icons-round text-sm">calendar_month</span>
+                        <span className="uppercase tracking-widest">Active Billing</span>
                     </div>
                 </div>
             </div>

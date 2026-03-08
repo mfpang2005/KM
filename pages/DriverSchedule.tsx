@@ -20,6 +20,7 @@ interface DriverChatMsg {
     content: string;
     timestamp: number;
     isMine: boolean;
+    type?: 'text' | 'audio';
 }
 
 interface Vehicle {
@@ -62,9 +63,9 @@ const DriverSchedule: React.FC = () => {
     const audioContextRef = useRef<AudioContext | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    // NOTE: userId 用于标识本人身份，这里不再使用随机生成的 driverIdRef
     // NOTE: GoEasy 单例，避免重复初始化
     const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
-    const driverIdRef = useRef<string>(`driver-${Math.random().toString(36).slice(2, 9)}`);
     // NOTE: Supabase Presence channel ref，PTT 开启时加入，让 admin-web 可以看到司机在线
     const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const chatBottomRef = useRef<HTMLDivElement | null>(null);
@@ -160,6 +161,37 @@ const DriverSchedule: React.FC = () => {
             supabase.removeChannel(orderChannel);
         };
     }, []);
+
+    // ── Fetch Historical Messages ──────────────────────────────────
+    useEffect(() => {
+        if (!isPttOpen || !userId) return;
+        const fetchHistory = async () => {
+            try {
+                const { data, error } = await supabase.from('messages')
+                    .select('*')
+                    .or(`receiver_id.eq.GLOBAL,and(sender_id.eq.${userId}),and(receiver_id.eq.${userId})`)
+                    .order('created_at', { ascending: false })
+                    .limit(50);
+
+                if (error) throw error;
+                if (data) {
+                    setDriverChatMessages(data.reverse().map(msg => ({
+                        id: msg.id,
+                        senderId: msg.sender_id,
+                        senderLabel: msg.sender_label || 'Unknown',
+                        senderRole: msg.sender_role || 'guest',
+                        type: msg.type,
+                        content: msg.content,
+                        timestamp: new Date(msg.created_at).getTime(),
+                        isMine: msg.sender_id === userId
+                    })));
+                }
+            } catch (err) {
+                console.error('Failed to fetch driver chat history', err);
+            }
+        };
+        fetchHistory();
+    }, [isPttOpen, userId]);
 
     const taskOrders = useMemo(() => orders.filter(o =>
         o.status === OrderStatus.READY || o.status === OrderStatus.DELIVERING
@@ -280,8 +312,9 @@ const DriverSchedule: React.FC = () => {
                 });
                 goEasyRef.current = goEasy;
 
+                const myId = userId || `driver-${Math.random().toString(36).slice(2, 9)}`;
                 goEasy.connect({
-                    id: driverIdRef.current,
+                    id: myId,
                     data: { role: 'driver' },
                     onSuccess: () => {
                         setPttStatus('CONNECTED');
@@ -290,7 +323,7 @@ const DriverSchedule: React.FC = () => {
                             onMessage: async (message: any) => {
                                 try {
                                     const payload = JSON.parse(message.content);
-                                    if (payload.senderId === driverIdRef.current) return;
+                                    if (payload.senderId === myId) return;
                                     if (payload.type === 'text') {
                                         setDriverChatMessages(prev => [...prev, {
                                             id: `${payload.senderId}-${payload.timestamp}`,
@@ -313,7 +346,7 @@ const DriverSchedule: React.FC = () => {
                             onFailed: (err: any) => console.error('[GoEasy PTT] Subscribe failed', err),
                         });
                         // 订阅司机私人频道
-                        const privateChannel = `driver_${driverIdRef.current}`;
+                        const privateChannel = `driver_${myId}`;
                         goEasy.pubsub.subscribe({
                             channel: privateChannel,
                             onMessage: async (message: any) => {
@@ -370,14 +403,15 @@ const DriverSchedule: React.FC = () => {
 
         // NOTE: 加入 Supabase Presence，让 admin-web Walkie-Talkie 页面的在线用户列表显示此司机
         try {
+            const myId = userId || `driver-${Math.random().toString(36).slice(2, 9)}`;
             const ch = supabase.channel('walkie-talkie-room', {
-                config: { presence: { key: driverIdRef.current } },
+                config: { presence: { key: myId } },
             });
             ch.subscribe(async (status) => {
                 if (status === 'SUBSCRIBED') {
                     await ch.track({
-                        userId: driverIdRef.current,
-                        email: '司机端',
+                        userId: myId,
+                        email: driverName || '司机端',
                         role: 'driver',
                         joinedAt: new Date().toISOString(),
                     });
@@ -394,7 +428,7 @@ const DriverSchedule: React.FC = () => {
         if (pttStatus !== 'CONNECTED') return;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mr = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+            const mr = new MediaRecorder(stream);
             audioChunksRef.current = [];
             mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
             mr.start(100);
@@ -415,14 +449,16 @@ const DriverSchedule: React.FC = () => {
         // NOTE: onstop 必须在 stop() 之前赋值，否则有时序 bug 导致回调不触发
         mr.onstop = async () => {
             if (!goEasyRef.current) return;
-            const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+            const mimeType = mr.mimeType || 'audio/webm';
+            const blob = new Blob(audioChunksRef.current, { type: mimeType });
             if (blob.size < 100) return;
             try {
+                const myId = userId || 'unknown-driver';
                 const base64Audio = await blobToBase64(blob);
                 const payload = JSON.stringify({
                     type: 'audio',
-                    senderId: driverIdRef.current,
-                    senderLabel: '司机端',
+                    senderId: myId,
+                    senderLabel: driverName || '司机端',
                     senderRole: 'driver',
                     audio: base64Audio,
                 });
@@ -435,7 +471,7 @@ const DriverSchedule: React.FC = () => {
 
                 // 将语音记录存储到 Supabase messages 表，触发 SuperAdmin 的 Realtime 监听
                 await supabase.from('messages').insert([{
-                    sender_id: driverIdRef.current,
+                    sender_id: myId,
                     sender_label: driverName || '司机端',
                     sender_role: 'driver',
                     receiver_id: 'GLOBAL',
@@ -477,11 +513,14 @@ const DriverSchedule: React.FC = () => {
     const sendDriverTextMessage = () => {
         const text = driverChatInput.trim();
         if (!text || !goEasyRef.current || pttStatus === 'IDLE' || pttStatus === 'CONNECTING') return;
+
+        const myId = userId || 'unknown-driver';
         const ts = Date.now();
+
         setDriverChatMessages(prev => [...prev, {
-            id: `${driverIdRef.current}-${ts}`,
-            senderId: driverIdRef.current,
-            senderLabel: '司机端',
+            id: `${myId}-${ts}`,
+            senderId: myId,
+            senderLabel: driverName || '司机端',
             senderRole: 'driver',
             content: text,
             timestamp: ts,
@@ -489,9 +528,10 @@ const DriverSchedule: React.FC = () => {
         }]);
         setDriverChatInput('');
         setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
         goEasyRef.current.pubsub.publish({
             channel: CHANNEL,
-            message: JSON.stringify({ type: 'text', senderId: driverIdRef.current, senderLabel: '司机端', senderRole: 'driver', content: text, timestamp: ts }),
+            message: JSON.stringify({ type: 'text', senderId: myId, senderLabel: driverName || '司机端', senderRole: 'driver', content: text, timestamp: ts }),
             onSuccess: () => { },
             onFailed: (err: any) => console.error('[GoEasy] Text publish failed', err),
         });
@@ -499,7 +539,7 @@ const DriverSchedule: React.FC = () => {
         const insertMsg = async () => {
             try {
                 await supabase.from('messages').insert([{
-                    sender_id: driverIdRef.current,
+                    sender_id: myId,
                     sender_label: driverName || '司机端',
                     sender_role: 'driver',
                     receiver_id: 'GLOBAL',
@@ -865,23 +905,23 @@ const DriverSchedule: React.FC = () => {
                                 <button
                                     key={v.id}
                                     onClick={() => handleDeclareVehicle(v)}
-                                    disabled={v.status === 'maintenance' || v.status === 'repair'}
-                                    className={`w-full p-8 rounded-[36px] border transition-all text-left flex items-center justify-between group active:scale-[0.98] ${selectedVehicle?.id === v.id ? 'bg-indigo-600 border-indigo-500 shadow-2xl shadow-indigo-600/20' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
+                                    disabled={v.status === 'maintenance' || v.status === 'repair' || selectedVehicle?.plate === v.plate}
+                                    className={`w-full p-8 rounded-[36px] border transition-all text-left flex items-center justify-between group active:scale-[0.98] ${selectedVehicle?.plate === v.plate ? 'bg-indigo-600 border-indigo-500 shadow-2xl shadow-indigo-600/20 opacity-80 cursor-default' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
                                 >
                                     <div className="flex items-center gap-6">
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${selectedVehicle?.id === v.id ? 'bg-white text-indigo-600' : 'bg-white/5 text-slate-500'}`}>
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${selectedVehicle?.plate === v.plate ? 'bg-white text-indigo-600' : 'bg-white/5 text-slate-500'}`}>
                                             <span className="material-icons-round text-2xl">local_shipping</span>
                                         </div>
                                         <div>
-                                            <h4 className={`text-base font-black ${selectedVehicle?.id === v.id ? 'text-white' : 'text-slate-200'}`}>{v.model}</h4>
-                                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${selectedVehicle?.id === v.id ? 'text-indigo-200' : 'text-slate-500'}`}>{v.plate} • {v.type}</p>
+                                            <h4 className={`text-base font-black ${selectedVehicle?.plate === v.plate ? 'text-white' : 'text-slate-200'}`}>{v.model}</h4>
+                                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${selectedVehicle?.plate === v.plate ? 'text-indigo-200' : 'text-slate-500'}`}>{v.plate} • {v.type}</p>
                                         </div>
                                     </div>
                                     {v.status === 'maintenance' || v.status === 'repair' ? (
                                         <span className="bg-rose-500/20 text-rose-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl border border-rose-500/20 tracking-widest">In Repair</span>
                                     ) : (
-                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedVehicle?.id === v.id ? 'border-white bg-white text-indigo-600' : 'border-slate-700'}`}>
-                                            {selectedVehicle?.id === v.id && <span className="material-icons-round text-[14px]">check</span>}
+                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedVehicle?.plate === v.plate ? 'border-white bg-white text-indigo-600' : 'border-slate-700'}`}>
+                                            {selectedVehicle?.plate === v.plate && <span className="material-icons-round text-[14px]">check</span>}
                                         </div>
                                     )}
                                 </button>
@@ -942,7 +982,17 @@ const DriverSchedule: React.FC = () => {
                                             <span className="text-[9px] text-slate-600">{time}</span>
                                         </div>
                                         <div className={`px-3.5 py-2 rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-slate-700/80 text-slate-100 rounded-tl-sm'}`}>
-                                            {msg.content}
+                                            {msg.type === 'audio' ? (
+                                                <button
+                                                    onClick={() => playAudio(msg.content)}
+                                                    className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all active:scale-95 ${msg.isMine ? 'bg-indigo-500 hover:bg-indigo-400 border-white/10' : 'bg-slate-600 hover:bg-slate-500 border-transparent shadow-sm'}`}
+                                                >
+                                                    <span className="material-icons-round text-[18px]">play_arrow</span>
+                                                    <span className="text-[12px] font-black uppercase tracking-widest">语音回放</span>
+                                                </button>
+                                            ) : (
+                                                msg.content
+                                            )}
                                         </div>
                                     </div>
                                 </div>

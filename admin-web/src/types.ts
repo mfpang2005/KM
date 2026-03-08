@@ -50,6 +50,7 @@ export interface Order {
     created_at?: string;
     delivery_photos?: string[];
     equipments?: Record<string, number>;
+    remark?: string;
 }
 
 export interface OrderCreate {
@@ -156,11 +157,23 @@ export interface DriverAssignment {
 export interface FinanceSummary {
     daily: number;
     monthly: number;
-    monthlyGoal: number;
     showFinance: boolean;
 }
 
 export interface FinanceSettings {
     enabled: boolean;
     goal: number;
+}
+
+export interface CollectionStats {
+    method: string;
+    amount: number;
+    count: number;
+}
+
+export interface FinanceData {
+    periodRevenue: number;
+    todayRevenue: number;
+    todayOrderCount: number;
+    collections: CollectionStats[];
 }

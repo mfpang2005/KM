@@ -453,19 +453,9 @@ async def get_financials(
             if p_status == 'paid':
                 today_revenue += curr_amount
 
-    # 获取月度目标
-    goal = 0
-    try:
-        cfg = supabase.table("system_config").select("value").eq("key", "finance_goal").execute()
-        if cfg.data:
-            goal = cfg.data[0].get("value", {}).get("amount", 0)
-    except Exception:
-        pass
-
     return {
         "periodRevenue": period_revenue,
         "todayRevenue": today_revenue,
-        "monthlyGoal": goal,
         "todayOrderCount": today_order_count,
         "collections": list(pm_stats.values()),
         "categorySales": [{"category": "Completed Sales", "amount": period_revenue}],

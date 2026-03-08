@@ -4,6 +4,8 @@ import { api, SuperAdminService, ProductService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { Order, Product } from '../types';
 import { OrderStatus, PaymentMethod } from '../types';
+import { PageHeader } from '../components/PageHeader';
+import { NotificationBell } from '../components/NotificationBell';
 
 export const OrdersPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -11,11 +13,13 @@ export const OrdersPage: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all');
     const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+    const [dateFilter, setDateFilter] = useState<string>(searchParams.get('date') || 'all');
 
     // Sync state with URL parameters when they change
     useEffect(() => {
         const status = searchParams.get('status');
         const search = searchParams.get('search');
+        const date = searchParams.get('date');
         const isReset = searchParams.get('reset') === 'true';
         const isCreate = searchParams.get('create') === 'true';
         const isAssign = searchParams.get('assign') === 'true';
@@ -23,6 +27,7 @@ export const OrdersPage: React.FC = () => {
         if (isReset) {
             setStatusFilter('all');
             setSearchQuery('');
+            setDateFilter('all');
         } else if (isCreate) {
             setShowCreateModal(true);
         } else if (isAssign) {
@@ -30,6 +35,7 @@ export const OrdersPage: React.FC = () => {
         } else {
             if (status) setStatusFilter(status);
             if (search !== null) setSearchQuery(search);
+            if (date) setDateFilter(date);
         }
     }, [searchParams]);
     const [drivers, setDrivers] = useState<any[]>([]);
@@ -395,7 +401,14 @@ export const OrdersPage: React.FC = () => {
 
         const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
 
-        return matchesSearch && matchesStatus;
+        let matchesDate = true;
+        if (dateFilter === 'today' && o.created_at) {
+            const today = new Date().toDateString();
+            const orderDate = new Date(o.created_at).toDateString();
+            matchesDate = today === orderDate;
+        }
+
+        return matchesSearch && matchesStatus && matchesDate;
     });
 
     const totalPages = Math.ceil(filteredOrders.length / pageSize);
@@ -404,70 +417,69 @@ export const OrdersPage: React.FC = () => {
     // Reset pagination when search or filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, statusFilter]);
+    }, [searchQuery, statusFilter, dateFilter]);
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-xl font-bold text-slate-800">Order Status</h1>
-                    <p className="text-slate-500 text-sm mt-1">Manage all incoming tasks and dispatches</p>
-                </div>
+        <div className="pb-20">
+            <PageHeader
+                title="Order Status / 订单状态"
+                subtitle="Manage all incoming tasks and dispatches"
+                showStats={false}
+                actions={
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => {
+                                    setStatusFilter('all');
+                                    setSearchQuery('');
+                                    window.history.replaceState({}, '', window.location.pathname);
+                                }}
+                                className="px-4 py-2 bg-slate-100/50 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all flex items-center gap-2"
+                                title="Reset all filters"
+                            >
+                                <span className="material-icons-round text-[18px]">restart_alt</span>
+                            </button>
+                            <button
+                                onClick={() => setShowCreateModal(true)}
+                                className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-sm hover:shadow-lg transition-all flex items-center gap-2"
+                            >
+                                <span className="material-icons-round text-[18px]">add</span>
+                                <span className="hidden lg:inline">New Order</span>
+                            </button>
 
-                <div className="flex items-center gap-3">
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => {
-                                setStatusFilter('all');
-                                setSearchQuery('');
-                                // Clear URL params without full reload
-                                window.history.replaceState({}, '', window.location.pathname);
-                            }}
-                            className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all flex items-center gap-2"
-                            title="Reset all filters"
-                        >
-                            <span className="material-icons-round text-[18px]">restart_alt</span>
-                            <span className="hidden md:inline">重置</span>
-                        </button>
-                        <button
-                            onClick={() => setShowCreateModal(true)}
-                            className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold text-sm hover:shadow-[0_8px_20px_rgba(220,38,38,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2 mr-2"
-                        >
-                            <span className="material-icons-round text-[18px]">add</span>
-                            New Order
-                        </button>
-                        <label htmlFor="order-status-filter" className="sr-only">Filter by Status</label>
-                        <select
-                            id="order-status-filter"
-                            name="order-status-filter"
-                            value={statusFilter}
-                            onChange={e => setStatusFilter(e.target.value)}
-                            className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-primary/20"
-                        >
-                            <option value="all">All Status</option>
-                            <option value={OrderStatus.PENDING}>Pending</option>
-                            <option value={OrderStatus.PREPARING}>Preparing</option>
-                            <option value={OrderStatus.READY}>Ready</option>
-                            <option value={OrderStatus.DELIVERING}>Delivering</option>
-                            <option value={OrderStatus.COMPLETED}>Completed</option>
-                        </select>
+                            <NotificationBell />
 
-                        <div className="relative w-64">
-                            <span className="material-icons-round absolute left-3 top-2.5 text-slate-400">search</span>
-                            <label htmlFor="order-search" className="sr-only">Search orders</label>
-                            <input
-                                id="order-search"
-                                name="order-search"
-                                type="text"
-                                placeholder="Search orders..."
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                            />
+                            <select
+                                id="order-status-filter"
+                                name="order-status-filter"
+                                value={statusFilter}
+                                onChange={e => setStatusFilter(e.target.value)}
+                                className="px-4 py-2 bg-white/50 backdrop-blur border border-slate-200 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500/20"
+                            >
+                                <option value="all">All Status</option>
+                                <option value={OrderStatus.PENDING}>Pending</option>
+                                <option value={OrderStatus.PREPARING}>Preparing</option>
+                                <option value={OrderStatus.READY}>Ready</option>
+                                <option value={OrderStatus.DELIVERING}>Delivering</option>
+                                <option value={OrderStatus.COMPLETED}>Completed</option>
+                            </select>
+
+                            <div className="relative w-48 lg:w-64">
+                                <span className="material-icons-round absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
+                                <input
+                                    id="order-search"
+                                    name="order-search"
+                                    type="text"
+                                    placeholder="Search orders..."
+                                    value={searchQuery}
+                                    onChange={e => setSearchQuery(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white/50 backdrop-blur text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                                />
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
+                }
+            />
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm relative">
                 {/* 锁定高度与固定表头加固 */}

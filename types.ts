@@ -45,6 +45,7 @@ export interface Order {
     paymentMethod?: PaymentMethod;
     paymentStatus?: 'paid' | 'pending' | 'unpaid';
     delivery_photos?: string[];
+    remark?: string;
 }
 
 export interface OrderCreate {

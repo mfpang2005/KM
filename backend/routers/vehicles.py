@@ -79,6 +79,10 @@ async def assign_vehicle(assignment: DriverAssignmentBase):
     
     vehicle = vehicle_resp.data[0]
     if vehicle["status"] == VehicleStatus.BUSY:
+        # Check if already assigned to THIS driver
+        assign_check = supabase.table("driver_assignments").select("*").eq("vehicle_id", assignment.vehicle_id).eq("driver_id", assignment.driver_id).eq("status", "active").execute()
+        if assign_check.data:
+            return {"message": "Vehicle already assigned to you", "assignment": assign_check.data[0]}
         raise HTTPException(status_code=400, detail="车辆已被占用 (Busy)")
     if vehicle["status"] == VehicleStatus.REPAIR:
         raise HTTPException(status_code=400, detail="车辆正在维修中 (Repair)")

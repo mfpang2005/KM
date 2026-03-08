@@ -40,10 +40,12 @@ async def get_finance_summary():
     - PENDING: delivery_date 为今日且 payment_status = 'pending' (已送达/待收)
     """
     from fastapi.concurrency import run_in_threadpool
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     import dateutil.parser
 
-    now = datetime.now(timezone.utc)
+    # Convert strictly to UTC+8 (Malaysia time) for daily grouping
+    malaysia_tz = timezone(timedelta(hours=8))
+    now = datetime.now(malaysia_tz)
     today_str = now.strftime("%Y-%m-%d")
 
     # Fetch ALL orders for this month to calculate metrics
@@ -75,17 +77,23 @@ async def get_finance_summary():
                 # If it's ISO format
                 if "T" in due_time_raw:
                     dt = dateutil.parser.isoparse(due_time_raw)
-                    if dt.strftime("%Y-%m-%d") == today_str:
+                    if dt.tzinfo is None:
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    if dt.astimezone(malaysia_tz).strftime("%Y-%m-%d") == today_str:
                         is_today = True
                 # Fallback to created_at if dueTime is just a time string or empty
                 else:
                     ca = dateutil.parser.isoparse(o.get("created_at"))
-                    if ca.strftime("%Y-%m-%d") == today_str:
+                    if ca.tzinfo is None:
+                        ca = ca.replace(tzinfo=timezone.utc)
+                    if ca.astimezone(malaysia_tz).strftime("%Y-%m-%d") == today_str:
                         is_today = True
         except Exception:
             # Final fallback
             ca = dateutil.parser.isoparse(o.get("created_at"))
-            if ca.strftime("%Y-%m-%d") == today_str:
+            if ca.tzinfo is None:
+                ca = ca.replace(tzinfo=timezone.utc)
+            if ca.astimezone(malaysia_tz).strftime("%Y-%m-%d") == today_str:
                 is_today = True
 
         # 1. 累计本月收入 (已支付的所有订单)

@@ -11,3 +11,7 @@ print(res2)
 print('Adding equipments column...')
 res3 = supabase.rpc('run_sql', {'query': 'ALTER TABLE orders ADD COLUMN IF NOT EXISTS equipments jsonb;'}).execute()
 print(res3)
+
+print('Adding remark column...')
+res4 = supabase.rpc('run_sql', {'query': 'ALTER TABLE orders ADD COLUMN IF NOT EXISTS remark text;'}).execute()
+print(res4)

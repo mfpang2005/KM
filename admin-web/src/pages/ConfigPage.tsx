@@ -12,7 +12,6 @@ export const ConfigPage: React.FC = () => {
     const [showAdd, setShowAdd] = useState(false);
 
     // NOTE: 财务设置面板状态，对应 system_config 中的 finance_goal 和 finance_display
-    const [financeGoal, setFinanceGoal] = useState<string>('');
     const [financeDisplay, setFinanceDisplay] = useState<boolean>(true);
     const [savingFinance, setSavingFinance] = useState(false);
 
@@ -21,9 +20,7 @@ export const ConfigPage: React.FC = () => {
             const data = await SuperAdminService.getConfig();
             setConfigs(data);
             // NOTE: 同时加载财务配置，点附在现有配置加载逻辑中
-            const goalCfg = data.find((c: { key: string }) => c.key === 'finance_goal');
             const displayCfg = data.find((c: { key: string }) => c.key === 'finance_display');
-            if (goalCfg?.value?.amount != null) setFinanceGoal(String(goalCfg.value.amount));
             if (displayCfg?.value?.enabled != null) setFinanceDisplay(Boolean(displayCfg.value.enabled));
         } catch (error) {
             console.error('Failed to load configs', error);
@@ -38,8 +35,6 @@ export const ConfigPage: React.FC = () => {
     const handleSaveFinance = async () => {
         setSavingFinance(true);
         try {
-            const amount = parseFloat(financeGoal) || 0;
-            await SuperAdminService.updateConfig('finance_goal', { amount });
             await SuperAdminService.updateConfig('finance_display', { enabled: financeDisplay });
             await loadConfig();
         } catch (err) {
@@ -77,7 +72,6 @@ export const ConfigPage: React.FC = () => {
 
     return (
         <div className="space-y-6">
-            {/* ── 财务设置面板 ── */}
             <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center gap-3 mb-4">
                     <span className="material-icons-round text-emerald-600 text-xl">payments</span>
@@ -85,47 +79,31 @@ export const ConfigPage: React.FC = () => {
                     <span className="ml-auto text-[10px] font-black uppercase tracking-widest bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">Finance</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                    <div>
-                        <label className="block text-xs font-bold text-slate-500 mb-1.5">月度业绩目标 (RM)</label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">RM</span>
-                            <input
-                                type="number"
-                                value={financeGoal}
-                                onChange={e => setFinanceGoal(e.target.value)}
-                                placeholder="例如：10000"
-                                className="w-full pl-10 pr-4 py-2.5 border border-slate-200 rounded-xl bg-white text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-primary/20"
-                            />
-                        </div>
-                        <p className="text-[10px] text-slate-400 mt-1">设置后，前端 App 控制台将显示本月进度条。</p>
-                    </div>
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-4 py-3">
-                            <div>
-                                <p className="text-xs font-bold text-slate-700">在 App 端显示财务数字</p>
-                                <p className="text-[10px] text-slate-400">关闭后，Admin 控制台将不显示今日/当月成交金额。</p>
-                            </div>
-                            <button
-                                onClick={() => setFinanceDisplay(!financeDisplay)}
-                                className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex-shrink-0 ml-4 ${financeDisplay ? 'bg-emerald-500' : 'bg-slate-200'}`}
-                                role="switch"
-                                aria-checked={financeDisplay}
-                            >
-                                <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${financeDisplay ? 'translate-x-6' : ''}`} />
-                            </button>
+                    <div className="flex items-center justify-between bg-white border border-slate-200 rounded-xl px-4 py-3">
+                        <div>
+                            <p className="text-xs font-bold text-slate-700">在 App 端显示财务数字</p>
+                            <p className="text-[10px] text-slate-400">关闭后，Admin 控制台将不显示今日/当月成交金额。</p>
                         </div>
                         <button
-                            onClick={handleSaveFinance}
-                            disabled={savingFinance}
-                            className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                            onClick={() => setFinanceDisplay(!financeDisplay)}
+                            className={`relative w-12 h-6 rounded-full transition-colors duration-300 flex-shrink-0 ml-4 ${financeDisplay ? 'bg-emerald-500' : 'bg-slate-200'}`}
+                            role="switch"
+                            aria-checked={financeDisplay}
                         >
-                            {savingFinance ? (
-                                <><span className="material-icons-round text-sm animate-spin">autorenew</span>保存中...</>
-                            ) : (
-                                <><span className="material-icons-round text-sm">save</span>保存财务设置</>
-                            )}
+                            <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-300 ${financeDisplay ? 'translate-x-6' : ''}`} />
                         </button>
                     </div>
+                    <button
+                        onClick={handleSaveFinance}
+                        disabled={savingFinance}
+                        className="py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-bold transition-colors disabled:opacity-60 flex items-center justify-center gap-2"
+                    >
+                        {savingFinance ? (
+                            <><span className="material-icons-round text-sm animate-spin">autorenew</span>保存中...</>
+                        ) : (
+                            <><span className="material-icons-round text-sm">save</span>保存财务设置</>
+                        )}
+                    </button>
                 </div>
             </div>
 

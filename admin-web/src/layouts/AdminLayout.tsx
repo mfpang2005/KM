@@ -96,93 +96,7 @@ const AdminLayout: React.FC = () => {
     const { user, logout } = useAuth();
     const location = useLocation();
     const scrollRef = useRef<HTMLDivElement>(null);
-    const [headerHide, setHeaderHide] = useState(false);
-
-    // ── 自动收起 Header 逻辑 ──────────────────────────────────────────────────
-    useEffect(() => {
-        const el = scrollRef.current;
-        if (!el) return;
-
-        let lastScrollTop = 0;
-        const threshold = 100; // 滚动超过 100px 后开始生效
-
-        const handleScroll = () => {
-            const currentScrollTop = el.scrollTop;
-
-            // 向下滚动超过阈值则收起，向上滚动则立即显示
-            if (currentScrollTop > lastScrollTop && currentScrollTop > threshold) {
-                setHeaderHide(true);
-            } else if (currentScrollTop < lastScrollTop) {
-                setHeaderHide(false);
-            }
-
-            lastScrollTop = Math.max(0, currentScrollTop);
-        };
-
-        el.addEventListener('scroll', handleScroll, { passive: true });
-        return () => el.removeEventListener('scroll', handleScroll);
-    }, []);
-
-    // 页面切换时自动显示 Header
-    useEffect(() => {
-        setHeaderHide(false);
-    }, [location.pathname]);
-
-    // ── 通知铃铛状态 ────────────────────────────────────────────────────────
-    const [showNotifs, setShowNotifs] = useState(false);
-    const [notifs, setNotifs] = useState<{ id: string; customerName: string; amount: number; created_at: string }[]>([]);
-    const [unread, setUnread] = useState(0);
-
-    const loadNotifs = async () => {
-        try {
-            const lastSeen = parseInt(localStorage.getItem('last_seen_notifs') || '0');
-            const { data } = await supabase
-                .from('orders')
-                .select('id, customerName, amount, created_at')
-                .eq('status', 'pending')
-                .order('created_at', { ascending: false })
-                .limit(10);
-            if (data) {
-                const unseen = data.filter(n => new Date(n.created_at).getTime() > lastSeen);
-                setNotifs(unseen);
-                setUnread(unseen.length);
-            }
-        } catch (e) {
-            // Silently fail or log sparingly
-        }
-    };
-
-    // NOTE: 初次加载 + Realtime 监听，拉取最新 PENDING 订单作为通知
-    useEffect(() => {
-        loadNotifs();
-
-        const ch = supabase
-            .channel('notif-bell')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, () => loadNotifs())
-            .subscribe();
-        return () => { supabase.removeChannel(ch); };
-    }, []);
-
-    const handleBell = () => {
-        const willShow = !showNotifs;
-        setShowNotifs(willShow);
-        if (willShow) {
-            setUnread(0); // 打开后清零红点
-        } else {
-            // 关闭后清空（查看后删除）
-            localStorage.setItem('last_seen_notifs', Date.now().toString());
-            setNotifs([]);
-            setUnread(0);
-        }
-    };
-
-    const handleClearAll = () => {
-        localStorage.setItem('last_seen_notifs', Date.now().toString());
-        setNotifs([]);
-        setUnread(0);
-        setShowNotifs(false);
-    };
-
+    // 侧边栏导航项
     const navItems = [
         { path: '/', label: 'Overview', icon: 'dashboard' },
         { path: '/users', label: 'Users', icon: 'people' },
@@ -268,78 +182,9 @@ const AdminLayout: React.FC = () => {
                 <div className="absolute top-[-10%] right-[-5%] w-96 h-96 bg-blue-400/20 rounded-full blur-[100px] pointer-events-none"></div>
                 <div className="absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-purple-400/20 rounded-full blur-[100px] pointer-events-none"></div>
 
-                <header className={`h-20 bg-white/40 backdrop-blur-xl border-b border-white/50 flex items-center px-10 shadow-[0_4px_30px_rgba(0,0,0,0.02)] justify-between sticky top-0 z-10 transition-all duration-500 ease-in-out ${headerHide ? '-mt-20 opacity-0 pointer-events-none' : 'mt-0 opacity-100'}`}>
-                    {/* 当前页标题（无副标题） */}
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">
-                        {navItems.find(i => location.pathname === i.path || (i.path !== '/' && location.pathname.startsWith(i.path)))?.label || 'Dashboard'}
-                    </h2>
-
-                    {/* 通知铃铛 */}
-                    <div className="relative">
-                        <button
-                            onClick={handleBell}
-                            className="relative w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-500 hover:text-indigo-600 transition-colors border border-slate-100"
-                        >
-                            <span className="material-icons-round text-[20px]">notifications</span>
-                            {unread > 0 && (
-                                <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-black flex items-center justify-center">
-                                    {unread > 9 ? '9+' : unread}
-                                </span>
-                            )}
-                        </button>
-
-                        {/* 下拉通知面板 */}
-                        {showNotifs && (
-                            <div className="absolute right-0 top-12 w-80 bg-white rounded-2xl shadow-xl border border-slate-100 z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
-                                <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
-                                    <h4 className="font-black text-slate-700 text-sm">新订单通知</h4>
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-xs font-bold text-slate-400">{notifs.length} 条待处理</span>
-                                        {notifs.length > 0 && (
-                                            <button onClick={handleClearAll} className="text-[10px] bg-slate-100 hover:bg-slate-200 text-slate-600 px-2.5 py-1 rounded-full font-bold transition-colors">
-                                                清空
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                                <div className="max-h-72 overflow-y-auto divide-y divide-slate-50">
-                                    {notifs.length === 0 ? (
-                                        <div className="py-10 text-center text-slate-300">
-                                            <span className="material-icons-round text-3xl">notifications_none</span>
-                                            <p className="text-xs font-bold mt-1">暂无新通知</p>
-                                        </div>
-                                    ) : notifs.map(n => (
-                                        <div key={n.id} className="px-5 py-3.5 hover:bg-slate-50 transition-colors">
-                                            <div className="flex items-start gap-3">
-                                                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0 mt-0.5">
-                                                    <span className="material-icons-round text-[16px] text-indigo-500">receipt_long</span>
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-bold text-slate-800 truncate">{n.customerName} 的新订单</p>
-                                                    <p className="text-[10px] font-black text-indigo-600 mt-0.5">RM {Number(n.amount).toFixed(2)}</p>
-                                                    <p className="text-[10px] text-slate-400 mt-0.5">
-                                                        {new Date(n.created_at).toLocaleString('zh-MY', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                                <div className="px-5 py-3 border-t border-slate-50 bg-slate-50/50">
-                                    <button
-                                        onClick={handleClearAll}
-                                        className="w-full text-center text-xs font-black text-indigo-600 hover:text-indigo-800 transition-colors"
-                                    >
-                                        关闭并清空
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </header>
                 <div
                     ref={scrollRef}
-                    className="flex-1 overflow-y-auto p-10 relative z-0 no-scrollbar"
+                    className="flex-1 overflow-y-auto pt-24 px-10 pb-10 relative z-0 no-scrollbar"
                 >
                     <div className="max-w-7xl mx-auto h-full">
                         <Outlet />

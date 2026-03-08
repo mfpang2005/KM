@@ -1,8 +1,9 @@
-﻿import os
+import os
 import httpx
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load env from backend directory
+load_dotenv('c:/Users/User/Downloads/kim-long-smart-catering-system/backend/.env')
 
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SERVICE_ROLE_KEY = os.getenv('SUPABASE_KEY')
@@ -14,7 +15,11 @@ HEADERS = {
 }
 
 def execute_sql(sql_query: str):
-    url = f'{SUPABASE_URL}/rest/v1/sql'
+    # Try the /rest/v1/rpc/run_sql if direct /rest/v1/sql fails
+    # But since the user has a script using /rest/v1/sql, I'll try that first if it exists
+    # Actually, I'll try rpc first if that's what backend/add_columns.py does
+    
+    url = f'{SUPABASE_URL}/rest/v1/rpc/run_sql'
     print(f'Executing POST to {url} with query: {sql_query}')
     response = httpx.post(url, json={'query': sql_query}, headers=HEADERS)
     if response.status_code in [200, 201]:
@@ -24,10 +29,5 @@ def execute_sql(sql_query: str):
         print(f'Failed SQL Execution Failed: {response.status_code} - {response.text}')
         return False
 
-sql = '''
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS batch text;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_photos jsonb;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS equipments jsonb;
-ALTER TABLE orders ADD COLUMN IF NOT EXISTS remark text;
-'''
+sql = 'ALTER TABLE orders ADD COLUMN IF NOT EXISTS remark text;'
 execute_sql(sql)

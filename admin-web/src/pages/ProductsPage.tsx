@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { api, ProductService } from '../services/api';
 import type { Product } from '../types';
+import { PageHeader } from '../components/PageHeader';
+import { NotificationBell } from '../components/NotificationBell';
 
 // NOTE: 预设品类选项，可根据供应商菜单扩展
 const PRESET_CATEGORIES = [
@@ -100,9 +102,6 @@ export const ProductsPage: React.FC = () => {
         setShowModal(true);
     };
 
-    /**
-     * 上传产品图片至 Supabase Storage product-images bucket
-     */
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -115,7 +114,6 @@ export const ProductsPage: React.FC = () => {
             const formData = new FormData();
             formData.append('file', file);
 
-            // POST to backend
             const response = await api.post('/products/upload', formData, {
                 headers: { 'Content-Type': 'multipart/form-data' }
             });
@@ -134,8 +132,7 @@ export const ProductsPage: React.FC = () => {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         const finalCategory = showCustomCategory ? customCategory : form.category;
-        // NOTE: 清理空字段，防止后端拒绝 null/空字段导致失败
-        const payload: Record<string, unknown> = {
+        const payload: Record<string, any> = {
             code: form.code,
             name: form.name,
             category: finalCategory || undefined,
@@ -148,15 +145,15 @@ export const ProductsPage: React.FC = () => {
         try {
             setIsSubmitting(true);
             if (editingProduct) {
-                await ProductService.update(editingProduct.id, payload as Parameters<typeof ProductService.update>[1]);
+                await ProductService.update(editingProduct.id, payload);
             } else {
-                await ProductService.create(payload as Parameters<typeof ProductService.create>[0]);
+                await ProductService.create(payload as any);
             }
             setShowModal(false);
             await loadProducts();
-        } catch (error: unknown) {
+        } catch (error: any) {
             console.error('Failed to save product', error);
-            const msg = error instanceof Error ? error.message : JSON.stringify(error);
+            const msg = error.message || JSON.stringify(error);
             alert(`保存失败: ${msg}`);
         } finally {
             setIsSubmitting(false);
@@ -164,19 +161,24 @@ export const ProductsPage: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-xl font-bold text-slate-800">Products Management</h1>
-                </div>
-                <button
-                    onClick={() => handleOpenModal()}
-                    className="px-5 py-2.5 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold text-sm hover:shadow-[0_8px_20px_rgba(220,38,38,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2"
-                >
-                    <span className="material-icons-round text-[20px]">add</span>
-                    Add Product
-                </button>
-            </div>
+        <div className="pb-20">
+            <PageHeader
+                title="Products Management"
+                subtitle="Configure item details and pricing globally"
+                showStats={false}
+                actions={
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => handleOpenModal()}
+                            className="px-5 py-2.5 bg-slate-900 text-white rounded-xl font-bold text-sm hover:shadow-lg transition-all active:scale-95 flex items-center gap-2"
+                        >
+                            <span className="material-icons-round text-[20px]">add</span>
+                            Add Product
+                        </button>
+                        <NotificationBell />
+                    </div>
+                }
+            />
 
             <div className="bg-white rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 overflow-hidden text-sm">
                 <table className="w-full text-left border-collapse">
@@ -193,15 +195,6 @@ export const ProductsPage: React.FC = () => {
                             <tr>
                                 <td colSpan={4} className="px-8 py-16 text-center text-slate-400">
                                     <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-red-500"></div>
-                                </td>
-                            </tr>
-                        ) : products.length === 0 ? (
-                            <tr>
-                                <td colSpan={4} className="px-8 py-16 text-center text-slate-400">
-                                    <div className="flex flex-col items-center gap-2">
-                                        <span className="material-icons-round text-6xl text-slate-200">inventory_2</span>
-                                        <p className="font-bold">No products found. Start by adding one!</p>
-                                    </div>
                                 </td>
                             </tr>
                         ) : (
@@ -253,7 +246,6 @@ export const ProductsPage: React.FC = () => {
                 </table>
             </div>
 
-            {/* Modal for Add / Edit Product */}
             {showModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
                     <div className="bg-white rounded-3xl shadow-xl w-full max-w-lg overflow-hidden relative border border-slate-100">
@@ -269,7 +261,6 @@ export const ProductsPage: React.FC = () => {
                         </div>
 
                         <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-                            {/* 图片上传区 */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1.5">Product Image</label>
                                 <input
@@ -322,13 +313,13 @@ export const ProductsPage: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Price (RM) <span className="text-slate-300">选填</span></label>
+                                    <label className="block text-xs font-bold text-slate-500 mb-1.5">Price (RM)</label>
                                     <input
                                         type="number"
                                         step="0.01"
                                         min="0"
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                        placeholder="面议价 / 留空"
+                                        placeholder="留空为面议"
                                         value={form.price}
                                         onChange={e => setForm({ ...form, price: e.target.value === '' ? '' : parseFloat(e.target.value) })}
                                     />
@@ -347,7 +338,6 @@ export const ProductsPage: React.FC = () => {
                                 />
                             </div>
 
-                            {/* 品类选择 - 预设下拉 + 自定义选项 */}
                             <div>
                                 <label className="block text-xs font-bold text-slate-500 mb-1.5">Category</label>
                                 {!showCustomCategory ? (
@@ -366,7 +356,6 @@ export const ProductsPage: React.FC = () => {
                                             type="button"
                                             onClick={() => setShowCustomCategory(true)}
                                             className="px-3 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors whitespace-nowrap"
-                                            title="自定义分类"
                                         >
                                             + 自定义
                                         </button>
@@ -384,7 +373,6 @@ export const ProductsPage: React.FC = () => {
                                             type="button"
                                             onClick={() => { setShowCustomCategory(false); setCustomCategory(''); }}
                                             className="px-3 py-2 text-xs font-bold text-slate-500 border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors"
-                                            title="返回预设选项"
                                         >
                                             <span className="material-icons-round text-[16px]">list</span>
                                         </button>
@@ -400,11 +388,10 @@ export const ProductsPage: React.FC = () => {
                                 >
                                     Cancel
                                 </button>
-                                {/* NOTE: 使用独立的 isSubmitting 而非列表 loading，避免初始加载时按钮被禁用 */}
                                 <button
                                     type="submit"
                                     disabled={isSubmitting || imageUploading}
-                                    className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20 disabled:opacity-50 flex items-center gap-2"
+                                    className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors shadow-lg disabled:opacity-50 flex items-center gap-2"
                                 >
                                     {isSubmitting && <span className="material-icons-round animate-spin text-[18px]">autorenew</span>}
                                     {editingProduct ? 'Save Changes' : 'Publish Product'}
@@ -414,9 +401,7 @@ export const ProductsPage: React.FC = () => {
                     </div>
                 </div>
             )}
-            {/* Modal for Add / Edit Product ... */}
 
-            {/* 双重删除确认弹窗 */}
             {isDeleteModalOpen && confirmDeleteInfo && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden relative border border-slate-100">
@@ -426,11 +411,9 @@ export const ProductsPage: React.FC = () => {
                                     {deleteStep === 1 ? 'help_outline' : 'report_problem'}
                                 </span>
                             </div>
-
                             <h3 className="text-2xl font-black text-slate-800 mb-2">
                                 {deleteStep === 1 ? 'Confirm Delete?' : 'Final Warning!'}
                             </h3>
-
                             <p className="text-slate-500 font-bold leading-relaxed mb-8 px-4">
                                 {deleteStep === 1 ? (
                                     <>Are you sure you want to remove <span className="text-slate-900 font-black">"{confirmDeleteInfo.name}"</span>?</>
@@ -438,12 +421,11 @@ export const ProductsPage: React.FC = () => {
                                     <span className="text-red-500">This action is permanent and will remove this product from all active menus. Click again to confirm.</span>
                                 )}
                             </p>
-
                             <div className="flex flex-col gap-3">
                                 {deleteStep === 1 ? (
                                     <button
                                         onClick={() => setDeleteStep(2)}
-                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-slate-900/20"
+                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl"
                                     >
                                         Yes, I'm Sure
                                     </button>
@@ -451,13 +433,12 @@ export const ProductsPage: React.FC = () => {
                                     <button
                                         onClick={executeDelete}
                                         disabled={isDeleting}
-                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-red-600/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl disabled:opacity-50 flex items-center justify-center gap-2"
                                     >
                                         {isDeleting && <span className="material-icons-round animate-spin">autorenew</span>}
                                         Confirm Permanent Delete
                                     </button>
                                 )}
-
                                 <button
                                     onClick={() => {
                                         setDeleteModalOpen(false);

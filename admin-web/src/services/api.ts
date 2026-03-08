@@ -66,10 +66,9 @@ export const SuperAdminService = {
 
     /** 获取财务汇总（今日/本月已完成订单总额），range 传 today/month/all */
     getFinanceSummary: async (range: 'today' | 'month' | 'all' = 'month'): Promise<{
-        grossSales: number;
-        netSales: number;
-        monthlyGoal: number;
-        tax: number;
+        periodRevenue: number;
+        todayRevenue: number;
+        todayOrderCount: number;
         collections: Array<{ method: string; amount: number; count: number }>;
     }> => {
         const response = await api.get(`/super-admin/financials?range=${range}`);
@@ -147,7 +146,7 @@ export const AdminOrderService = {
     /**
      * 获取财务汇总（今日/本月已完成订单总额）
      */
-    getFinanceSummary: async (): Promise<{ daily: number; monthly: number; monthlyGoal: number; showFinance: boolean }> => {
+    getFinanceSummary: async (): Promise<{ daily: number; monthly: number; showFinance: boolean }> => {
         const response = await api.get('/orders/finance-summary');
         return response.data;
     },

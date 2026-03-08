@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ProductService, AdminOrderService, SuperAdminService } from '../services/api';
+import { ProductService, AdminOrderService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { OrderStatus, PaymentMethod } from '../types';
-import type { Product, OrderCreate, User } from '../types';
+import type { Product, OrderCreate } from '../types';
 
 /** 购物车项目 */
 interface CartItem {
@@ -76,17 +76,11 @@ export const CreateOrderPage: React.FC = () => {
     const [equipments, setEquipments] = useState<Record<string, number>>(
         EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {})
     );
-    const [drivers, setDrivers] = useState<User[]>([]);
-    const [driversLoading, setDriversLoading] = useState(true);
-    const [selectedDriverId, setSelectedDriverId] = useState<string | undefined>(undefined);
 
-    // 加载产品和司机
+    // 加载产品
     useEffect(() => {
-        Promise.all([
-            ProductService.getAll(),
-            SuperAdminService.getUsers()
-        ])
-            .then(([productsData, usersData]) => {
+        ProductService.getAll()
+            .then((productsData) => {
                 const data = Array.isArray(productsData) ? productsData : [];
                 setProducts(data);
 
@@ -96,17 +90,10 @@ export const CreateOrderPage: React.FC = () => {
                     prices[p.id] = p.price || 0;
                 });
                 setCustomPrices(prices);
-
-                if (Array.isArray(usersData)) {
-                    setDrivers(usersData.filter(u => u.role === 'driver'));
-                } else {
-                    setDrivers([]);
-                }
             })
             .catch(err => console.error('Failed to load data', err))
             .finally(() => {
                 setProductsLoading(false);
-                setDriversLoading(false);
             });
     }, []);
 
@@ -226,12 +213,11 @@ export const CreateOrderPage: React.FC = () => {
                 amount: totalAmount,
                 type: address.trim() ? 'delivery' : 'takeaway',
                 paymentMethod: payment as PaymentMethod,
-                driverId: selectedDriverId,
+                driverId: undefined, // 強制不指派司机
                 equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
             };
 
             const order = await AdminOrderService.create(payload);
-            const assignedDriver = selectedDriverId ? drivers.find(d => d.id === selectedDriverId) : null;
             setConfirmedOrder({
                 orderId: order.id,
                 orderRef: orderRef.current,
@@ -246,7 +232,7 @@ export const CreateOrderPage: React.FC = () => {
                 payment,
                 items: [...cart],
                 equipments: { ...equipments },
-                driverName: assignedDriver?.name || assignedDriver?.email || '未指派',
+                driverName: '待指派',
                 dueTime: payload.dueTime,
                 createdAt: new Date().toLocaleString('zh-MY', { hour12: false }),
                 status: payload.status,
@@ -271,7 +257,6 @@ export const CreateOrderPage: React.FC = () => {
         setEventTime('');
         setPayment(PaymentMethod.CASH);
         setEquipments(EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {}));
-        setSelectedDriverId(undefined);
         setConfirmedOrder(null);
         orderRef.current = generateOrderRef();
     };
@@ -947,66 +932,7 @@ export const CreateOrderPage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* 指派配送员模块 */}
-                    <div className="bg-white rounded-[28px] shadow-sm border border-slate-100 overflow-hidden mt-4">
-                        <div className="p-5 border-b border-slate-50 flex justify-between items-center">
-                            <h3 className="font-black text-slate-700 text-sm flex items-center gap-2">
-                                <span className="material-icons-round text-[18px] text-teal-500">local_shipping</span>
-                                指派配送员
-                            </h3>
-                            {selectedDriverId && (
-                                <button
-                                    onClick={() => setSelectedDriverId(undefined)}
-                                    className="text-[10px] font-bold text-slate-400 hover:text-red-500 transition-colors"
-                                >
-                                    清除选择
-                                </button>
-                            )}
-                        </div>
-                        <div className="p-4">
-                            {driversLoading ? (
-                                <div className="text-center py-4 text-xs font-bold text-slate-400 flex items-center justify-center gap-2">
-                                    <span className="material-icons-round animate-spin text-sm">autorenew</span>
-                                    加载司机列表中...
-                                </div>
-                            ) : drivers.length === 0 ? (
-                                <div className="text-center py-4 text-xs font-bold text-slate-400">
-                                    暂无可用司机
-                                </div>
-                            ) : (
-                                <div className="grid grid-cols-1 gap-2 max-h-[220px] overflow-y-auto no-scrollbar pr-1">
-                                    {drivers.map(driver => (
-                                        <button
-                                            key={driver.id}
-                                            onClick={() => setSelectedDriverId(driver.id)}
-                                            className={`flex items-center gap-3 p-3 rounded-xl border text-left transition-all ${selectedDriverId === driver.id ? 'bg-teal-50 border-teal-300 shadow-sm' : 'bg-white border-slate-100 hover:border-slate-200'}`}
-                                        >
-                                            <div className="relative">
-                                                {driver.avatar_url ? (
-                                                    <img src={driver.avatar_url} alt={driver.name} className="w-10 h-10 rounded-full object-cover" />
-                                                ) : (
-                                                    <div className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-400">
-                                                        <span className="material-icons-round text-lg">person</span>
-                                                    </div>
-                                                )}
-                                                <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${driver.status === 'active' ? 'bg-green-500' : 'bg-slate-300'}`}></span>
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="text-sm font-bold text-slate-800 truncate">{driver.name || driver.email}</div>
-                                                <div className="text-[10px] font-bold text-slate-500 flex items-center gap-1 mt-0.5">
-                                                    <span className="material-icons-round text-[12px] text-slate-400">phone</span>
-                                                    {driver.phone || '无电话记录'}
-                                                </div>
-                                            </div>
-                                            {selectedDriverId === driver.id && (
-                                                <span className="material-icons-round text-teal-600">check_circle</span>
-                                            )}
-                                        </button>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+
 
                     {/* 提交按钮 */}
                     <button
