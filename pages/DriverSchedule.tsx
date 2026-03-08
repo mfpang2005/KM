@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { OrderService, UserService } from '../src/services/api';
+import { OrderService, UserService, api } from '../src/services/api';
 import { Order, OrderStatus, User } from '../types';
 import GoEasy from 'goeasy';
 import { supabase } from '../src/lib/supabase';
@@ -146,7 +146,9 @@ const DriverSchedule: React.FC = () => {
                     fetchOrders();
                 }
             )
-            .subscribe();
+            .subscribe((status) => {
+                console.log(`[Realtime] Order channel status: ${status}`);
+            });
 
         const timer = setInterval(() => {
             setNow(new Date());
@@ -523,47 +525,42 @@ const DriverSchedule: React.FC = () => {
 
     const handleDeclareVehicle = async (vehicle: Vehicle) => {
         try {
-            await supabase.from('vehicles').update({ status: 'busy' }).eq('id', vehicle.id);
+            // NOTE: 调用 Backend 统一重构后的 assign API
+            await api.post('/vehicles/assign', {
+                driver_id: userId,
+                vehicle_id: vehicle.id
+            });
+
             setSelectedVehicle(vehicle);
             setDeclaredTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
             setIsVehicleDeclaring(false);
-            if (userId) {
-                await UserService.updateProfile(userId, {
-                    vehicle_model: vehicle.model,
-                    vehicle_plate: vehicle.plate,
-                    vehicle_type: vehicle.type,
-                    vehicle_status: 'busy'
-                });
-            }
+
+            // 刷新本地数据
+            fetchUserProfile(userId!);
+            fetchVehicles();
         } catch (error) {
             console.error("Failed to declare vehicle", error);
+            alert('车辆指派失败，该车可能已被占用');
         }
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#f8f6f6] relative">
-            <header className="pt-12 pb-6 px-6 bg-white sticky top-0 z-30 shadow-sm flex items-center justify-between no-print">
+        <div className="flex flex-col h-full bg-[#0f172a] relative text-white">
+            <header className="pt-12 pb-6 px-6 bg-[#1e293b]/50 backdrop-blur-xl sticky top-0 z-30 border-b border-white/5 flex items-center justify-between no-print">
                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-primary/20 p-0.5">
-                        <img src={driverImg} className="w-full h-full object-cover rounded-full" alt="Driver" />
+                    <div className="w-12 h-12 rounded-2xl overflow-hidden border-2 border-primary/40 p-0.5 shadow-[0_0_20px_rgba(99,102,241,0.3)]">
+                        <img src={driverImg} className="w-full h-full object-cover rounded-xl" alt="Driver" />
                     </div>
                     <div>
-                        <h1 className="text-xl font-black text-slate-900">{driverName}, 你好!</h1>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-                            {currentView === 'tasks' ? `今日配送: ${taskOrders.length} 趟` : currentView === 'history' ? `累计交付: ${historyOrders.length} 趟` : '个人资料管理'}
+                        <h1 className="text-xl font-black text-white tracking-tight">{driverName}, 你好!</h1>
+                        <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-[0.2em]">
+                            {currentView === 'tasks' ? `ACTIVE MISSIONS: ${taskOrders.length}` : currentView === 'history' ? `COMPLETED: ${historyOrders.length}` : 'PROFILE SETTINGS'}
                         </p>
                     </div>
                 </div>
                 {currentView === 'tasks' && (
                     <div className="flex gap-2">
-                        <button onClick={() => { window.location.href = `tel:${driverPhone}`; }} className="w-10 h-10 bg-slate-900 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90">
-                            <span className="material-icons-round text-sm">headset_mic</span>
-                        </button>
-                        {/* GoEasy PTT 入口按钮 */}
-                        <button
-                            onClick={() => { if (!isPttOpen) startPttSession(); }}
-                            className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg active:scale-90 ${isPttOpen ? 'bg-primary text-white animate-pulse' : 'bg-white text-slate-400 border border-slate-100'
-                                }`}>
+                        <button onClick={() => { if (!isPttOpen) startPttSession(); }} className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all shadow-xl active:scale-90 ${isPttOpen ? 'bg-primary text-white animate-pulse' : 'bg-white/5 text-slate-400 border border-white/10'}`}>
                             <span className="material-icons-round text-sm">cell_tower</span>
                         </button>
                     </div>
@@ -576,82 +573,137 @@ const DriverSchedule: React.FC = () => {
                         {activeOrder && (
                             <section>
                                 <div className="flex items-center justify-between px-2 mb-3">
-                                    <h2 className="text-[10px] font-black text-primary uppercase tracking-widest">正在配送 (ACTIVE)</h2>
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{activeOrder.dueTime} 交付</span>
+                                    <h2 className="text-[10px] font-black text-indigo-400 uppercase tracking-widest">正在配送 / Active Mission</h2>
+                                    <span className="text-[10px] font-mono font-black text-rose-500 uppercase tracking-widest animate-pulse">{activeOrder.dueTime} DEADLINE</span>
                                 </div>
-                                <div className="bg-white rounded-[40px] shadow-2xl border border-slate-100 overflow-hidden relative">
-                                    <div className={`px-6 py-2 flex items-center justify-between transition-colors ${notifiedOrders.has(activeOrder.id) ? 'bg-green-500 text-white' : isNoticeTime ? 'bg-orange-500 text-white animate-pulse' : 'bg-slate-100 text-slate-400'}`}>
+                                <div className="relative rounded-[40px] overflow-hidden group active:scale-[0.98] transition-transform"
+                                    style={{
+                                        background: 'rgba(255,255,255,0.03)',
+                                        backdropFilter: 'blur(30px)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)'
+                                    }}>
+
+                                    {/* Mission Progress Bar Top */}
+                                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-white/5">
+                                        <div className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-1000"
+                                            style={{ width: activeOrder.status === OrderStatus.DELIVERING ? '66%' : '33%' }} />
+                                    </div>
+
+                                    <div className={`px-6 py-3 flex items-center justify-between transition-colors ${notifiedOrders.has(activeOrder.id) ? 'bg-[#10b981]/10 text-[#10b981]' : isNoticeTime ? 'bg-orange-500/10 text-orange-400 animate-pulse' : 'bg-white/5 text-slate-500'}`}>
                                         <div className="flex items-center gap-2">
-                                            <span className="material-icons-round text-sm">{notifiedOrders.has(activeOrder.id) ? 'check_circle' : 'notifications'}</span>
-                                            <span className="text-[10px] font-black uppercase tracking-wider">
-                                                {notifiedOrders.has(activeOrder.id) ? '已告知客人即将抵达' : isNoticeTime ? '建议发送抵达预告' : '系统监控中...'}
+                                            <span className="material-icons-round text-[14px]">{notifiedOrders.has(activeOrder.id) ? 'check_circle' : 'sensors'}</span>
+                                            <span className="text-[9px] font-black uppercase tracking-[0.2em]">
+                                                {notifiedOrders.has(activeOrder.id) ? 'STATUS: NOTIFIED' : isNoticeTime ? 'WARNING: NEAR DELIVERY' : 'STATUS: TRACKING'}
                                             </span>
                                         </div>
                                     </div>
-                                    <div className="p-6 bg-white space-y-6">
+
+                                    <div className="p-7 space-y-6">
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <h3 className="text-2xl font-black text-slate-900 tracking-tight">{activeOrder.customerName}</h3>
-                                                <p className="text-[10px] font-black text-slate-300 uppercase mt-1 tracking-widest">ORDER: {activeOrder.id}</p>
+                                                <h3 className="text-3xl font-black text-white tracking-tight leading-none mb-2">{activeOrder.customerName}</h3>
+                                                <p className="text-[10px] font-mono font-black text-slate-500 uppercase tracking-[0.3em]">ID-{activeOrder.id.slice(0, 8)}</p>
                                             </div>
-                                            <button onClick={() => setSelectedOrder(activeOrder)} className="w-12 h-12 bg-slate-50 rounded-2xl flex items-center justify-center text-slate-400 border border-slate-100 active:scale-95 transition-transform">
-                                                <span className="material-icons-round">inventory_2</span>
-                                            </button>
+                                            <div className="flex flex-col items-center">
+                                                <span className="text-[8px] font-black text-indigo-400 uppercase mb-1">Items</span>
+                                                <button onClick={() => setSelectedOrder(activeOrder)} className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white border border-white/10 active:scale-90 transition-all hover:bg-white/10">
+                                                    <span className="material-icons-round">inventory_2</span>
+                                                </button>
+                                            </div>
                                         </div>
 
 
                                         // ... (in component)
-                                        <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100/50">
-                                            <span className="material-icons-round text-primary mt-0.5">place</span>
+                                        <div className="flex items-start gap-4 p-5 bg-white/5 rounded-[24px] border border-white/5">
+                                            <span className="material-icons-round text-indigo-400 mt-1">place</span>
                                             <div className="flex-1">
-                                                <p className="text-xs font-bold text-slate-600 leading-relaxed">{activeOrder.address}</p>
-                                                <a
-                                                    href={getGoogleMapsUrl(activeOrder.address)}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="inline-flex items-center gap-1 mt-2 text-[10px] font-black text-blue-600 uppercase tracking-wider bg-blue-50 px-2 py-1 rounded-lg active:scale-95 transition-transform"
-                                                >
-                                                    <span className="material-icons-round text-xs">navigation</span>
-                                                    Google Maps 导航
-                                                </a>
+                                                <p className="text-[13px] font-bold text-slate-300 leading-relaxed">{activeOrder.address}</p>
+                                                <div className="flex gap-2 mt-4">
+                                                    <a
+                                                        href={getGoogleMapsUrl(activeOrder.address)}
+                                                        target="_blank"
+                                                        rel="noopener noreferrer"
+                                                        className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-500/10 text-indigo-400 rounded-xl text-[10px] font-black uppercase tracking-wider border border-indigo-500/20 active:scale-95 transition-all"
+                                                    >
+                                                        <span className="material-icons-round text-xs">navigation</span>
+                                                        Google Maps
+                                                    </a>
+                                                    <button onClick={() => { window.location.href = `tel:${activeOrder.customerPhone}`; }} className="inline-flex items-center gap-2 px-4 py-2 bg-white/5 text-white rounded-xl text-[10px] font-black uppercase tracking-wider border border-white/10 active:scale-95 transition-all">
+                                                        <span className="material-icons-round text-xs">phone</span>
+                                                        拨号
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
-                                        <div className="grid grid-cols-2 gap-3">
-                                            <button onClick={() => handleWhatsApp(activeOrder, 'arrival')} className={`py-4 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase tracking-wider transition-all border-2 ${notifiedOrders.has(activeOrder.id) ? 'bg-green-50 border-green-100 text-green-600' : 'bg-primary/5 border-primary text-primary shadow-lg shadow-primary/10'}`}>
-                                                <span className="material-icons-round text-sm">near_me</span> 抵达预告
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); /* Photo Logic would go here */ alert('Camera module activated'); }}
+                                                className="h-16 bg-white/5 text-white rounded-3xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 border border-white/10 active:scale-95 transition-all group"
+                                            >
+                                                <span className="material-icons-round text-lg text-indigo-400 group-active:scale-125 transition-transform">camera_alt</span>
+                                                Photo
                                             </button>
-                                            <button onClick={() => { window.location.href = `tel:${activeOrder.customerPhone}`; }} className="py-4 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center gap-2 text-xs font-black uppercase border border-blue-100">
-                                                <span className="material-icons-round text-sm">phone</span> 拨号
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); handleUpdateStatus(activeOrder.id, OrderStatus.COMPLETED); }}
+                                                className="h-16 bg-gradient-to-r from-[#10b981] to-[#059669] text-white rounded-3xl font-black text-[10px] uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-[0_10px_30px_rgba(16,185,129,0.3)] active:scale-95 transition-all group"
+                                            >
+                                                <span className="material-icons-round text-lg group-active:translate-x-1 transition-transform">task_alt</span>
+                                                Complete
                                             </button>
                                         </div>
-                                        {activeOrder.status === OrderStatus.READY ? (
-                                            <button onClick={() => handleUpdateStatus(activeOrder.id, OrderStatus.DELIVERING)} className="w-full py-5 bg-blue-600 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
-                                                <span className="material-icons-round">local_shipping</span> 装车出发 (START)
-                                            </button>
-                                        ) : (
-                                            <button onClick={() => navigate('/driver/confirm', { state: { orderId: activeOrder.id } })} className="w-full py-5 bg-slate-900 text-white rounded-[24px] font-black text-sm uppercase tracking-widest shadow-xl active:scale-95 transition-all flex items-center justify-center gap-3">
-                                                <span className="material-icons-round">camera_alt</span> 交付拍照 (FINISH)
-                                            </button>
-                                        )}
+
+                                        <div className="grid grid-cols-1 gap-4">
+                                            {/* Unified Start/Finish Action with Gradient */}
+                                            {activeOrder.status === OrderStatus.READY ? (
+                                                <button
+                                                    onClick={() => handleUpdateStatus(activeOrder.id, OrderStatus.DELIVERING)}
+                                                    className="w-full h-16 bg-gradient-to-r from-indigo-600 to-violet-600 text-white rounded-[24px] font-black text-sm uppercase tracking-[0.2em] shadow-[0_15px_30px_rgba(99,102,241,0.3)] active:scale-95 transition-all flex items-center justify-center gap-4 border border-white/10"
+                                                >
+                                                    <span className="material-icons-round text-xl">local_shipping</span>
+                                                    START DELIVERY
+                                                </button>
+                                            ) : (
+                                                <div className="flex gap-3">
+                                                    <button
+                                                        onClick={() => handleWhatsApp(activeOrder, 'arrival')}
+                                                        className={`flex-[0.4] h-16 rounded-[24px] flex flex-col items-center justify-center border-2 transition-all active:scale-95 ${notifiedOrders.has(activeOrder.id) ? 'bg-[#10b981]/10 border-[#10b981]/40 text-[#10b981]' : 'bg-white/5 border-white/10 text-slate-400'}`}
+                                                    >
+                                                        <span className="material-icons-round text-sm mb-1">near_me</span>
+                                                        <span className="text-[8px] font-black uppercase tracking-[0.1em]">Notify</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={() => navigate('/driver/confirm', { state: { orderId: activeOrder.id } })}
+                                                        className="flex-1 h-16 bg-white text-slate-900 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl active:scale-95 transition-all flex items-center justify-center gap-3"
+                                                    >
+                                                        <span className="material-icons-round text-xl">camera_alt</span>
+                                                        COMPLETE
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             </section>
                         )}
                         {upcomingOrders.length > 0 && (
                             <section className="space-y-4">
-                                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">后续排程 (NEXT)</h2>
+                                <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest px-2">后续排程 / Incoming</h2>
                                 <div className="space-y-3">
                                     {upcomingOrders.map(order => (
-                                        <div key={order.id} className="bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all" onClick={() => setSelectedOrder(order)}>
-                                            <div className="w-12 h-12 bg-slate-50 rounded-2xl flex flex-col items-center justify-center border border-slate-100">
-                                                <span className="text-[14px] font-black text-slate-800 leading-none">{order.dueTime.split(':')[0]}</span>
-                                                <span className="text-[8px] font-black text-slate-400 uppercase mt-0.5">PM</span>
+                                        <div key={order.id} className="group p-6 rounded-[32px] border border-white/5 active:scale-[0.98] transition-all flex items-center gap-5"
+                                            style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(10px)' }}
+                                            onClick={() => setSelectedOrder(order)}>
+                                            <div className="w-14 h-14 bg-white/5 rounded-2xl flex flex-col items-center justify-center border border-white/5">
+                                                <span className="text-[16px] font-mono font-black text-white leading-none">{order.dueTime.split(':')[0]}</span>
+                                                <span className="text-[8px] font-black text-indigo-400 uppercase mt-1">PM</span>
                                             </div>
-                                            <div className="flex-1">
-                                                <h4 className="text-xs font-black text-slate-800">{order.customerName}</h4>
-                                                <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5 truncate max-w-[150px]">{order.address}</p>
+                                            <div className="flex-1 min-w-0">
+                                                <h4 className="text-sm font-black text-white truncate">{order.customerName}</h4>
+                                                <p className="text-[10px] text-slate-500 font-bold uppercase mt-1 truncate">{order.address}</p>
                                             </div>
-                                            <span className="material-icons-round text-slate-200">chevron_right</span>
+                                            <span className="material-icons-round text-slate-700 group-hover:text-white transition-colors">chevron_right</span>
                                         </div>
                                     ))}
                                 </div>
@@ -661,24 +713,26 @@ const DriverSchedule: React.FC = () => {
                 )}
 
                 {currentView === 'history' && (
-                    <section className="space-y-4 animate-in fade-in duration-300">
+                    <section className="space-y-5 animate-in fade-in duration-500">
                         <div className="flex items-center justify-between px-2">
-                            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">历史交付记录 (PAST DELIVERIES)</h2>
+                            <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">历史交付 / Record</h2>
                         </div>
                         <div className="space-y-3">
                             {historyOrders.map(order => (
-                                <div key={order.id} className="bg-white p-5 rounded-[32px] border border-slate-100 shadow-sm flex items-center gap-4 active:scale-[0.98] transition-all" onClick={() => setSelectedOrder(order)}>
-                                    <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center text-green-600 border border-green-100">
-                                        <span className="material-icons-round">task_alt</span>
+                                <div key={order.id} className="group p-6 rounded-[32px] border border-white/5 active:scale-[0.98] transition-all flex items-center gap-5"
+                                    style={{ background: 'rgba(255,255,255,0.02)', backdropFilter: 'blur(10px)' }}
+                                    onClick={() => setSelectedOrder(order)}>
+                                    <div className="w-14 h-14 bg-emerald-500/10 rounded-2xl flex items-center justify-center text-emerald-400 border border-emerald-500/20 shadow-[0_0_20px_rgba(16,185,129,0.1)]">
+                                        <span className="material-icons-round text-xl">done_all</span>
                                     </div>
-                                    <div className="flex-1">
+                                    <div className="flex-1 min-w-0">
                                         <div className="flex justify-between items-start">
-                                            <h4 className="text-xs font-black text-slate-800">{order.customerName}</h4>
-                                            <span className="text-[10px] font-black text-primary">RM {order.amount.toFixed(2)}</span>
+                                            <h4 className="text-sm font-black text-white truncate pr-2">{order.customerName}</h4>
+                                            <span className="text-xs font-mono font-black text-indigo-400">RM {order.amount.toFixed(2)}</span>
                                         </div>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase mt-0.5">{order.id} • 已完成</p>
+                                        <p className="text-[9px] text-slate-500 font-bold uppercase mt-1">MISSION COMPLETED • {order.id.slice(0, 8)}</p>
                                     </div>
-                                    <span className="material-icons-round text-slate-200">chevron_right</span>
+                                    <span className="material-icons-round text-slate-700 group-hover:text-white transition-colors">chevron_right</span>
                                 </div>
                             ))}
                         </div>
@@ -686,89 +740,90 @@ const DriverSchedule: React.FC = () => {
                 )}
 
                 {currentView === 'profile' && (
-                    <section className="space-y-6 animate-in fade-in duration-300 pb-10">
-                        <div className="bg-slate-900 rounded-[40px] p-8 text-white relative overflow-hidden shadow-2xl">
-                            <div className="absolute top-0 right-0 p-6 opacity-10">
-                                <span className="material-icons-round text-8xl">local_shipping</span>
-                            </div>
-                            <div className="flex flex-col items-center mb-6 relative z-10">
-                                <div className="relative group">
-                                    <img src={driverImg} className="w-24 h-24 rounded-full object-cover border-4 border-primary/20 shadow-xl" alt="Driver Profile" />
-                                    <label className="absolute bottom-0 right-0 bg-primary w-9 h-9 rounded-full flex items-center justify-center cursor-pointer shadow-lg active:scale-90 transition-transform">
-                                        <span className="material-icons-round text-white text-sm">camera_alt</span>
+                    <section className="space-y-8 animate-in fade-in duration-500 pb-16">
+                        <div className="bg-gradient-to-br from-indigo-900/40 to-slate-900/60 rounded-[48px] p-10 text-white relative overflow-hidden border border-white/5 shadow-2xl">
+                            {/* Decorative Blur */}
+                            <div className="absolute -top-10 -right-10 w-40 h-40 bg-indigo-600/20 rounded-full blur-3xl" />
+
+                            <div className="flex flex-col items-center mb-8 relative z-10">
+                                <div className="relative">
+                                    <div className="absolute inset-0 bg-indigo-500/20 blur-2xl rounded-full scale-110" />
+                                    <img src={driverImg} className="w-28 h-28 rounded-[40px] object-cover border-2 border-white/10 shadow-2xl relative z-10" alt="Driver Profile" />
+                                    <label className="absolute -bottom-2 -right-2 bg-white w-10 h-10 rounded-2xl flex items-center justify-center cursor-pointer shadow-xl text-slate-900 active:scale-90 transition-transform z-20 border border-white/10">
+                                        <span className="material-icons-round text-lg">camera_alt</span>
                                         <input type="file" className="hidden" accept="image/*" onChange={handleImageChange} />
                                     </label>
                                 </div>
-                                <div className="mt-4 text-center">
-                                    <h2 className="text-2xl font-black tracking-tight">{driverName}</h2>
-                                    <p className="text-[10px] text-primary font-black uppercase tracking-widest">认证司机 ID: #D-88219</p>
+                                <div className="mt-6 text-center">
+                                    <h2 className="text-3xl font-black tracking-tight mb-1">{driverName}</h2>
+                                    <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.4em]">RANK: CERTIFIED DRIVER</p>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-4 relative z-10">
-                                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">本月评分</p>
-                                    <div className="flex items-center gap-1">
-                                        <span className="text-xl font-black">4.9</span>
-                                        <span className="material-icons-round text-yellow-500 text-sm">star</span>
+                                <div className="bg-white/5 rounded-3xl p-5 border border-white/5 backdrop-blur-md">
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-2">Rating</p>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-2xl font-mono font-black">4.9</span>
+                                        <span className="material-icons-round text-amber-500 text-[16px]">star</span>
                                     </div>
                                 </div>
-                                <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
-                                    <p className="text-[9px] text-slate-400 font-bold uppercase mb-1">准点率</p>
-                                    <p className="text-xl font-black text-green-400">98%</p>
+                                <div className="bg-white/5 rounded-3xl p-5 border border-white/5 backdrop-blur-md">
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-2">Punctuality</p>
+                                    <p className="text-2xl font-mono font-black text-[#10b981]">98%</p>
                                 </div>
                             </div>
                         </div>
 
-                        <div className="bg-white rounded-[32px] p-6 border border-slate-100 space-y-4 shadow-sm">
-                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">个人资料设定</h3>
-                            <div className="space-y-4">
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-black text-slate-300 uppercase ml-2 tracking-widest">姓名 (NAME)</label>
-                                    <input value={driverName} onChange={e => setDriverName(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:bg-white focus:border-primary/20 transition-all outline-none" placeholder="输入姓名" />
+                        <div className="bg-white/5 rounded-[40px] p-8 border border-white/5 space-y-6 backdrop-blur-sm">
+                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] pl-2">Account Settings</h3>
+                            <div className="space-y-5">
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-indigo-400 uppercase ml-2 tracking-widest">Real Name</label>
+                                    <input value={driverName} onChange={e => setDriverName(e.target.value)} className="w-full h-14 px-6 bg-white/5 border border-white/5 rounded-2xl text-sm font-bold text-white focus:bg-white/10 focus:border-indigo-500/30 transition-all outline-none" />
                                 </div>
-                                <div className="space-y-1">
-                                    <label className="text-[9px] font-black text-slate-300 uppercase ml-2 tracking-widest">电话号码 (PHONE)</label>
-                                    <input value={driverPhone} onChange={e => setDriverPhone(e.target.value)} className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl text-xs font-bold focus:bg-white focus:border-primary/20 transition-all outline-none" placeholder="输入电话号码" />
+                                <div className="space-y-2">
+                                    <label className="text-[9px] font-black text-indigo-400 uppercase ml-2 tracking-widest">Contact Phone</label>
+                                    <input value={driverPhone} onChange={e => setDriverPhone(e.target.value)} className="w-full h-14 px-6 bg-white/5 border border-white/5 rounded-2xl text-sm font-bold text-white focus:bg-white/10 focus:border-indigo-500/30 transition-all outline-none" />
                                 </div>
                                 <button
                                     onClick={saveProfile}
                                     disabled={isSavingProfile}
-                                    className="w-full py-4 bg-primary text-white rounded-xl font-black text-xs uppercase shadow-md active:scale-95 transition-all disabled:opacity-50"
+                                    className="w-full h-16 bg-white text-slate-900 rounded-2xl font-black text-sm uppercase tracking-[0.2em] shadow-xl active:scale-[0.98] transition-all disabled:opacity-50 mt-4"
                                 >
-                                    {isSavingProfile ? '保存中...' : '保存资料'}
+                                    {isSavingProfile ? 'UPDATING...' : 'SAVE PROFILE'}
                                 </button>
                             </div>
                         </div>
 
                         {/* Vehicle Selection Section */}
-                        <div className="space-y-2">
-                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-2">车辆信息</h3>
+                        <div className="space-y-3">
+                            <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] pl-2">Vehicle Assets</h3>
                             <button
                                 onClick={() => setIsVehicleDeclaring(true)}
-                                className={`w-full bg-white rounded-[32px] p-6 border transition-all flex items-center justify-between text-left group active:scale-[0.98] ${declaredTime ? 'border-primary/30 ring-4 ring-primary/5' : 'border-slate-100'}`}
+                                className={`w-full bg-white/5 rounded-[40px] p-8 border transition-all flex items-center justify-between text-left group active:scale-[0.98] ${declaredTime ? 'border-primary/40 ring-4 ring-primary/10' : 'border-white/5'}`}
                             >
-                                <div className="flex items-center gap-4">
-                                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${declaredTime ? 'bg-primary text-white' : 'bg-slate-50 text-slate-400'}`}>
-                                        <span className="material-icons-round">local_shipping</span>
+                                <div className="flex items-center gap-5">
+                                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors shadow-lg ${declaredTime ? 'bg-indigo-500 text-white' : 'bg-white/5 text-slate-500'}`}>
+                                        <span className="material-icons-round text-2xl">local_shipping</span>
                                     </div>
                                     <div>
-                                        <p className="text-sm font-black text-slate-800">{selectedVehicle?.model || '未选择车辆'}</p>
-                                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{selectedVehicle?.plate || '-'} • {selectedVehicle?.type || '-'}</p>
+                                        <p className="text-lg font-black text-white leading-tight">{selectedVehicle?.model || 'No Vehicle'}</p>
+                                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest mt-1">{selectedVehicle?.plate || '-'} • {selectedVehicle?.type || '-'}</p>
                                         {declaredTime && (
-                                            <p className="text-[8px] text-primary font-black uppercase mt-1">已申报使用: {declaredTime}</p>
+                                            <p className="text-[9px] text-emerald-400 font-black uppercase mt-2 tracking-widest flex items-center gap-1">
+                                                <span className="w-1 h-1 bg-emerald-400 rounded-full animate-pulse" />
+                                                Active Since {declaredTime}
+                                            </p>
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex flex-col items-end gap-1">
-                                    <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-md ${selectedVehicle?.status === 'repair' || selectedVehicle?.status === 'maintenance' ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-600'}`}>
-                                        {selectedVehicle?.status === 'repair' || selectedVehicle?.status === 'maintenance' ? '维保中' : '运行良好'}
+                                <div className="flex flex-col items-end gap-2">
+                                    <span className={`text-[8px] font-black uppercase px-2 py-1 rounded-lg ${selectedVehicle?.status === 'repair' || selectedVehicle?.status === 'maintenance' ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-400'}`}>
+                                        {selectedVehicle?.status === 'repair' || selectedVehicle?.status === 'maintenance' ? 'OUT OF SVC' : 'READY'}
                                     </span>
-                                    <span className="text-[10px] font-black text-slate-300 group-hover:text-primary transition-colors">修改车辆</span>
+                                    <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest group-hover:scale-110 transition-transform">Update</span>
                                 </div>
                             </button>
-                            <p className="text-[9px] text-primary font-bold text-center mt-2 uppercase tracking-tighter">
-                                加入选择车辆 每次使用都必须申报
-                            </p>
                         </div>
 
                         <div className="bg-white rounded-[32px] border border-slate-100 overflow-hidden shadow-sm">
@@ -793,48 +848,50 @@ const DriverSchedule: React.FC = () => {
 
             {/* Vehicle Declaration Modal */}
             {isVehicleDeclaring && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[110] flex flex-col justify-end animate-in fade-in duration-300 no-print">
-                    <div className="bg-white w-full max-w-md mx-auto rounded-t-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[85vh] flex flex-col">
-                        <header className="flex justify-between items-start mb-8 flex-shrink-0">
+                <div className="fixed inset-0 bg-[#0f172a]/80 backdrop-blur-2xl z-[110] flex flex-col justify-end animate-in fade-in duration-500 no-print">
+                    <div className="bg-[#1e293b] w-full max-w-md mx-auto rounded-t-[48px] p-10 shadow-[0_-20px_80px_rgba(0,0,0,0.8)] border-t border-white/10 animate-in slide-in-from-bottom duration-500 max-h-[90vh] flex flex-col">
+                        <header className="flex justify-between items-start mb-10 flex-shrink-0">
                             <div>
-                                <h2 className="text-2xl font-black text-slate-900 tracking-tight">车辆申报中心</h2>
-                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1">请选择今日配送使用的车辆</p>
+                                <h2 className="text-3xl font-black text-white tracking-tight">Vehicle Assets</h2>
+                                <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.3em] mt-2">Deploy your transport for today's mission</p>
                             </div>
-                            <button onClick={() => setIsVehicleDeclaring(false)} className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 active:scale-90 shadow-sm">
+                            <button onClick={() => setIsVehicleDeclaring(false)} className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-slate-400 active:scale-90 border border-white/10 transition-all">
                                 <span className="material-icons-round">close</span>
                             </button>
                         </header>
-                        <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-6">
+
+                        <div className="flex-1 overflow-y-auto no-scrollbar space-y-4 pb-10">
                             {vehicles.map(v => (
                                 <button
                                     key={v.id}
                                     onClick={() => handleDeclareVehicle(v)}
                                     disabled={v.status === 'maintenance' || v.status === 'repair'}
-                                    className={`w-full p-6 rounded-[32px] border transition-all text-left flex items-center justify-between group active:scale-[0.98] ${selectedVehicle?.id === v.id ? 'bg-primary/5 border-primary shadow-lg shadow-primary/5' : 'bg-slate-50 border-slate-100'}`}
+                                    className={`w-full p-8 rounded-[36px] border transition-all text-left flex items-center justify-between group active:scale-[0.98] ${selectedVehicle?.id === v.id ? 'bg-indigo-600 border-indigo-500 shadow-2xl shadow-indigo-600/20' : 'bg-white/5 border-white/5 hover:bg-white/10'}`}
                                 >
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${selectedVehicle?.id === v.id ? 'bg-primary text-white' : 'bg-white text-slate-300'}`}>
+                                    <div className="flex items-center gap-6">
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-colors ${selectedVehicle?.id === v.id ? 'bg-white text-indigo-600' : 'bg-white/5 text-slate-500'}`}>
                                             <span className="material-icons-round text-2xl">local_shipping</span>
                                         </div>
                                         <div>
-                                            <h4 className={`text-sm font-black ${selectedVehicle?.id === v.id ? 'text-slate-900' : 'text-slate-700'}`}>{v.model}</h4>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{v.plate} • {v.type}</p>
+                                            <h4 className={`text-base font-black ${selectedVehicle?.id === v.id ? 'text-white' : 'text-slate-200'}`}>{v.model}</h4>
+                                            <p className={`text-[10px] font-bold uppercase tracking-widest mt-1 ${selectedVehicle?.id === v.id ? 'text-indigo-200' : 'text-slate-500'}`}>{v.plate} • {v.type}</p>
                                         </div>
                                     </div>
                                     {v.status === 'maintenance' || v.status === 'repair' ? (
-                                        <span className="bg-red-50 text-red-500 text-[8px] font-black uppercase px-2 py-1 rounded-md">维保中</span>
+                                        <span className="bg-rose-500/20 text-rose-500 text-[8px] font-black uppercase px-3 py-1.5 rounded-xl border border-rose-500/20 tracking-widest">In Repair</span>
                                     ) : (
-                                        <span className={`text-[10px] font-black uppercase ${selectedVehicle?.id === v.id ? 'text-primary' : 'text-slate-300'}`}>
-                                            {selectedVehicle?.id === v.id ? '正在使用' : '选择此车'}
-                                        </span>
+                                        <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedVehicle?.id === v.id ? 'border-white bg-white text-indigo-600' : 'border-slate-700'}`}>
+                                            {selectedVehicle?.id === v.id && <span className="material-icons-round text-[14px]">check</span>}
+                                        </div>
                                     )}
                                 </button>
                             ))}
                         </div>
-                        <div className="bg-orange-50 p-5 rounded-3xl border border-orange-100 mb-6 flex items-start gap-3">
-                            <span className="material-icons-round text-orange-500 text-sm mt-0.5">info</span>
-                            <p className="text-[10px] text-orange-700 font-bold leading-relaxed uppercase">
-                                根据公司规定，每次开始配送前必须进行车辆申报，以确保物流追踪的准确性与安全性。
+
+                        <div className="bg-indigo-500/10 p-6 rounded-[32px] border border-indigo-500/20 mb-6 flex items-start gap-4">
+                            <span className="material-icons-round text-indigo-400 text-lg">info</span>
+                            <p className="text-[10px] text-indigo-300 font-bold leading-relaxed uppercase tracking-wider">
+                                Mandatory: You must declare the active vehicle before starting any mission to ensure real-time tracking accuracy.
                             </p>
                         </div>
                     </div>
@@ -957,77 +1014,83 @@ const DriverSchedule: React.FC = () => {
             )}
 
             {selectedOrder && (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[110] flex flex-col justify-end animate-in fade-in duration-300 no-print">
-                    <div className="bg-white w-full max-w-md mx-auto rounded-t-[48px] p-8 shadow-2xl animate-in slide-in-from-bottom duration-300 max-h-[88vh] flex flex-col">
-                        <header className="flex justify-between items-start mb-8 flex-shrink-0">
+                <div className="fixed inset-0 bg-[#0f172a]/80 backdrop-blur-2xl z-[110] flex flex-col justify-end animate-in fade-in duration-500 no-print">
+                    <div className="bg-[#1e293b] w-full max-w-md mx-auto rounded-t-[48px] p-10 shadow-[0_-20px_80px_rgba(0,0,0,0.8)] border-t border-white/10 animate-in slide-in-from-bottom duration-500 max-h-[92vh] flex flex-col">
+                        <header className="flex justify-between items-start mb-10 flex-shrink-0">
                             <div>
-                                <h2 className="text-2xl font-black text-slate-900 tracking-tight">配送单明细</h2>
-                                <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1">NO: {selectedOrder.id} • {selectedOrder.status === OrderStatus.COMPLETED ? '已完成' : '待处理'}</p>
+                                <h2 className="text-3xl font-black text-white tracking-tight">Mission Brief</h2>
+                                <p className="text-[10px] text-indigo-400 font-black uppercase tracking-[0.3em] mt-2">NO: {selectedOrder.id.slice(0, 12)} • {selectedOrder.status.toUpperCase()}</p>
                             </div>
-                            <button onClick={() => setSelectedOrder(null)} className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-transform shadow-sm">
+                            <button onClick={() => setSelectedOrder(null)} className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-slate-400 active:scale-90 border border-white/10 shadow-sm">
                                 <span className="material-icons-round">close</span>
                             </button>
                         </header>
-                        <div className="flex-1 overflow-y-auto no-scrollbar space-y-6">
-                            <div className="space-y-3">
-                                <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">收货方资料</h4>
-                                <div className="bg-slate-50 p-5 rounded-[28px] border border-slate-100/50 space-y-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm border border-slate-50">
-                                            <span className="material-icons-round text-sm">person</span>
+
+                        <div className="flex-1 overflow-y-auto no-scrollbar space-y-8">
+                            <div className="space-y-4">
+                                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] pl-1">Destination Info</h4>
+                                <div className="bg-white/5 p-6 rounded-[32px] border border-white/5 space-y-6">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-10 h-10 bg-indigo-500/20 rounded-xl flex items-center justify-center text-indigo-400 border border-indigo-500/20">
+                                            <span className="material-icons-round text-lg">person</span>
                                         </div>
-                                        <span className="text-sm font-black text-slate-800">{selectedOrder.customerName}</span>
+                                        <span className="text-base font-black text-white">{selectedOrder.customerName}</span>
                                     </div>
-                                    <div className="flex items-start gap-3">
-                                        <div className="w-8 h-8 bg-white rounded-xl flex items-center justify-center text-primary shadow-sm border border-slate-50 shrink-0">
-                                            <span className="material-icons-round text-sm">place</span>
+                                    <div className="flex items-start gap-4">
+                                        <div className="w-10 h-10 bg-white/5 rounded-xl flex items-center justify-center text-slate-500 shrink-0 border border-white/10">
+                                            <span className="material-icons-round text-lg">place</span>
                                         </div>
                                         <div className="flex-1">
-                                            <span className="text-xs font-bold text-slate-500 leading-relaxed block">{selectedOrder.address}</span>
+                                            <span className="text-sm font-bold text-slate-400 leading-relaxed block">{selectedOrder.address}</span>
                                             <a
                                                 href={getGoogleMapsUrl(selectedOrder.address)}
                                                 target="_blank"
                                                 rel="noopener noreferrer"
-                                                className="inline-flex items-center gap-1 mt-1 text-[9px] font-black text-blue-500 uppercase tracking-wider"
+                                                className="inline-flex items-center gap-2 mt-3 text-[10px] font-black text-indigo-400 uppercase tracking-widest bg-indigo-500/10 px-3 py-1.5 rounded-lg border border-indigo-500/10 hover:bg-indigo-500/20 transition-all"
                                             >
-                                                <span className="material-icons-round text-[10px]">open_in_new</span>
-                                                打开地图
+                                                <span className="material-icons-round text-xs">open_in_new</span>
+                                                Navigate
                                             </a>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div className="space-y-3">
-                                <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">菜品清单 (ITEMS)</h4>
-                                <div className="bg-white border border-slate-100 rounded-[28px] divide-y divide-slate-50 overflow-hidden shadow-sm">
+
+                            <div className="space-y-4">
+                                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] pl-1">Payload / Items</h4>
+                                <div className="bg-white/5 border border-white/5 rounded-[32px] divide-y divide-white/5 overflow-hidden">
                                     {selectedOrder.items.map((item, idx) => (
-                                        <div key={idx} className="p-4 flex justify-between items-center">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-300 border border-slate-50">
-                                                    <span className="material-icons-round text-sm">fastfood</span>
+                                        <div key={idx} className="p-6 flex justify-between items-center group hover:bg-white/5 transition-colors">
+                                            <div className="flex items-center gap-5">
+                                                <div className="w-12 h-12 bg-white/5 rounded-2xl flex items-center justify-center text-slate-500 border border-white/5">
+                                                    <span className="material-icons-round">restaurant</span>
                                                 </div>
-                                                <span className="text-sm font-bold text-slate-700">{item.name}</span>
+                                                <span className="text-sm font-black text-slate-200">{item.name}</span>
                                             </div>
-                                            <span className="text-xs font-black text-primary">x {item.quantity}</span>
+                                            <div className="px-4 py-2 bg-indigo-600/20 rounded-xl border border-indigo-600/20">
+                                                <span className="text-xs font-mono font-black text-indigo-400">x{item.quantity}</span>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
                             </div>
-                            <div className="bg-slate-900 p-6 rounded-[32px] text-white flex justify-between items-center shadow-xl shadow-slate-900/20">
-                                <div>
-                                    <p className="text-[9px] font-black text-primary uppercase tracking-widest mb-1">应收金额 (PORTABLE)</p>
-                                    <h4 className="text-3xl font-black tracking-tighter">RM {selectedOrder.amount.toFixed(2)}</h4>
+
+                            <div className="bg-white p-8 rounded-[40px] text-slate-900 flex justify-between items-center shadow-[0_20px_50px_rgba(255,255,255,0.05)]">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Total Amount Receivable</p>
+                                    <h4 className="text-4xl font-mono font-black tracking-tighter">RM {selectedOrder.amount.toFixed(2)}</h4>
                                 </div>
-                                <div className="text-right">
-                                    <span className="bg-white/10 px-3 py-1 rounded-full text-[9px] font-black uppercase border border-white/5">支付方式: 现金/到付</span>
+                                <div className="flex flex-col items-end gap-2">
+                                    <span className="bg-slate-100 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase text-slate-500 border border-slate-200">CASH ON DLV</span>
                                 </div>
                             </div>
                         </div>
-                        <div className="pt-6 flex gap-3">
-                            <button onClick={() => setSelectedOrder(null)} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">关闭详情</button>
+
+                        <div className="pt-10 flex gap-4">
+                            <button onClick={() => setSelectedOrder(null)} className="flex-1 h-16 bg-white/5 text-slate-400 rounded-2xl font-black text-xs uppercase tracking-[0.2em] border border-white/10 active:scale-95 transition-all">Dismiss</button>
                             {selectedOrder.status !== OrderStatus.COMPLETED && (
-                                <button onClick={() => { handleWhatsApp(selectedOrder); setSelectedOrder(null); }} className="px-6 py-4 bg-green-500 text-white rounded-2xl font-black text-xs uppercase shadow-lg shadow-green-200 active:scale-95 transition-all">
-                                    <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-5 h-5" alt="WA" />
+                                <button onClick={() => { handleWhatsApp(selectedOrder); setSelectedOrder(null); }} className="px-8 h-16 bg-[#25D366] text-white rounded-2xl font-black text-xs uppercase shadow-xl shadow-[#25D366]/20 active:scale-95 transition-all">
+                                    <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-6 h-6" alt="WA" />
                                 </button>
                             )}
                         </div>
@@ -1035,21 +1098,24 @@ const DriverSchedule: React.FC = () => {
                 </div>
             )}
 
-            <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 flex justify-around items-start pt-4 safe-bottom h-[96px] shadow-[0_-10px_40px_rgba(0,0,0,0.05)] rounded-t-[32px] no-print z-40">
-                <button onClick={() => setCurrentView('tasks')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'tasks' ? 'text-primary' : 'text-slate-400'}`}>
-                    <span className="material-icons-round">local_shipping</span>
-                    <span className={`text-[9px] font-black uppercase tracking-tighter ${currentView === 'tasks' ? 'opacity-100' : 'opacity-60'}`}>配送任务</span>
-                    {currentView === 'tasks' && <div className="w-1 h-1 bg-primary rounded-full mt-0.5"></div>}
+            <nav className="fixed bottom-0 left-0 right-0 bg-[#1e293b]/80 backdrop-blur-2xl border-t border-white/5 flex justify-around items-start pt-4 safe-bottom h-[96px] shadow-[0_-20px_50px_rgba(0,0,0,0.5)] rounded-t-[40px] no-print z-40">
+                <button onClick={() => setCurrentView('tasks')} className={`flex flex-col items-center gap-1.5 transition-all ${currentView === 'tasks' ? 'text-white' : 'text-slate-500 hover:text-slate-400'}`}>
+                    <div className={`p-2 rounded-2xl transition-all ${currentView === 'tasks' ? 'bg-indigo-600 shadow-lg shadow-indigo-600/30 ring-4 ring-indigo-600/10' : ''}`}>
+                        <span className="material-icons-round text-xl">local_shipping</span>
+                    </div>
+                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] ${currentView === 'tasks' ? 'text-indigo-400' : 'text-slate-600'}`}>Missions</span>
                 </button>
-                <button onClick={() => setCurrentView('history')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'history' ? 'text-primary' : 'text-slate-400'}`}>
-                    <span className="material-icons-round">history</span>
-                    <span className={`text-[9px] font-black uppercase tracking-tighter ${currentView === 'history' ? 'opacity-100' : 'opacity-60'}`}>配送历史</span>
-                    {currentView === 'history' && <div className="w-1 h-1 bg-primary rounded-full mt-0.5"></div>}
+                <button onClick={() => setCurrentView('history')} className={`flex flex-col items-center gap-1.5 transition-all ${currentView === 'history' ? 'text-white' : 'text-slate-500 hover:text-slate-400'}`}>
+                    <div className={`p-2 rounded-2xl transition-all ${currentView === 'history' ? 'bg-indigo-600 shadow-lg shadow-indigo-600/30 ring-4 ring-indigo-600/10' : ''}`}>
+                        <span className="material-icons-round text-xl">history</span>
+                    </div>
+                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] ${currentView === 'history' ? 'text-indigo-400' : 'text-slate-600'}`}>Records</span>
                 </button>
-                <button onClick={() => setCurrentView('profile')} className={`flex flex-col items-center gap-1 transition-all ${currentView === 'profile' ? 'text-primary' : 'text-slate-400'}`}>
-                    <span className="material-icons-round">person</span>
-                    <span className={`text-[9px] font-black uppercase tracking-tighter ${currentView === 'profile' ? 'opacity-100' : 'opacity-60'}`}>个人中心</span>
-                    {currentView === 'profile' && <div className="w-1 h-1 bg-primary rounded-full mt-0.5"></div>}
+                <button onClick={() => setCurrentView('profile')} className={`flex flex-col items-center gap-1.5 transition-all ${currentView === 'profile' ? 'text-white' : 'text-slate-500 hover:text-slate-400'}`}>
+                    <div className={`p-2 rounded-2xl transition-all ${currentView === 'profile' ? 'bg-indigo-600 shadow-lg shadow-indigo-600/30 ring-4 ring-indigo-600/10' : ''}`}>
+                        <span className="material-icons-round text-xl">person</span>
+                    </div>
+                    <span className={`text-[8px] font-black uppercase tracking-[0.2em] ${currentView === 'profile' ? 'text-indigo-400' : 'text-slate-600'}`}>Profile</span>
                 </button>
             </nav>
         </div>

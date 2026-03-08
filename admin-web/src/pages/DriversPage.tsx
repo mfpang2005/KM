@@ -621,27 +621,6 @@ export const DriversPage: React.FC = () => {
                                 </h3>
                                 <div className="space-y-3">
                                     <div>
-                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Vehicle Status</label>
-                                        <div className="grid grid-cols-3 gap-2">
-                                            {[
-                                                { val: 'idle', label: '空闲 (Idle)' },
-                                                { val: 'maintenance', label: '维修 (Maint)' },
-                                                { val: 'occupied', label: '占用 (Occup)' }
-                                            ].map(opt => (
-                                                <button
-                                                    key={opt.val}
-                                                    onClick={() => setEditForm({ ...editForm, vehicle_status: opt.val })}
-                                                    className={`py-2 px-2 rounded-xl text-[11px] font-black border transition-all ${editForm.vehicle_status === opt.val
-                                                        ? 'bg-slate-800 text-white border-slate-800 shadow-md transform scale-[1.02]'
-                                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                                                        }`}
-                                                >
-                                                    {opt.label}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    <div>
                                         <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Assigned Vehicle (Inventory Lookup)</label>
                                         <div className="relative group">
                                             <select

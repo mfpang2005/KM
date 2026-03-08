@@ -367,71 +367,107 @@ async def get_financials(
     current_user: dict = Depends(require_super_admin),
 ):
     """
-    获取财务汇总数据，支持 range=today/month/all 和 payment_status=all/paid/unpaid 过滤
+    获取财务汇总数据，支持范围过滤与支付状态过滤。
+    统一逻辑：使用 dueTime 作为交付日期过滤。
     """
     from fastapi.concurrency import run_in_threadpool
     from datetime import datetime, timezone
+    import dateutil.parser
 
     now = datetime.now(timezone.utc)
+    today_str = now.strftime("%Y-%m-%d")
 
-    query = supabase.table("orders").select("*").eq("status", "completed")
-
-    if payment_status == "paid":
-        query = query.eq("paymentStatus", "paid")
-    elif payment_status == "unpaid":
-        query = query.eq("paymentStatus", "unpaid")
-
-    if range == "today":
-        today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-        query = query.gte("created_at", today_start)
-    elif range == "month":
-        month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-        query = query.gte("created_at", month_start)
-
+    # Fetch orders based on range
+    # Since we use dueTime for filtering, we fetch a broader range and filter in Python
+    # for accuracy, or use Postgres date operators.
+    # To keep it consistent, we fetch this month's orders.
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    
+    query = supabase.table("orders").select("*").gte("created_at", month_start).neq("status", "cancelled")
+    
     response = await run_in_threadpool(query.execute)
-    orders = response.data or []
+    all_orders = response.data or []
 
-    # For SuperAdmin the query is already filtered by range (today or month)
-    # So gross_sales here is either today's revenue or month's revenue depending on the range parameter
-    period_revenue = sum((o.get("amount") or 0) for o in orders)
-    today_order_count = 0 
-    
-    # We still need to count today's orders specifically
-    # And specifically calculate today's revenue if range is 'month' to show the top cards
+    period_revenue = 0
     today_revenue = 0
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    
-    for o in orders:
-        if o.get("created_at", "") >= today_start:
-            today_order_count += 1
-            today_revenue += (o.get("amount") or 0)
-
-    # 统计支付方式
+    today_order_count = 0
     pm_stats: dict = {}
-    for o in orders:
-        method = o.get("paymentMethod") or "cash"
-        if method not in pm_stats:
-            pm_stats[method] = {"method": method, "amount": 0, "count": 0}
-        pm_stats[method]["amount"] += (o.get("amount") or 0)
-        pm_stats[method]["count"] += 1
 
-    # 获取月度目标（从 system_config 读取）
+    for o in all_orders:
+        curr_amount = o.get("amount") or 0
+        due_time_raw = o.get("dueTime") or ""
+        p_status = o.get("paymentStatus") or "pending"
+        
+        # Parse dueTime
+        is_today = False
+        is_in_period = False
+        try:
+            if due_time_raw and "T" in due_time_raw:
+                dt = dateutil.parser.isoparse(due_time_raw)
+                dt_str = dt.strftime("%Y-%m-%d")
+                if dt_str == today_str:
+                    is_today = True
+                
+                if range == "today":
+                    if dt_str == today_str: is_in_period = True
+                elif range == "month":
+                    if dt.month == now.month and dt.year == now.year: is_in_period = True
+                else: # all
+                    is_in_period = True
+            else:
+                # Fallback to created_at
+                ca = dateutil.parser.isoparse(o.get("created_at"))
+                ca_str = ca.strftime("%Y-%m-%d")
+                if ca_str == today_str:
+                    is_today = True
+                
+                if range == "today":
+                    if ca_str == today_str: is_in_period = True
+                elif range == "month":
+                    if ca.month == now.month and ca.year == now.year: is_in_period = True
+                else:
+                    is_in_period = True
+        except Exception:
+            continue
+
+        # Filter by payment_status parameter from request (if applicable)
+        if payment_status == "paid" and p_status != "paid":
+            continue
+        if payment_status == "unpaid" and p_status not in ["pending", "unpaid"]:
+            continue
+
+        # Period calculation (only PAID reflects in revenue)
+        if is_in_period and p_status == 'paid':
+            period_revenue += curr_amount
+            
+            # Payment Method Stats for period
+            method = o.get("paymentMethod") or "cash"
+            if method not in pm_stats:
+                pm_stats[method] = {"method": method, "amount": 0, "count": 0}
+            pm_stats[method]["amount"] += curr_amount
+            pm_stats[method]["count"] += 1
+
+        # Today's specific cards
+        if is_today:
+            today_order_count += 1
+            if p_status == 'paid':
+                today_revenue += curr_amount
+
+    # 获取月度目标
     goal = 0
     try:
-        cfg_resp = supabase.table("system_config").select("value").eq("key", "finance_goal").execute()
-        if cfg_resp.data:
-            goal = cfg_resp.data[0].get("value", {}).get("amount", 0)
+        cfg = supabase.table("system_config").select("value").eq("key", "finance_goal").execute()
+        if cfg.data:
+            goal = cfg.data[0].get("value", {}).get("amount", 0)
     except Exception:
         pass
 
     return {
-        "periodRevenue": period_revenue, # Revenue based on selected range
+        "periodRevenue": period_revenue,
         "todayRevenue": today_revenue,
         "monthlyGoal": goal,
         "todayOrderCount": today_order_count,
         "collections": list(pm_stats.values()),
-        "categorySales": [
-            {"category": "Delivery Orders", "amount": period_revenue}
-        ],
+        "categorySales": [{"category": "Completed Sales", "amount": period_revenue}],
         "hourlySales": []
     }

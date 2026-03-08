@@ -817,12 +817,22 @@ export const OrdersPage: React.FC = () => {
                                                     <div key={item.product.id} className="flex items-center justify-between text-sm">
                                                         <div className="flex-1 overflow-hidden pr-2">
                                                             <p className="font-bold text-slate-800 truncate">{item.product.name}</p>
-                                                            <p className="text-xs text-red-500 font-bold">
-                                                                RM {((item.priceOverride ?? item.product.price) || 0).toFixed(2)}
-                                                                {item.priceOverride !== undefined && item.priceOverride !== item.product.price && (
-                                                                    <span className="ml-1 text-[9px] text-slate-400 line-through">(RM {(item.product.price || 0).toFixed(2)})</span>
-                                                                )}
-                                                            </p>
+                                                            <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-lg border border-red-100/50 mt-1">
+                                                                <span className="text-[10px] font-black">RM</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    value={item.priceOverride ?? item.product.price}
+                                                                    onChange={(e) => handlePriceChange(item.product.id, e.target.value)}
+                                                                    className="w-16 bg-transparent border-none p-0 text-xs font-black outline-none focus:ring-0"
+                                                                />
+                                                            </div>
+                                                            {item.priceOverride !== undefined && item.priceOverride !== item.product.price && (
+                                                                <p className="text-[9px] text-slate-400 line-through mt-0.5 ml-1">
+                                                                    Original: RM {(item.product.price || 0).toFixed(2)}
+                                                                </p>
+                                                            )}
                                                         </div>
                                                         <div className="flex items-center gap-3 bg-slate-100 px-2 py-1 rounded-lg">
                                                             <button onClick={() => updateItemQuantity(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors">

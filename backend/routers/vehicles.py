@@ -99,6 +99,12 @@ async def assign_vehicle(assignment: DriverAssignmentBase):
     if not assign_resp.data:
         raise HTTPException(status_code=500, detail="Failed to create assignment")
 
+    # 4. 更新车辆状态为 BUSY (已占用)
+    supabase.table("vehicles").update({
+        "status": VehicleStatus.BUSY,
+        "updated_at": datetime.datetime.utcnow().isoformat()
+    }).eq("id", assignment.vehicle_id).execute()
+
     # 5. 更新 driver 用户档案的冗余字段（车牌、型号、类型）以保持前台列表显示一致
     supabase.table("users").update({
         "vehicle_plate": vehicle["plate_no"],

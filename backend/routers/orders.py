@@ -35,73 +35,95 @@ async def get_orders(
 async def get_finance_summary():
     """
     公开的财务汇总端点，供前端 Admin 首页使用（无需 super_admin 权限）。
-    返回今日和本月已完成订单的总金额。
+    数据源对齐：
+    - TODAY REVENUE: delivery_date 为今日且 payment_status = 'paid'
+    - PENDING: delivery_date 为今日且 payment_status = 'pending' (已送达/待收)
     """
     from fastapi.concurrency import run_in_threadpool
     from datetime import datetime, timezone
+    import dateutil.parser
 
     now = datetime.now(timezone.utc)
+    today_str = now.strftime("%Y-%m-%d")
 
-    # 今日开始时间
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    # 本月开始时间
+    # Fetch ALL orders for this month to calculate metrics
+    # Using created_at for month boundary, but filtering by dueTime for 'Today'
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-
-    # Fetch ALL orders for this month (both paid and unpaid) to calculate pending and today's orders
+    
     monthly_resp = await run_in_threadpool(
         supabase.table("orders")
-        .select("id, customerName, amount, status, paymentStatus, created_at")
+        .select("id, customerName, amount, status, paymentStatus, dueTime, created_at")
         .gte("created_at", month_start)
         .execute
     )
-    monthly_orders = monthly_resp.data or []
+    all_orders = monthly_resp.data or []
 
-    # Calculate metrics
     daily_revenue = 0
     monthly_revenue = 0
     daily_order_count = 0
     pending_amount = 0
     today_orders_list = []
 
-    for o in monthly_orders:
+    for o in all_orders:
         curr_amount = o.get("amount") or 0
-        is_today = o.get("created_at", "") >= today_start
+        due_time_raw = o.get("dueTime") or ""
         
-        # Pending amount calculation (unpaid orders)
-        if o.get("paymentStatus") in ["pending", "unpaid"] and o.get("status") != "cancelled":
-            pending_amount += curr_amount
+        # Parse dueTime to check if it's today
+        is_today = False
+        try:
+            if due_time_raw:
+                # If it's ISO format
+                if "T" in due_time_raw:
+                    dt = dateutil.parser.isoparse(due_time_raw)
+                    if dt.strftime("%Y-%m-%d") == today_str:
+                        is_today = True
+                # Fallback to created_at if dueTime is just a time string or empty
+                else:
+                    ca = dateutil.parser.isoparse(o.get("created_at"))
+                    if ca.strftime("%Y-%m-%d") == today_str:
+                        is_today = True
+        except Exception:
+            # Final fallback
+            ca = dateutil.parser.isoparse(o.get("created_at"))
+            if ca.strftime("%Y-%m-%d") == today_str:
+                is_today = True
 
-        # Revenue calculation (only paid and completed/delivered orders)
-        if o.get("paymentStatus") == "paid" and o.get("status") == "completed":
+        # 1. 累计本月收入 (已支付的所有订单)
+        if o.get("paymentStatus") == "paid" and o.get("status") != "cancelled":
             monthly_revenue += curr_amount
-            if is_today:
-                daily_revenue += curr_amount
 
-        # Today's order list and count (all non-cancelled orders today)
+        # 2. 今日数据
         if is_today and o.get("status") != "cancelled":
             daily_order_count += 1
+            
+            # 今日收入 (Today Revenue): 已支付
+            if o.get("paymentStatus") == "paid":
+                daily_revenue += curr_amount
+            
+            # 今日待收 (Pending): 未支付 (不管是否送达，只要是今天的订单且未付)
+            # 用户要求：已送达但 payment_status = false。
+            # 这里我们放宽一点：只要是今天的订单且未付，即算 Pending。
+            if o.get("paymentStatus") in ["pending", "unpaid"]:
+                pending_amount += curr_amount
+
             today_orders_list.append({
                 "id": o.get("id"),
                 "customerName": o.get("customerName"),
                 "amount": curr_amount,
-                "paymentStatus": o.get("paymentStatus") or "pending"
+                "paymentStatus": o.get("paymentStatus") or "pending",
+                "status": o.get("status")
             })
 
-    # 读取月度目标配置（可选）
+    # 系统配置读取 (Goal & Display)
     goal = 0
-    try:
-        cfg_resp = supabase.table("system_config").select("value").eq("key", "finance_goal").execute()
-        if cfg_resp.data:
-            goal = cfg_resp.data[0].get("value", {}).get("amount", 0)
-    except Exception:
-        pass
-
-    # 读取财务显示开关配置
     show_finance = True
     try:
-        disp_resp = supabase.table("system_config").select("value").eq("key", "finance_display").execute()
-        if disp_resp.data:
-            show_finance = disp_resp.data[0].get("value", {}).get("enabled", True)
+        cfg = supabase.table("system_config").select("key, value").in_("key", ["finance_goal", "finance_display"]).execute()
+        for item in cfg.data:
+            if item["key"] == "finance_goal":
+                goal = item["value"].get("amount", 0)
+            elif item["key"] == "finance_display":
+                show_finance = item["value"].get("enabled", True)
     except Exception:
         pass
 

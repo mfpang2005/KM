@@ -114,14 +114,26 @@ const AccountManagement: React.FC = () => {
     // ── Filtered order list
     const filteredOrders = useMemo(() => {
         const now = new Date();
+        const todayStr = now.toDateString();
+
         return orders.filter(o => {
-            const created = new Date(o.created_at || '');
+            let isToday = false;
+            try {
+                if (o.dueTime && o.dueTime.includes('T')) {
+                    isToday = new Date(o.dueTime).toDateString() === todayStr;
+                } else {
+                    isToday = new Date(o.created_at).toDateString() === todayStr;
+                }
+            } catch (e) {
+                isToday = new Date(o.created_at).toDateString() === todayStr;
+            }
 
             // Date filter
             if (dateFilter === 'today') {
-                if (created.toDateString() !== now.toDateString()) return false;
+                if (!isToday) return false;
             } else if (dateFilter === 'month') {
-                if (created.getMonth() !== now.getMonth() || created.getFullYear() !== now.getFullYear()) return false;
+                const d = o.dueTime && o.dueTime.includes('T') ? new Date(o.dueTime) : new Date(o.created_at);
+                if (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear()) return false;
             }
 
             // Paid filter
@@ -134,15 +146,26 @@ const AccountManagement: React.FC = () => {
 
     // ── Daily sales metrics derived from today's orders
     const todayOrders = useMemo(() => orders.filter(o => {
-        const created = new Date(o.created_at || '');
-        return created.toDateString() === new Date().toDateString();
+        const todayStr = new Date().toDateString();
+        try {
+            if (o.dueTime && o.dueTime.includes('T')) {
+                return new Date(o.dueTime).toDateString() === todayStr;
+            }
+            return new Date(o.created_at).toDateString() === todayStr;
+        } catch (e) {
+            return new Date(o.created_at).toDateString() === todayStr;
+        }
     }), [orders]);
 
-    const todayPaid = useMemo(() => todayOrders.filter(o => o.paymentStatus === 'paid'), [todayOrders]);
-    const todayUnpaid = useMemo(() => todayOrders.filter(o => o.paymentStatus !== 'paid'), [todayOrders]);
-    const collectionRate = todayOrders.length > 0 ? (todayPaid.length / todayOrders.length) * 100 : 0;
-    const todayTotal = todayOrders.reduce((acc, o) => acc + (o.amount || 0), 0);
-    const todayCollected = todayPaid.reduce((acc, o) => acc + (o.amount || 0), 0);
+    const todayPaidCount = useMemo(() => todayOrders.filter(o => o.paymentStatus === 'paid').length, [todayOrders]);
+    const todayUnpaidCount = useMemo(() => todayOrders.filter(o => o.paymentStatus !== 'paid').length, [todayOrders]);
+    const collectionRate = todayOrders.length > 0 ? (todayPaidCount / todayOrders.length) * 100 : 0;
+
+    // TODAY REVENUE: delivery_date 为今日且已支付
+    const todayRevenue = todayOrders.filter(o => o.paymentStatus === 'paid').reduce((acc, o) => acc + (o.amount || 0), 0);
+    // PENDING: delivery_date 为今日且未支付
+    const todayPending = todayOrders.filter(o => o.paymentStatus !== 'paid').reduce((acc, o) => acc + (o.amount || 0), 0);
+
     const goalPct = summary.monthlyGoal > 0 ? Math.min((summary.monthly / summary.monthlyGoal) * 100, 100) : 0;
 
     return (
@@ -170,103 +193,100 @@ const AccountManagement: React.FC = () => {
                     <div className="grid grid-cols-2 gap-3">
                         {/* Today Total — full-width */}
                         <div
-                            className="col-span-2 relative rounded-[28px] overflow-hidden p-6"
+                            className="col-span-2 relative rounded-[32px] overflow-hidden p-8"
                             style={{
-                                background: 'rgba(255,255,255,0.06)',
-                                backdropFilter: 'blur(20px)',
-                                border: '1px solid rgba(255,255,255,0.12)',
-                                boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+                                background: 'rgba(255,255,255,0.03)',
+                                backdropFilter: 'blur(30px)',
+                                border: '1px solid rgba(255,255,255,0.1)',
+                                boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
                             }}
                         >
-                            {/* Decorative ring */}
-                            <div className="absolute -right-8 -top-8 w-40 h-40 rounded-full border border-indigo-500/20 pointer-events-none" />
-                            <div className="absolute -right-4 -top-4 w-24 h-24 rounded-full border border-violet-500/20 pointer-events-none" />
+                            {/* Decorative elements */}
+                            <div className="absolute -right-10 -top-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
+                            <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-violet-500/10 rounded-full blur-2xl" />
 
-                            <p className="text-[9px] font-black text-indigo-300 tracking-[0.35em] uppercase mb-2">Today Total</p>
+                            <p className="text-[10px] font-black text-indigo-400 tracking-[0.5em] uppercase mb-4 text-center">Today Total</p>
                             {loading ? (
-                                <div className="h-10 w-40 bg-white/10 animate-pulse rounded-xl" />
+                                <div className="h-16 w-full bg-white/5 animate-pulse rounded-2xl mb-8" />
                             ) : (
-                                <div className="flex items-end gap-3">
-                                    <span className="text-5xl font-black text-white leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                        RM {summary.daily.toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                <div className="text-center mb-8">
+                                    <span className="text-6xl font-mono font-black text-white tracking-tighter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] leading-none italic" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                                        RM {(todayRevenue + todayPending).toLocaleString('en-MY', { minimumFractionDigits: 2 })}
                                     </span>
                                 </div>
                             )}
-                            <div className="flex gap-4 mt-4 pt-4 border-t border-white/10">
-                                <div>
-                                    <p className="text-[8px] text-slate-500 font-bold uppercase">Order Count</p>
-                                    <p className="text-sm font-black text-slate-200">{todayOrders.length} <span className="text-[10px] text-slate-500 font-bold">单</span></p>
+
+                            <div className="grid grid-cols-3 gap-2 pt-6 border-t border-white/5">
+                                <div className="text-center">
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Order Count</p>
+                                    <p className="text-xl font-black text-white">{todayOrders.length}</p>
                                 </div>
-                                <div className="border-l border-white/10 pl-4">
-                                    <p className="text-[8px] text-slate-500 font-bold uppercase">已收</p>
-                                    <p className="text-sm font-black text-green-400">RM {todayCollected.toFixed(2)}</p>
+                                <div className="text-center border-x border-white/5">
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">已收 (RM)</p>
+                                    <p className="text-xl font-mono font-black text-[#10b981]">{todayRevenue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
                                 </div>
-                                <div className="border-l border-white/10 pl-4">
-                                    <p className="text-[8px] text-slate-500 font-bold uppercase">待收</p>
-                                    <p className="text-sm font-black text-red-400">RM {(todayTotal - todayCollected).toFixed(2)}</p>
+                                <div className="text-center">
+                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">待收 (RM)</p>
+                                    <p className="text-xl font-mono font-black text-[#ef4444]">{todayPending.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Monthly KPI */}
                         <div
-                            className="relative rounded-[24px] p-5 overflow-hidden"
+                            className="relative rounded-[28px] p-6 overflow-hidden"
                             style={{
-                                background: 'rgba(99,102,241,0.15)',
+                                background: 'rgba(99,102,241,0.1)',
                                 backdropFilter: 'blur(16px)',
-                                border: '1px solid rgba(99,102,241,0.25)',
+                                border: '1px solid rgba(99,102,241,0.2)',
                             }}
                         >
-                            <p className="text-[8px] font-black text-indigo-300 tracking-[0.3em] uppercase mb-1">Monthly</p>
-                            <p className="text-2xl font-black text-white">RM {summary.monthly.toLocaleString('en-MY', { minimumFractionDigits: 0 })}</p>
-                            <p className="text-[8px] text-indigo-300 mt-1">本月累计</p>
+                            <p className="text-[9px] font-black text-indigo-300 tracking-[0.3em] uppercase mb-2">Monthly</p>
+                            <p className="text-2xl font-mono font-black text-white">RM {summary.monthly.toLocaleString('en-MY', { minimumFractionDigits: 0 })}</p>
+                            <p className="text-[9px] text-indigo-400/60 mt-2 font-bold uppercase tracking-tighter">本月累计已收</p>
                         </div>
 
                         {/* Collection Rate */}
                         <div
-                            className="relative rounded-[24px] p-5 overflow-hidden"
+                            className="relative rounded-[28px] p-6 overflow-hidden"
                             style={{
-                                background: 'rgba(16,185,129,0.12)',
+                                background: 'rgba(16,185,129,0.08)',
                                 backdropFilter: 'blur(16px)',
-                                border: '1px solid rgba(16,185,129,0.2)',
+                                border: '1px solid rgba(16,185,129,0.15)',
                             }}
                         >
-                            <p className="text-[8px] font-black text-emerald-300 tracking-[0.3em] uppercase mb-1">Collected</p>
-                            <p className="text-2xl font-black text-white">{collectionRate.toFixed(0)}<span className="text-sm">%</span></p>
-                            <p className="text-[8px] text-emerald-300 mt-1">{todayPaid.length}/{todayOrders.length} 单已收</p>
+                            <p className="text-[9px] font-black text-emerald-300 tracking-[0.3em] uppercase mb-2">Collection</p>
+                            <p className="text-2xl font-mono font-black text-white">{collectionRate.toFixed(0)}<span className="text-sm ml-0.5">%</span></p>
+                            <p className="text-[9px] text-emerald-400/60 mt-2 font-bold uppercase tracking-tighter">{todayPaidCount}/{todayOrders.length} 订单已结清</p>
                         </div>
                     </div>
 
                     {/* ── MONTHLY GOAL PROGRESS ─────────────── */}
                     {summary.monthlyGoal > 0 && (
                         <div
-                            className="rounded-[24px] p-5"
+                            className="rounded-[28px] p-6"
                             style={{
-                                background: 'rgba(255,255,255,0.05)',
-                                border: '1px solid rgba(255,255,255,0.08)',
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.06)',
                             }}
                         >
-                            <div className="flex justify-between items-center mb-3">
-                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">月度目标进度</p>
-                                <span className="text-xs font-black text-indigo-300">{goalPct.toFixed(1)}%</span>
+                            <div className="flex justify-between items-center mb-4">
+                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">月度回笼进度</p>
+                                <span className="text-xs font-black text-indigo-400">{goalPct.toFixed(1)}%</span>
                             </div>
-                            <div className="h-2.5 bg-white/10 rounded-full overflow-hidden">
+                            <div className="h-3 bg-white/5 rounded-full overflow-hidden p-0.5 border border-white/5">
                                 <div
-                                    className="h-full rounded-full transition-all duration-1000"
+                                    className="h-full rounded-full transition-all duration-1000 relative"
                                     style={{
                                         width: `${goalPct}%`,
                                         background: goalPct >= 100
-                                            ? 'linear-gradient(90deg,#10b981,#34d399)'
-                                            : goalPct >= 60
-                                                ? 'linear-gradient(90deg,#6366f1,#a78bfa)'
-                                                : 'linear-gradient(90deg,#f59e0b,#fbbf24)',
-                                        boxShadow: '0 0 12px rgba(99,102,241,0.5)'
+                                            ? 'linear-gradient(90deg, #10b981, #059669)'
+                                            : 'linear-gradient(90deg, #6366f1, #8b5cf6)',
+                                        boxShadow: '0 0 20px rgba(99,102,241,0.3)'
                                     }}
-                                />
-                            </div>
-                            <div className="flex justify-between mt-2">
-                                <span className="text-[8px] text-slate-500">RM 0</span>
-                                <span className="text-[8px] text-slate-500">目标 RM {summary.monthlyGoal.toLocaleString()}</span>
+                                >
+                                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
+                                </div>
                             </div>
                         </div>
                     )}
@@ -357,15 +377,15 @@ const AccountManagement: React.FC = () => {
                                             </div>
 
                                             <div className="flex flex-col items-end gap-2 shrink-0">
-                                                <span className="text-lg font-black text-white">RM {(order.amount || 0).toFixed(2)}</span>
+                                                <span className="text-lg font-mono font-black text-white">RM {(order.amount || 0).toFixed(2)}</span>
 
                                                 {/* Payment Toggle */}
                                                 <button
                                                     onClick={() => handleTogglePaid(order)}
                                                     disabled={toggling === order.id}
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 ${order.paymentStatus === 'paid'
-                                                        ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                                                        : 'bg-red-500/20 text-red-400 border border-red-500/30'
+                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-lg ${order.paymentStatus === 'paid'
+                                                        ? 'bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30'
+                                                        : 'bg-[#ef4444]/20 text-[#ef4444] border border-[#ef4444]/30'
                                                         } ${toggling === order.id ? 'opacity-50 pointer-events-none' : ''}`}
                                                 >
                                                     {toggling === order.id ? (
@@ -396,17 +416,17 @@ const AccountManagement: React.FC = () => {
                         <div className="divide-y divide-white/5">
                             {[
                                 { label: '今日订单总数', value: `${todayOrders.length} 单`, icon: 'receipt_long' },
-                                { label: '今日总金额', value: `RM ${todayTotal.toFixed(2)}`, icon: 'payments' },
-                                { label: '已收金额', value: `RM ${todayCollected.toFixed(2)}`, icon: 'check_circle', color: 'text-emerald-400' },
-                                { label: '待收金额', value: `RM ${(todayTotal - todayCollected).toFixed(2)}`, icon: 'pending', color: 'text-red-400' },
-                                { label: '收款进度', value: `${collectionRate.toFixed(1)}%`, icon: 'trending_up', color: collectionRate >= 80 ? 'text-emerald-400' : 'text-amber-400' },
+                                { label: '今日总金额', value: `RM ${(todayRevenue + todayPending).toFixed(2)}`, icon: 'payments' },
+                                { label: '已收金额', value: `RM ${todayRevenue.toFixed(2)}`, icon: 'check_circle', color: 'text-emerald-400' },
+                                { label: '待收金额', value: `RM ${todayPending.toFixed(2)}`, icon: 'pending', color: 'text-rose-400' },
+                                { label: '回笼进度', value: `${collectionRate.toFixed(1)}%`, icon: 'trending_up', color: collectionRate >= 80 ? 'text-emerald-400' : 'text-amber-400' },
                             ].map(row => (
                                 <div key={row.label} className="flex items-center justify-between px-5 py-3.5">
                                     <div className="flex items-center gap-2.5">
                                         <span className={`material-icons-round text-[16px] ${row.color || 'text-slate-500'}`}>{row.icon}</span>
                                         <span className="text-[11px] font-bold text-slate-400">{row.label}</span>
                                     </div>
-                                    <span className={`text-[12px] font-black ${row.color || 'text-slate-200'}`}>{row.value}</span>
+                                    <span className={`text-[12px] font-mono font-black ${row.color || 'text-slate-200'}`}>{row.value}</span>
                                 </div>
                             ))}
                         </div>

@@ -94,18 +94,18 @@ export const FinancePage: React.FC = () => {
             {/* Main Stats Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard
-                    label={range === 'today' ? "Today Revenue" : "Period Revenue"}
+                    label="PERIOD REVENUE"
                     value={data?.periodRevenue || 0}
                     icon="trending_up"
                     color="blue"
                     subtitle={`Total collected for ${range}`}
                 />
                 <StatCard
-                    label="Today Revenue"
+                    label="TODAY REVENUE"
                     value={data?.todayRevenue || 0}
                     icon="monetization_on"
                     color="emerald"
-                    subtitle="Real-time collection"
+                    subtitle="Paid orders today"
                 />
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm group hover:shadow-md transition-shadow">
                     <div className="flex justify-between items-start mb-6">
@@ -115,11 +115,11 @@ export const FinancePage: React.FC = () => {
                         <span className="material-icons-round text-slate-200 group-hover:text-slate-300 transition-colors">keyboard_arrow_right</span>
                     </div>
                     <div>
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Today Orders</p>
+                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">TODAY ORDERS</p>
                         <div className="flex items-baseline gap-1">
                             <span className="text-2xl font-black text-slate-800 tracking-tighter">{data?.todayOrderCount || 0}</span>
                         </div>
-                        <p className="text-[10px] mt-1.5 text-slate-400 font-medium">Completed orders today</p>
+                        <p className="text-[10px] mt-1.5 text-slate-400 font-medium">Delivery date is today</p>
                     </div>
                 </div>
                 <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-between group hover:shadow-md transition-shadow">

@@ -49,14 +49,14 @@ export function useFinanceSummary(): FinanceSummary {
     useEffect(() => {
         fetchSummary();
 
-        // NOTE: 订阅 orders 表变更，任何订单更新（包括状态或收款情况变动）时实时刷新财务数字
+        // NOTE: 强制订阅 orders 表的所有变更 (INSERT, UPDATE, DELETE)，实现“点击即更新”
         const channel = supabase
-            .channel('finance-summary-realtime')
+            .channel('finance-all-sync')
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'orders' },
+                { event: '*', schema: 'public', table: 'orders' },
                 () => {
-                    // Update on any changes to orders to reflect payment confirmations instantly
+                    console.log('[useFinanceSummary] Orders table changed, refreshing stats...');
                     fetchSummary();
                 }
             )

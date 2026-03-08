@@ -50,7 +50,9 @@ const FinanceWidget: React.FC<FinanceWidgetProps> = ({ user }) => {
 
                 <div className="relative mb-2">
                     {loading ? (
-                        <div className="h-16 w-48 bg-white/10 animate-pulse rounded-2xl" />
+                        <div className="h-16 w-48 bg-white/10 rounded-2xl relative overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                        </div>
                     ) : (
                         <div className="flex items-baseline gap-2">
                             <span className="text-xl font-bold text-indigo-100/50">RM</span>
@@ -97,26 +99,30 @@ const FinanceWidget: React.FC<FinanceWidgetProps> = ({ user }) => {
             </div>
 
             {/* 3. 次级指标：今日订单数 & 待收余款 */}
-            <div className={`grid grid-cols-2 gap-4 transition-all duration-500 ${isExpanded ? 'opacity-40 grayscale pointer-events-none scale-95' : 'opacity-100'}`}>
+            <div className={`grid grid-cols-2 gap-4 transition-all duration-500 hover:gap-5 ${isExpanded ? 'opacity-40 grayscale blur-[1px] pointer-events-none scale-95' : 'opacity-100'}`}>
                 {/* 订单数卡片 */}
-                <div className="bg-indigo-50/40 backdrop-blur-md border border-indigo-100/60 p-6 rounded-[2rem] shadow-lg shadow-indigo-100/30 hover:shadow-xl hover:-translate-y-1 transition-all duration-500 flex flex-col justify-center items-center relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-indigo-500/30" />
-                    <p className="text-[10px] text-indigo-700/70 font-black uppercase tracking-widest mb-2">Order Count</p>
+                <div className="bg-white/80 backdrop-blur-md border border-white p-6 rounded-[2.5rem] shadow-xl shadow-indigo-500/5 hover:shadow-indigo-500/15 hover:-translate-y-1 active:scale-95 transition-all duration-500 flex flex-col justify-center items-center relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-indigo-400 to-violet-400 opacity-40" />
+                    <p className="text-[10px] text-indigo-900/40 font-black uppercase tracking-widest mb-2">Order Count</p>
                     {loading ? (
-                        <span className="h-8 w-16 bg-indigo-100 rounded-lg animate-pulse" />
+                        <div className="h-8 w-16 bg-indigo-100/50 rounded-lg relative overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                        </div>
                     ) : (
-                        <p className="text-4xl font-black text-indigo-600 tracking-tight group-hover:scale-110 transition-transform">{dailyOrderCount}</p>
+                        <p className="text-4xl font-black text-indigo-600 tracking-tight group-hover:scale-110 transition-transform duration-500">{dailyOrderCount}</p>
                     )}
                 </div>
 
                 {/* 待收余款卡片 */}
-                <div className="bg-amber-50/40 backdrop-blur-md border border-amber-100/60 p-6 rounded-[2rem] shadow-lg shadow-amber-100/30 hover:shadow-xl hover:-translate-y-1 transition-all duration-500 flex flex-col justify-center items-center relative overflow-hidden group">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-amber-500/30" />
-                    <p className="text-[10px] text-amber-700/70 font-black uppercase tracking-widest mb-2">Pending</p>
+                <div className="bg-white/80 backdrop-blur-md border border-white p-6 rounded-[2.5rem] shadow-xl shadow-amber-500/5 hover:shadow-amber-500/15 hover:-translate-y-1 active:scale-95 transition-all duration-500 flex flex-col justify-center items-center relative overflow-hidden group">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-amber-400 to-orange-400 opacity-40" />
+                    <p className="text-[10px] text-amber-900/40 font-black uppercase tracking-widest mb-2">Pending</p>
                     {loading ? (
-                        <span className="h-8 w-24 bg-amber-100 rounded-lg animate-pulse" />
+                        <div className="h-8 w-24 bg-amber-100/50 rounded-lg relative overflow-hidden">
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/60 to-transparent -translate-x-full animate-[shimmer_2s_infinite]" />
+                        </div>
                     ) : (
-                        <div className="flex items-baseline gap-1">
+                        <div className="flex items-baseline gap-1 group-hover:scale-105 transition-transform duration-500">
                             <span className="text-xs font-bold text-amber-600/50">RM</span>
                             <span className="text-2xl font-black text-amber-600 tabular-nums">
                                 {Number(pendingAmount).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
@@ -127,20 +133,22 @@ const FinanceWidget: React.FC<FinanceWidgetProps> = ({ user }) => {
             </div>
 
             {/* 4. 月度汇总卡片 (Glassmorphism Dark) */}
-            <div className={`relative overflow-hidden rounded-[2.5rem] bg-slate-900 p-8 shadow-2xl transition-all duration-500 ${isExpanded ? 'opacity-40 grayscale pointer-events-none scale-95' : 'opacity-100'}`}>
-                <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px]" />
+            <div className={`relative group overflow-hidden rounded-[3rem] bg-slate-900 p-8 shadow-2xl transition-all duration-500 ${isExpanded ? 'opacity-40 grayscale blur-[1px] pointer-events-none scale-95' : 'opacity-100 hover:shadow-indigo-500/20'}`}>
+                <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] group-hover:bg-indigo-500/20 transition-all duration-700" />
+                <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-fuchsia-500/10 rounded-full blur-[80px]" />
+
                 <div className="relative flex justify-between items-center h-full">
                     <div>
-                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.3em] mb-3">Monthly Total</p>
-                        <div className="flex items-baseline gap-2">
+                        <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em] mb-4 group-hover:text-indigo-400 transition-colors">Monthly Total</p>
+                        <div className="flex items-baseline gap-2 group-hover:translate-x-1 transition-transform duration-500">
                             <span className="text-indigo-400/80 font-bold text-lg">RM</span>
-                            <span className="text-4xl font-black text-white tracking-tighter tabular-nums">
+                            <span className="text-5xl font-black text-white tracking-tighter tabular-nums drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">
                                 {Number(monthly).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                         </div>
                     </div>
-                    <div className="w-16 h-16 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-indigo-400">
-                        <span className="material-icons-round text-3xl">analytics</span>
+                    <div className="w-20 h-20 rounded-[2rem] bg-slate-800/80 backdrop-blur-xl border border-slate-700 flex items-center justify-center text-indigo-400 shadow-inner group-hover:rotate-12 transition-all duration-500">
+                        <span className="material-icons-round text-4xl">analytics</span>
                     </div>
                 </div>
             </div>
