@@ -8,6 +8,9 @@ export interface FinanceSummary {
     monthlyGoal: number;
     showFinance: boolean;
     loading: boolean;
+    dailyOrderCount: number;
+    pendingAmount: number;
+    todayOrders: any[];
 }
 
 /**
@@ -20,6 +23,9 @@ export function useFinanceSummary(): FinanceSummary {
     const [monthly, setMonthly] = useState(0);
     const [monthlyGoal, setMonthlyGoal] = useState(0);
     const [showFinance, setShowFinance] = useState(true);
+    const [dailyOrderCount, setDailyOrderCount] = useState(0);
+    const [pendingAmount, setPendingAmount] = useState(0);
+    const [todayOrders, setTodayOrders] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
     const fetchSummary = useCallback(async () => {
@@ -30,6 +36,9 @@ export function useFinanceSummary(): FinanceSummary {
             setMonthly(data.monthly ?? 0);
             setMonthlyGoal(data.monthlyGoal ?? 0);
             setShowFinance(data.showFinance ?? true);
+            setDailyOrderCount(data.dailyOrderCount ?? 0);
+            setPendingAmount(data.pendingAmount ?? 0);
+            setTodayOrders(data.todayOrders ?? []);
         } catch (err) {
             console.error('[useFinanceSummary] Failed to fetch summary:', err);
         } finally {
@@ -40,17 +49,15 @@ export function useFinanceSummary(): FinanceSummary {
     useEffect(() => {
         fetchSummary();
 
-        // NOTE: 订阅 orders 表变更，任何订单被标记为 completed 时实时刷新财务数字
+        // NOTE: 订阅 orders 表变更，任何订单更新（包括状态或收款情况变动）时实时刷新财务数字
         const channel = supabase
             .channel('finance-summary-realtime')
             .on(
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'orders' },
-                (payload) => {
-                    // 只有状态变为 completed 才重新拉取
-                    if (payload.new?.status === 'completed') {
-                        fetchSummary();
-                    }
+                () => {
+                    // Update on any changes to orders to reflect payment confirmations instantly
+                    fetchSummary();
                 }
             )
             .subscribe();
@@ -60,5 +67,14 @@ export function useFinanceSummary(): FinanceSummary {
         };
     }, [fetchSummary]);
 
-    return { daily, monthly, monthlyGoal, showFinance, loading };
+    return {
+        daily,
+        monthly,
+        monthlyGoal,
+        showFinance,
+        loading,
+        dailyOrderCount,
+        pendingAmount,
+        todayOrders
+    };
 }

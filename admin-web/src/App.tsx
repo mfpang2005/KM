@@ -15,6 +15,7 @@ import { DriversPage } from './pages/DriversPage';
 import { VehiclesPage } from './pages/VehiclesPage';
 import KitchenCalendarPage from './pages/KitchenCalendarPage';
 import KitchenPrepPage from './pages/KitchenPrepPage';
+import { FinancePage } from './pages/FinancePage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading, logout } = useAuth();
@@ -78,6 +79,7 @@ const App: React.FC = () => {
           <Route path="walkie-talkie" element={<WalkieTalkiePage />} />
           <Route path="kitchen-prep" element={<KitchenPrepPage />} />
           <Route path="kitchen-calendar" element={<KitchenCalendarPage />} />
+          <Route path="finance" element={<FinancePage />} />
           <Route path="config" element={<ConfigPage />} />
           <Route path="audit" element={<AuditLogsPage />} />
         </Route>

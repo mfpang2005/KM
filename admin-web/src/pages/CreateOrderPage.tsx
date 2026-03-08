@@ -9,6 +9,7 @@ interface CartItem {
     product: Product;
     quantity: number;
     note: string;
+    priceOverride?: number;
 }
 
 /** 订单确认快照 — 含全部可打印所需字段 */
@@ -56,6 +57,7 @@ export const CreateOrderPage: React.FC = () => {
     const [products, setProducts] = useState<Product[]>([]);
     const [productsLoading, setProductsLoading] = useState(true);
     const [cart, setCart] = useState<CartItem[]>([]);
+    const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
     const [activeCategory, setActiveCategory] = useState('全部');
     const [searchQuery, setSearchQuery] = useState('');
     const [customerName, setCustomerName] = useState('');
@@ -85,7 +87,16 @@ export const CreateOrderPage: React.FC = () => {
             SuperAdminService.getUsers()
         ])
             .then(([productsData, usersData]) => {
-                setProducts(Array.isArray(productsData) ? productsData : []);
+                const data = Array.isArray(productsData) ? productsData : [];
+                setProducts(data);
+
+                // 初始化自定义价格映射
+                const prices: Record<string, number> = {};
+                data.forEach(p => {
+                    prices[p.id] = p.price || 0;
+                });
+                setCustomPrices(prices);
+
                 if (Array.isArray(usersData)) {
                     setDrivers(usersData.filter(u => u.role === 'driver'));
                 } else {
@@ -127,17 +138,41 @@ export const CreateOrderPage: React.FC = () => {
     }), [products, activeCategory, searchQuery]);
 
     const totalAmount = useMemo(() =>
-        cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0),
+        cart.reduce((sum, item) => sum + (item.priceOverride ?? item.product.price) * item.quantity, 0),
         [cart]
     );
 
     /** 将产品加入购物车 */
     const addToCart = (product: Product) => {
+        const currentPrice = customPrices[product.id] ?? product.price;
         setCart(prev => {
             const existing = prev.find(i => i.product.id === product.id);
-            if (existing) return prev.map(i => i.product.id === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-            return [...prev, { product, quantity: 1, note: '' }];
+            if (existing) {
+                return prev.map(i =>
+                    i.product.id === product.id
+                        ? { ...i, quantity: i.quantity + 1, priceOverride: currentPrice }
+                        : i
+                );
+            }
+            return [...prev, { product, quantity: 1, note: '', priceOverride: currentPrice }];
         });
+    };
+
+    const handlePriceChange = (productId: string, value: string) => {
+        const newPrice = value === '' ? 0 : parseFloat(value);
+        if (isNaN(newPrice) || newPrice < 0) return;
+
+        setCustomPrices(prev => ({
+            ...prev,
+            [productId]: newPrice
+        }));
+
+        // 同时更新购物车中已有项目的单价
+        setCart(prev => prev.map(item =>
+            item.product.id === productId
+                ? { ...item, priceOverride: newPrice }
+                : item
+        ));
     };
 
     const updateQty = (id: string, delta: number) => {
@@ -180,7 +215,8 @@ export const CreateOrderPage: React.FC = () => {
                 items: cart.map(i => ({
                     id: i.product.id,
                     name: i.product.name,
-                    price: i.product.price,
+                    price: i.priceOverride ?? i.product.price,
+                    original_price: i.product.price,
                     quantity: i.quantity,
                     note: i.note || undefined,
                 })),
@@ -610,8 +646,20 @@ export const CreateOrderPage: React.FC = () => {
                                                 )}
                                                 <div className="p-3">
                                                     <div className="text-[9px] font-black text-slate-400 uppercase mb-1">{p.code}</div>
-                                                    <div className="text-xs font-bold text-slate-800 line-clamp-2 leading-tight">{p.name}</div>
-                                                    <div className="text-sm font-black text-indigo-600 mt-1">RM {(p.price || 0).toFixed(2)}</div>
+                                                    <div className="text-xs font-bold text-slate-800 line-clamp-2 leading-tight mb-1">{p.name}</div>
+                                                    <div className="flex items-center gap-1 text-indigo-600 group/price relative">
+                                                        <span className="text-[10px] font-black">RM</span>
+                                                        <input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            value={customPrices[p.id] !== undefined ? customPrices[p.id] : (p.price || 0)}
+                                                            onChange={(e) => handlePriceChange(p.id, e.target.value)}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            className="w-full bg-transparent border-none p-0 text-sm font-black outline-none focus:ring-0 focus:border-indigo-500"
+                                                        />
+                                                        <span className="material-icons-round text-[12px] opacity-0 group-hover/price:opacity-100 transition-opacity absolute right-0">edit</span>
+                                                    </div>
                                                 </div>
                                                 {inCart && (
                                                     <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-indigo-600 text-white text-xs font-black flex items-center justify-center shadow-md">
@@ -688,7 +736,14 @@ export const CreateOrderPage: React.FC = () => {
                                             <div className="flex items-center gap-3">
                                                 <div className="flex-1 min-w-0">
                                                     <p className="text-xs font-bold text-slate-800 truncate">{item.product.name}</p>
-                                                    <p className="text-[10px] text-indigo-500 font-black">RM {(item.product.price * item.quantity).toFixed(2)}</p>
+                                                    <p className="text-[10px] text-indigo-500 font-black">
+                                                        RM {((item.priceOverride ?? item.product.price) * item.quantity).toFixed(2)}
+                                                        {item.priceOverride !== undefined && item.priceOverride !== item.product.price && (
+                                                            <span className="ml-1 text-[8px] text-slate-400 line-through">
+                                                                (RM {(item.product.price * item.quantity).toFixed(2)})
+                                                            </span>
+                                                        )}
+                                                    </p>
                                                 </div>
                                                 <div className="flex items-center gap-2 bg-slate-50 rounded-xl px-2 py-1 border border-slate-100">
                                                     <button onClick={() => updateQty(item.product.id, -1)} className="w-6 h-6 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">

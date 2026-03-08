@@ -194,6 +194,7 @@ const AdminLayout: React.FC = () => {
         { path: '/drivers', label: 'Drivers Management', icon: 'directions_bike' },
         { path: '/products', label: 'Products', icon: 'inventory_2' },
         { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice' },
+        { path: '/finance', label: 'Financials', icon: 'account_balance_wallet' },
         { path: '/config', label: 'Settings', icon: 'settings' },
         { path: '/audit', label: 'Audit Logs', icon: 'history' },
     ];

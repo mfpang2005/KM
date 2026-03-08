@@ -239,7 +239,31 @@ export const DriversPage: React.FC = () => {
         if (!editingDriver) return;
         setIsSaving(true);
         try {
-            await api.patch(`/super-admin/users/${editingDriver.id}`, editForm);
+            // If vehicle plate changed, we need to handle assignment logic
+            const originalPlate = editingDriver.vehicle_plate;
+            const newPlate = editForm.vehicle_plate;
+
+            if (newPlate !== originalPlate) {
+                if (originalPlate) {
+                    // Unassign old first
+                    await VehicleService.unassignDriver(editingDriver.id);
+                }
+                if (newPlate) {
+                    // Find vehicle ID
+                    const v = vehicles.find(v => v.plate_no === newPlate);
+                    if (v) {
+                        await VehicleService.assignToDriver(editingDriver.id, v.id);
+                    }
+                }
+            }
+
+            // Patch other user details
+            await api.patch(`/super-admin/users/${editingDriver.id}`, {
+                name: editForm.name,
+                phone: editForm.phone,
+                vehicle_status: editForm.vehicle_status
+            });
+
             setEditingDriver(null);
             loadData();
         } catch (error) {
@@ -265,23 +289,21 @@ export const DriversPage: React.FC = () => {
                 phone: addForm.phone || null, // handle empty string as null
                 role: 'driver'
             });
-            const newDriverId = res.data.id;
 
-            // Update additional driver specific info via super-admin patch (excluding phone as it's handled in create)
-            await api.patch(`/super-admin/users/${newDriverId}`, {
-                vehicle_model: addForm.vehicle_model,
-                vehicle_plate: addForm.vehicle_plate,
-                vehicle_type: addForm.vehicle_type,
-                vehicle_status: 'idle'
-            });
+            // If a vehicle was selected, assign it correctly using ID
+            if (addForm.vehicle_plate) {
+                const vehicle = vehicles.find(v => v.plate_no === addForm.vehicle_plate);
+                if (vehicle) {
+                    await VehicleService.assignToDriver(res.data.id, vehicle.id);
+                }
+            }
 
             setShowAddModal(false);
             setAddForm({ name: '', phone: '', email: '', password: '', vehicle_model: '', vehicle_plate: '', vehicle_type: '' });
             loadData();
-        } catch (error: any) {
-            console.error('Failed to create new driver', error);
-            const detail = error.response?.data?.detail || error.message || 'Unknown error';
-            alert(`Failed to create new driver: ${detail}`);
+        } catch (error) {
+            console.error('Failed to create driver', error);
+            alert('Failed to create driver account.');
         } finally {
             setIsAdding(false);
         }
@@ -417,13 +439,25 @@ export const DriversPage: React.FC = () => {
                                                     <span className="text-[10px] font-black text-slate-400 uppercase shrink-0 ml-2">Today: <span className="text-primary">{driver.completedToday}</span> Done</span>
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-0.5">
-                                                    <p className="text-[10px] text-slate-500 font-bold uppercase tracking-widest truncate">
+                                                    <p
+                                                        onClick={() => window.location.href = '/vehicles'}
+                                                        className="text-[10px] text-slate-500 font-bold uppercase tracking-widest truncate cursor-pointer hover:text-primary transition-colors flex items-center gap-1"
+                                                    >
+                                                        <span className="material-icons-round text-[12px]">local_shipping</span>
                                                         {driver.currentVehicle ? `${driver.currentVehicle.plate_no} (${driver.currentVehicle.model || 'Unknown'})` : 'No Vehicle Assigned'}
                                                     </p>
                                                     {driver.currentVehicle ? (
-                                                        <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-green-100 text-green-700 cursor-pointer hover:bg-red-100 hover:text-red-700 transition-colors`} onClick={() => handleUnassignVehicle(driver.id)} title="点击解绑">
-                                                            已绑定 [解绑]
-                                                        </span>
+                                                        <div className="flex items-center gap-2">
+                                                            <span className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-green-100 text-green-700 cursor-pointer hover:bg-red-100 hover:text-red-700 transition-colors`} onClick={() => handleUnassignVehicle(driver.id)} title="点击解绑">
+                                                                已绑定 [解绑]
+                                                            </span>
+                                                            {driver.currentVehicle.status === 'repair' && (
+                                                                <div className="flex items-center gap-1 px-2 py-0.5 rounded-md text-[9px] font-black uppercase bg-red-100 text-red-600 animate-pulse border border-red-200">
+                                                                    <span className="material-icons-round text-[12px]">warning</span>
+                                                                    维修中 / 禁止出车
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     ) : (
                                                         <button
                                                             onClick={(e) => { e.stopPropagation(); setAssigningVehicleToDriver(driver); }}
@@ -608,34 +642,60 @@ export const DriversPage: React.FC = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Vehicle Model</label>
-                                        <input
-                                            type="text"
-                                            value={editForm.vehicle_model || ''}
-                                            onChange={e => setEditForm({ ...editForm, vehicle_model: e.target.value })}
-                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                            placeholder="e.g. Toyota Hiace"
-                                        />
+                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Assigned Vehicle (Inventory Lookup)</label>
+                                        <div className="relative group">
+                                            <select
+                                                value={editForm.vehicle_plate || ''}
+                                                onChange={async (e) => {
+                                                    const plate = e.target.value;
+                                                    const vehicle = vehicles.find(v => v.plate_no === plate);
+                                                    if (plate === '') {
+                                                        // Handle unassign if necessary or just clear form
+                                                        setEditForm({ ...editForm, vehicle_plate: '', vehicle_model: '', vehicle_type: '' });
+                                                    } else if (vehicle) {
+                                                        setEditForm({
+                                                            ...editForm,
+                                                            vehicle_plate: vehicle.plate_no,
+                                                            vehicle_model: vehicle.model || '',
+                                                            vehicle_type: vehicle.type || ''
+                                                        });
+                                                    }
+                                                }}
+                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-bold transition-all appearance-none cursor-pointer"
+                                            >
+                                                <option value="">-- No Vehicle Assigned --</option>
+                                                {vehicles.filter(v => v.status === 'available' || v.plate_no === editingDriver.vehicle_plate).map(v => (
+                                                    <option key={v.id} value={v.plate_no}>
+                                                        {v.plate_no} - {v.model || 'Unknown Model'} ({v.type || 'N/A'}) {v.status === 'repair' ? '[REPAIR]' : ''}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                                <span className="material-icons-round">unfold_more</span>
+                                            </div>
+                                        </div>
+                                        <p className="mt-2 text-[10px] text-slate-400 font-medium px-1 flex items-center gap-1">
+                                            <span className="material-icons-round text-[12px]">info</span>
+                                            Only "Available" vehicles are listed for new assignments.
+                                        </p>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
+                                    <div className="grid grid-cols-2 gap-3 opacity-50 pointer-events-none">
                                         <div>
-                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Plate Number</label>
+                                            <label className="block text-[11px] font-bold text-slate-400 mb-1 ml-1">Auto-Filled Model</label>
                                             <input
                                                 type="text"
-                                                value={editForm.vehicle_plate || ''}
-                                                onChange={e => setEditForm({ ...editForm, vehicle_plate: e.target.value })}
-                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all uppercase"
-                                                placeholder="e.g. VNZ 1234"
+                                                readOnly
+                                                value={editForm.vehicle_model || ''}
+                                                className="w-full bg-slate-100 border-transparent rounded-xl px-4 py-3 text-xs font-medium"
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Type</label>
+                                            <label className="block text-[11px] font-bold text-slate-400 mb-1 ml-1">Auto-Filled Type</label>
                                             <input
                                                 type="text"
+                                                readOnly
                                                 value={editForm.vehicle_type || ''}
-                                                onChange={e => setEditForm({ ...editForm, vehicle_type: e.target.value })}
-                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                                placeholder="e.g. 冷链运输"
+                                                className="w-full bg-slate-100 border-transparent rounded-xl px-4 py-3 text-xs font-medium"
                                             />
                                         </div>
                                     </div>
@@ -793,38 +853,57 @@ export const DriversPage: React.FC = () => {
                                 <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
                                     <span className="material-icons-round text-[14px]">local_shipping</span> Vehicle Info (Optional)
                                 </h3>
-                                <div className="space-y-3">
+                                <div>
+                                    <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Assign Initial Vehicle (Optional)</label>
+                                    <div className="relative group">
+                                        <select
+                                            value={addForm.vehicle_plate || ''}
+                                            onChange={(e) => {
+                                                const plate = e.target.value;
+                                                const vehicle = vehicles.find(v => v.plate_no === plate);
+                                                if (plate === '') {
+                                                    setAddForm({ ...addForm, vehicle_plate: '', vehicle_model: '', vehicle_type: '' });
+                                                } else if (vehicle) {
+                                                    setAddForm({
+                                                        ...addForm,
+                                                        vehicle_plate: vehicle.plate_no,
+                                                        vehicle_model: vehicle.model || '',
+                                                        vehicle_type: vehicle.type || ''
+                                                    });
+                                                }
+                                            }}
+                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-bold transition-all appearance-none cursor-pointer"
+                                        >
+                                            <option value="">-- No Vehicle Assigned --</option>
+                                            {vehicles.filter(v => v.status === 'available').map(v => (
+                                                <option key={v.id} value={v.plate_no}>
+                                                    {v.plate_no} - {v.model || 'Unknown Model'}
+                                                </option>
+                                            ))}
+                                        </select>
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                            <span className="material-icons-round">unfold_more</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3 opacity-50 pointer-events-none">
                                     <div>
-                                        <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Vehicle Model</label>
+                                        <label className="block text-[11px] font-bold text-slate-400 mb-1 ml-1">Auto-Filled Model</label>
                                         <input
                                             type="text"
-                                            value={addForm.vehicle_model}
-                                            onChange={e => setAddForm({ ...addForm, vehicle_model: e.target.value })}
-                                            className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                            placeholder="e.g. Toyota Hiace"
+                                            readOnly
+                                            value={addForm.vehicle_model || ''}
+                                            className="w-full bg-slate-100 border-transparent rounded-xl px-4 py-1.5 text-[10px] font-medium"
                                         />
                                     </div>
-                                    <div className="grid grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Plate Number</label>
-                                            <input
-                                                type="text"
-                                                value={addForm.vehicle_plate}
-                                                onChange={e => setAddForm({ ...addForm, vehicle_plate: e.target.value })}
-                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all uppercase"
-                                                placeholder="e.g. VNZ 1234"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[11px] font-bold text-slate-500 mb-1 ml-1">Type</label>
-                                            <input
-                                                type="text"
-                                                value={addForm.vehicle_type}
-                                                onChange={e => setAddForm({ ...addForm, vehicle_type: e.target.value })}
-                                                className="w-full bg-slate-50 border-transparent focus:bg-white focus:border-primary focus:ring-4 focus:ring-primary/10 rounded-xl px-4 py-3 text-sm font-medium transition-all"
-                                                placeholder="e.g. 冷链运输"
-                                            />
-                                        </div>
+                                    <div>
+                                        <label className="block text-[11px] font-bold text-slate-400 mb-1 ml-1">Auto-Filled Type</label>
+                                        <input
+                                            type="text"
+                                            readOnly
+                                            value={addForm.vehicle_type || ''}
+                                            className="w-full bg-slate-100 border-transparent rounded-xl px-4 py-1.5 text-[10px] font-medium"
+                                        />
                                     </div>
                                 </div>
                             </div>

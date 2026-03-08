@@ -99,14 +99,13 @@ async def assign_vehicle(assignment: DriverAssignmentBase):
     if not assign_resp.data:
         raise HTTPException(status_code=500, detail="Failed to create assignment")
 
-    # 4. 更新车辆状态为 busy
-    supabase.table("vehicles").update({
-        "status": VehicleStatus.BUSY,
-        "updated_at": datetime.datetime.utcnow().isoformat()
-    }).eq("id", assignment.vehicle_id).execute()
-
-    # 5. 可选：更新 driver 用户档案的当前车辆 (如果前台强依赖用户信息上的冗余字段)
-    # supabase.table("users").update({"vehicle_plate": vehicle["plate_no"]}).eq("id", assignment.driver_id).execute()
+    # 5. 更新 driver 用户档案的冗余字段（车牌、型号、类型）以保持前台列表显示一致
+    supabase.table("users").update({
+        "vehicle_plate": vehicle["plate_no"],
+        "vehicle_model": vehicle.get("model"),
+        "vehicle_type": vehicle.get("type"),
+        "vehicle_status": "occupied"
+    }).eq("id", assignment.driver_id).execute()
 
     return {"message": "Vehicle assigned successfully", "assignment": assign_resp.data[0]}
 
@@ -116,6 +115,13 @@ async def unassign_vehicle(driver_id: str):
     # 找到该司机的活跃分配
     assign_resp = supabase.table("driver_assignments").select("*").eq("driver_id", driver_id).eq("status", "active").execute()
     if not assign_resp.data:
+        # 同时清理用户信息中的车辆冗余，防止数据不一致
+        supabase.table("users").update({
+            "vehicle_plate": None,
+            "vehicle_model": None,
+            "vehicle_type": None,
+            "vehicle_status": "idle"
+        }).eq("id", driver_id).execute()
         return {"message": "No active assignments found for this driver"}
         
     assignment = assign_resp.data[0]
@@ -131,5 +137,13 @@ async def unassign_vehicle(driver_id: str):
         "status": VehicleStatus.AVAILABLE,
         "updated_at": datetime.datetime.utcnow().isoformat()
     }).eq("id", assignment["vehicle_id"]).execute()
+
+    # 清理用户信息中的车辆冗余
+    supabase.table("users").update({
+        "vehicle_plate": None,
+        "vehicle_model": None,
+        "vehicle_type": None,
+        "vehicle_status": "idle"
+    }).eq("id", driver_id).execute()
     
     return {"message": "Vehicle unassigned successfully"}

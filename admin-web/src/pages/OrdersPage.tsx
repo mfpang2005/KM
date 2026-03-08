@@ -66,10 +66,11 @@ export const OrdersPage: React.FC = () => {
         paymentMethod: PaymentMethod.CASH as PaymentMethod,
         eventDate: '',
         eventTime: '',
-        items: [] as { product: Product, quantity: number }[],
+        items: [] as { product: Product, quantity: number, priceOverride?: number }[],
         equipments: {} as Record<string, number>,
         driverId: null as string | null
     });
+    const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
     const EQUIPMENTS_LIST = ['汤匙', '烤鸡网', '叉子', '垃圾袋', 'Food Tong', '盘子', '红烧桶', '高盖', '杯子', '篮子', '铁脚架', '装酱碗'];
     const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -101,7 +102,15 @@ export const OrdersPage: React.FC = () => {
     const fetchProducts = useCallback(async () => {
         try {
             const data = await ProductService.getAll();
-            setProducts(Array.isArray(data) ? data : []);
+            const productsData = Array.isArray(data) ? data : [];
+            setProducts(productsData);
+
+            // 初始化自定义价格映射
+            const prices: Record<string, number> = {};
+            productsData.forEach(p => {
+                prices[p.id] = p.price || 0;
+            });
+            setCustomPrices(prices);
         } catch (error) {
             console.error('Failed to load products', error);
         }
@@ -132,10 +141,24 @@ export const OrdersPage: React.FC = () => {
     }, [loadOrders, fetchDrivers, fetchProducts]);
 
     const handleEditClick = (order: Order) => {
+        const prices: Record<string, number> = { ...customPrices };
+
         const preparedItems = (order.items || []).map((i: any) => {
             const product = products.find(p => p.id === i.id) || { id: i.id, name: i.name, price: i.price, code: '' } as Product;
-            return { product, quantity: i.quantity };
+
+            // 如果订单项有成交价，记录到 customPrices
+            if (i.price !== undefined) {
+                prices[i.id] = Number(i.price);
+            }
+
+            return {
+                product,
+                quantity: i.quantity,
+                priceOverride: i.price !== undefined ? Number(i.price) : undefined
+            };
         });
+
+        setCustomPrices(prices);
 
         const dueDate = order.dueTime ? new Date(order.dueTime) : new Date();
         const eventDate = order.dueTime ? `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}` : '';
@@ -167,7 +190,16 @@ export const OrdersPage: React.FC = () => {
 
         try {
             setIsSubmitting(true);
-            const amount = newOrder.items.reduce((sum, item) => sum + (item.product.price || 0) * item.quantity, 0);
+            const amount = newOrder.items.reduce((sum, item) => sum + ((item.priceOverride ?? item.product.price) || 0) * item.quantity, 0);
+
+            const itemsPayload = newOrder.items.map(i => ({
+                id: i.product.id,
+                name: i.product.name,
+                price: i.priceOverride ?? i.product.price,
+                original_price: i.product.price,
+                quantity: i.quantity,
+                note: (i as any).note
+            }));
 
             let dueTime = editingOrder ? editingOrder.dueTime : new Date(Date.now() + 30 * 60000).toISOString();
             if (newOrder.eventDate && newOrder.eventTime) {
@@ -183,7 +215,7 @@ export const OrdersPage: React.FC = () => {
                 customerName: newOrder.customerName || 'Walk-in Customer',
                 customerPhone: newOrder.customerPhone || '-',
                 address: newOrder.address || '',
-                items: newOrder.items.map(i => ({ id: i.product.id, name: i.product.name, quantity: i.quantity, price: i.product.price })),
+                items: itemsPayload,
                 status: editingOrder ? editingOrder.status : OrderStatus.PENDING,
                 dueTime: dueTime,
                 amount: parseFloat(amount.toFixed(2)),
@@ -219,11 +251,33 @@ export const OrdersPage: React.FC = () => {
 
     const toggleOrderItem = (product: Product) => {
         const existing = newOrder.items.find(i => i.product.id === product.id);
+        const currentPrice = customPrices[product.id] ?? product.price;
+
         if (existing) {
             setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.product.id !== product.id) });
         } else {
-            setNewOrder({ ...newOrder, items: [...newOrder.items, { product, quantity: 1 }] });
+            setNewOrder({ ...newOrder, items: [...newOrder.items, { product, quantity: 1, priceOverride: currentPrice }] });
         }
+    };
+
+    const handlePriceChange = (productId: string, value: string) => {
+        const newPrice = value === '' ? 0 : parseFloat(value);
+        if (isNaN(newPrice) || newPrice < 0) return;
+
+        setCustomPrices(prev => ({
+            ...prev,
+            [productId]: newPrice
+        }));
+
+        // 同时更新当前订单草稿中的价格
+        setNewOrder(prev => ({
+            ...prev,
+            items: prev.items.map(item =>
+                item.product.id === productId
+                    ? { ...item, priceOverride: newPrice }
+                    : item
+            )
+        }));
     };
 
     const updateItemQuantity = (productId: string, delta: number) => {
@@ -672,7 +726,19 @@ export const OrdersPage: React.FC = () => {
                                                         </div>
                                                         <div>
                                                             <p className="font-bold text-sm text-slate-800 line-clamp-1">{p.name}</p>
-                                                            <p className="text-xs font-black text-slate-500 mt-1">RM {(p.price || 0).toFixed(2)}</p>
+                                                            <div className="flex items-center gap-1 text-red-500 group/price relative mt-1">
+                                                                <span className="text-[10px] font-black">RM</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    value={customPrices[p.id] !== undefined ? customPrices[p.id] : (p.price || 0)}
+                                                                    onChange={(e) => handlePriceChange(p.id, e.target.value)}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="w-16 bg-transparent border-none p-0 text-xs font-black outline-none focus:ring-0"
+                                                                />
+                                                                <span className="material-icons-round text-[10px] opacity-0 group-hover/price:opacity-100 transition-opacity">edit</span>
+                                                            </div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -751,7 +817,12 @@ export const OrdersPage: React.FC = () => {
                                                     <div key={item.product.id} className="flex items-center justify-between text-sm">
                                                         <div className="flex-1 overflow-hidden pr-2">
                                                             <p className="font-bold text-slate-800 truncate">{item.product.name}</p>
-                                                            <p className="text-xs text-slate-400">RM {(item.product.price || 0).toFixed(2)}</p>
+                                                            <p className="text-xs text-red-500 font-bold">
+                                                                RM {((item.priceOverride ?? item.product.price) || 0).toFixed(2)}
+                                                                {item.priceOverride !== undefined && item.priceOverride !== item.product.price && (
+                                                                    <span className="ml-1 text-[9px] text-slate-400 line-through">(RM {(item.product.price || 0).toFixed(2)})</span>
+                                                                )}
+                                                            </p>
                                                         </div>
                                                         <div className="flex items-center gap-3 bg-slate-100 px-2 py-1 rounded-lg">
                                                             <button onClick={() => updateItemQuantity(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors">
@@ -834,7 +905,7 @@ export const OrdersPage: React.FC = () => {
                                         <span className="font-bold text-slate-500">Total Amount</span>
                                         <span className="text-2xl font-black text-red-600">
                                             <span className="text-sm mr-1">RM</span>
-                                            {newOrder.items.reduce((s, i) => s + (i.product.price || 0) * i.quantity, 0).toFixed(2)}
+                                            {newOrder.items.reduce((s, i) => s + ((i.priceOverride ?? i.product.price) || 0) * i.quantity, 0).toFixed(2)}
                                         </span>
                                     </div>
                                     <button
@@ -1136,7 +1207,14 @@ export const OrdersPage: React.FC = () => {
                                                     <td className="py-3 px-2 text-center align-top">
                                                         <span className="font-black text-slate-900">{item.quantity}</span>
                                                     </td>
-                                                    <td className="py-3 px-2 text-right text-slate-600 font-mono align-top">RM {item.price ? Number(item.price).toFixed(2) : '-'}</td>
+                                                    <td className="py-3 px-2 text-right text-slate-600 font-mono align-top">
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="font-bold text-slate-900">RM {item.price ? Number(item.price).toFixed(2) : '-'}</span>
+                                                            {item.original_price && Number(item.price) !== Number(item.original_price) && (
+                                                                <span className="text-[9px] text-slate-400 line-through">市场价: RM {Number(item.original_price).toFixed(2)}</span>
+                                                            )}
+                                                        </div>
+                                                    </td>
                                                     <td className="py-3 pl-2 text-right font-black text-slate-900 font-mono align-top">RM {item.price ? (Number(item.price) * item.quantity).toFixed(2) : '-'}</td>
                                                 </tr>
                                             ))}

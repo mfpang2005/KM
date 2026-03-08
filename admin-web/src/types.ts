@@ -25,8 +25,11 @@ export type PaymentMethod = typeof PaymentMethod[keyof typeof PaymentMethod];
 
 export interface OrderItem {
     id: string;
-    name: string;
+    name?: string;
+    product_name?: string;
     quantity: number;
+    price?: number;         // 成交价 (Price at order)
+    original_price?: number; // 市场价 (Original price)
     note?: string;
 }
 
@@ -53,7 +56,14 @@ export interface OrderCreate {
     customerName: string;
     customerPhone: string;
     address: string;
-    items: { id: string; quantity: number }[];
+    items: {
+        id: string;
+        quantity: number;
+        price?: number;
+        original_price?: number;
+        name?: string;
+        note?: string;
+    }[];
     status: OrderStatus;
     dueTime: string;
     amount: number;
@@ -132,6 +142,7 @@ export interface Vehicle {
     road_tax_expiry?: string;
     capacity?: number;
     notes?: string;
+    driver_name?: string;
 }
 
 export interface DriverAssignment {

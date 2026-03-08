@@ -10,7 +10,8 @@ import * as XLSX from 'xlsx';
 interface OrderItem {
     id: string;
     order_id: string;
-    name: string;
+    name?: string;
+    product_name?: string;
     quantity: number;
     is_prepared: boolean;
     status: 'pending' | 'ready';
@@ -224,7 +225,7 @@ const OrderCard: React.FC<{
                                             {/* Item info */}
                                             <div className="flex-1 min-w-0">
                                                 <p className={`text-sm font-black truncate ${item.is_prepared ? 'text-green-700 line-through decoration-green-400' : 'text-slate-800'}`}>
-                                                    {item.name}
+                                                    {item.name || item.product_name || 'Unnamed Dish'}
                                                 </p>
                                                 {item.note && (
                                                     <p className="text-[9px] font-bold text-amber-600 mt-0.5 truncate italic">⚠ {item.note}</p>

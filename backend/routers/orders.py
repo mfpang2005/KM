@@ -47,21 +47,45 @@ async def get_finance_summary():
     # 本月开始时间
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
 
-    # 本月已完成订单
+    # Fetch ALL orders for this month (both paid and unpaid) to calculate pending and today's orders
     monthly_resp = await run_in_threadpool(
         supabase.table("orders")
-        .select("amount, created_at")
-        .eq("status", "completed")
+        .select("id, customerName, amount, status, paymentStatus, created_at")
         .gte("created_at", month_start)
         .execute
     )
     monthly_orders = monthly_resp.data or []
 
-    daily_total = sum(
-        (o.get("amount") or 0) for o in monthly_orders
-        if o.get("created_at", "") >= today_start
-    )
-    monthly_total = sum(o.get("amount") or 0 for o in monthly_orders)
+    # Calculate metrics
+    daily_revenue = 0
+    monthly_revenue = 0
+    daily_order_count = 0
+    pending_amount = 0
+    today_orders_list = []
+
+    for o in monthly_orders:
+        curr_amount = o.get("amount") or 0
+        is_today = o.get("created_at", "") >= today_start
+        
+        # Pending amount calculation (unpaid orders)
+        if o.get("paymentStatus") in ["pending", "unpaid"] and o.get("status") != "cancelled":
+            pending_amount += curr_amount
+
+        # Revenue calculation (only paid and completed/delivered orders)
+        if o.get("paymentStatus") == "paid" and o.get("status") == "completed":
+            monthly_revenue += curr_amount
+            if is_today:
+                daily_revenue += curr_amount
+
+        # Today's order list and count (all non-cancelled orders today)
+        if is_today and o.get("status") != "cancelled":
+            daily_order_count += 1
+            today_orders_list.append({
+                "id": o.get("id"),
+                "customerName": o.get("customerName"),
+                "amount": curr_amount,
+                "paymentStatus": o.get("paymentStatus") or "pending"
+            })
 
     # 读取月度目标配置（可选）
     goal = 0
@@ -82,10 +106,13 @@ async def get_finance_summary():
         pass
 
     return {
-        "daily": daily_total,
-        "monthly": monthly_total,
+        "daily": daily_revenue,
+        "monthly": monthly_revenue,
         "monthlyGoal": goal,
         "showFinance": show_finance,
+        "dailyOrderCount": daily_order_count,
+        "pendingAmount": pending_amount,
+        "todayOrders": today_orders_list
     }
 
 
@@ -138,8 +165,9 @@ async def get_order_items(order_id: str):
                         "id": str(idx),
                         "order_id": order_id,
                         "product_id": it.get("id"),
-                        "product_name": it.get("name"),
+                        "name": it.get("name"),
                         "quantity": it.get("quantity"),
+                        "note": it.get("note"),
                         "is_prepared": False,
                         "status": "pending"
                     })
@@ -238,7 +266,8 @@ async def create_order(order: OrderCreate):
                         "name": item["name"],
                         "quantity": item["quantity"],
                         "status": "pending",
-                        "note": item.get("note")
+                        "note": item.get("note"),
+                        "price": item.get("price", 0)
                     })
                 try:
                     supabase.table("order_items").insert(prep_items).execute()

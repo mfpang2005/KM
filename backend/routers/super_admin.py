@@ -391,9 +391,20 @@ async def get_financials(
     response = await run_in_threadpool(query.execute)
     orders = response.data or []
 
-    gross_sales = sum(o.get("amount", 0) or 0 for o in orders)
-    tax = gross_sales * 0.06  # 6% SST
-    net_sales = gross_sales + tax
+    # For SuperAdmin the query is already filtered by range (today or month)
+    # So gross_sales here is either today's revenue or month's revenue depending on the range parameter
+    period_revenue = sum((o.get("amount") or 0) for o in orders)
+    today_order_count = 0 
+    
+    # We still need to count today's orders specifically
+    # And specifically calculate today's revenue if range is 'month' to show the top cards
+    today_revenue = 0
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    
+    for o in orders:
+        if o.get("created_at", "") >= today_start:
+            today_order_count += 1
+            today_revenue += (o.get("amount") or 0)
 
     # 统计支付方式
     pm_stats: dict = {}
@@ -401,7 +412,7 @@ async def get_financials(
         method = o.get("paymentMethod") or "cash"
         if method not in pm_stats:
             pm_stats[method] = {"method": method, "amount": 0, "count": 0}
-        pm_stats[method]["amount"] += o.get("amount", 0) or 0
+        pm_stats[method]["amount"] += (o.get("amount") or 0)
         pm_stats[method]["count"] += 1
 
     # 获取月度目标（从 system_config 读取）
@@ -414,14 +425,13 @@ async def get_financials(
         pass
 
     return {
-        "grossSales": gross_sales,
-        "discounts": 0,
-        "tax": tax,
-        "netSales": net_sales,
+        "periodRevenue": period_revenue, # Revenue based on selected range
+        "todayRevenue": today_revenue,
         "monthlyGoal": goal,
+        "todayOrderCount": today_order_count,
         "collections": list(pm_stats.values()),
         "categorySales": [
-            {"category": "配送订单", "amount": gross_sales}
+            {"category": "Delivery Orders", "amount": period_revenue}
         ],
         "hourlySales": []
     }

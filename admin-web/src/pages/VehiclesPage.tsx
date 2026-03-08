@@ -183,6 +183,18 @@ export const VehiclesPage: React.FC = () => {
                                             {vehicle.road_tax_expiry || '未设置'}
                                         </span>
                                     </div>
+
+                                    {vehicle.status === 'busy' && (
+                                        <div
+                                            onClick={(e) => { e.stopPropagation(); window.location.href = '/drivers'; }}
+                                            className="flex justify-between items-center p-3 rounded-2xl bg-indigo-50/50 border border-indigo-100/50 cursor-pointer hover:bg-indigo-100/50 transition-colors"
+                                        >
+                                            <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-widest flex items-center gap-1">
+                                                <span className="material-icons-round text-[14px]">person</span> 当前司机
+                                            </span>
+                                            <span className="text-xs font-black text-indigo-700">{vehicle.driver_name || '已派单'}</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* 操作按钮组：悬停时出现 */}
