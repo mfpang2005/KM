@@ -47,16 +47,6 @@ export const FinancePage: React.FC = () => {
         if (el) el.scrollIntoView({ behavior: 'smooth' });
     };
 
-    const handleTogglePayment = async (orderId: string, currentStatus: string | undefined) => {
-        const newStatus = currentStatus === 'paid' ? 'unpaid' : 'paid';
-        try {
-            const { error } = await supabase.from('orders').update({ paymentStatus: newStatus }).eq('id', orderId);
-            if (error) throw error;
-        } catch (err) {
-            console.error('Failed to toggle payment status', err);
-            alert('Update failed');
-        }
-    };
 
     const handleUpdateField = async (orderId: string, field: string, value: any) => {
         try {
@@ -324,15 +314,17 @@ export const FinancePage: React.FC = () => {
                                             </select>
                                         </td>
                                         <td className="px-8 py-4">
-                                            <button
-                                                onClick={() => handleTogglePayment(order.id, order.paymentStatus)}
-                                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${order.paymentStatus === 'paid'
-                                                    ? 'bg-[#10b981]/10 text-[#10b981] border border-[#10b981]/20'
-                                                    : 'bg-[#ef4444]/10 text-[#ef4444] border border-[#ef4444]/20 shadow-sm'
+                                            <select
+                                                value={order.paymentStatus || 'unpaid'}
+                                                onChange={(e) => handleUpdateField(order.id, 'paymentStatus', e.target.value)}
+                                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border-none focus:ring-0 cursor-pointer ${order.paymentStatus === 'paid'
+                                                    ? 'bg-[#10b981]/10 text-[#10b981]'
+                                                    : 'bg-[#ef4444]/10 text-[#ef4444] shadow-sm'
                                                     }`}
                                             >
-                                                {order.paymentStatus === 'paid' ? 'PAID' : 'UNPAID'}
-                                            </button>
+                                                <option value="unpaid">UNPAID</option>
+                                                <option value="paid">PAID</option>
+                                            </select>
                                         </td>
                                         <td className="px-8 py-4">
                                             <input
