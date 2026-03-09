@@ -3,7 +3,6 @@ uvicorn
 supabase
 python-dotenv
 pydantic
-requests
 httpx
 google-api-python-client
 google-auth-httplib2

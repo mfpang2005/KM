@@ -45,28 +45,7 @@ interface Recipe {
     ingredients: Ingredient[];
 }
 
-const INITIAL_RECIPES: Recipe[] = [
-    {
-        id: 'r1',
-        name: '扬州炒饭',
-        ingredients: [
-            { name: '白米 (Rice)', baseQty: 0.3, unit: 'kg' },
-            { name: '虾仁 (Shrimp)', baseQty: 0.1, unit: 'kg' },
-            { name: '鸡蛋 (Eggs)', baseQty: 6, unit: '粒' },
-            { name: '青葱 (Spring Onion)', baseQty: 0.02, unit: 'kg' },
-        ]
-    },
-    {
-        id: 'r2',
-        name: '椰浆饭 (Nasi Lemak)',
-        ingredients: [
-            { name: '香米 (Fragrant Rice)', baseQty: 0.4, unit: 'kg' },
-            { name: '椰奶 (Santan)', baseQty: 0.1, unit: 'L' },
-            { name: '炸鸡腿 (Fried Chicken)', baseQty: 10, unit: '份' },
-            { name: '参巴酱 (Sambal)', baseQty: 0.15, unit: 'kg' },
-        ]
-    }
-];
+const INITIAL_RECIPES: Recipe[] = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -277,7 +256,7 @@ const OrderCard: React.FC<{
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const KitchenPrepPage: React.FC = () => {
-    const [activeTab, setActiveTab] = useState<'production' | 'history' | 'recipes'>('production');
+    const [activeTab, setActiveTab] = useState<'production' | 'history'>('production');
     const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
     const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
     const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
@@ -332,6 +311,15 @@ const KitchenPrepPage: React.FC = () => {
         }
     }, []);
 
+    const fetchRecipes = useCallback(async () => {
+        try {
+            const data = await AdminOrderService.getRecipes();
+            setRecipes(data);
+        } catch (e) {
+            console.error('Failed to fetch recipes', e);
+        }
+    }, []);
+
     // NOTE: Load order_items when a card is expanded
     const loadOrderItems = useCallback(async (orderId: string) => {
         if (fetchingItemsRef.current.has(orderId)) return;
@@ -354,11 +342,15 @@ const KitchenPrepPage: React.FC = () => {
 
     useEffect(() => {
         fetchOrders();
+        fetchRecipes();
 
         // Realtime: listen to both orders AND order_items tables
-        const ch = supabase.channel('kitchen-prep-v2')
+        const ch = supabase.channel('kitchen-prep-v3')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
                 fetchOrders();
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes' }, () => {
+                fetchRecipes();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, (payload: any) => {
                 // Update the specific item in state directly
@@ -483,24 +475,41 @@ const KitchenPrepPage: React.FC = () => {
         setIsAddingRecipe(true);
     };
 
-    const handleDeleteRecipe = (id: string) => {
+    const handleDeleteRecipe = async (id: string) => {
         if (window.confirm('Are you sure you want to delete this recipe?')) {
-            setRecipes(recipes.filter(r => r.id !== id));
+            try {
+                await AdminOrderService.deleteRecipe(id);
+                fetchRecipes();
+            } catch (e) {
+                console.error('Failed to delete recipe', e);
+            }
         }
     };
 
-    const handleAddOrUpdateRecipe = (e: React.FormEvent<HTMLFormElement>) => {
+    const handleAddOrUpdateRecipe = async (e: React.FormEvent<HTMLFormElement>) => {
         e.preventDefault();
         const validIngredients = newRecipeIngredients.filter(ing => ing.name.trim() !== '');
-        if (editingRecipeId) {
-            setRecipes(recipes.map(r => r.id === editingRecipeId ? { ...r, name: newRecipeName, ingredients: validIngredients } : r));
-        } else {
-            setRecipes([...recipes, { id: 'r' + Date.now(), name: newRecipeName, ingredients: validIngredients }]);
+        try {
+            if (editingRecipeId) {
+                await AdminOrderService.updateRecipe(editingRecipeId, {
+                    name: newRecipeName,
+                    ingredients: validIngredients
+                });
+            } else {
+                await AdminOrderService.addRecipe({
+                    name: newRecipeName,
+                    ingredients: validIngredients
+                });
+            }
+            fetchRecipes();
+            setIsAddingRecipe(false);
+            setEditingRecipeId(null);
+            setNewRecipeName('');
+            setNewRecipeIngredients([{ name: '', baseQty: 0, unit: '' }]);
+        } catch (e) {
+            console.error('Failed to save recipe', e);
+            alert('保存失败，请重试');
         }
-        setIsAddingRecipe(false);
-        setEditingRecipeId(null);
-        setNewRecipeName('');
-        setNewRecipeIngredients([{ name: '', baseQty: 0, unit: '' }]);
     };
 
     const handleExportExcel = () => {
@@ -545,8 +554,18 @@ const KitchenPrepPage: React.FC = () => {
             }));
             const currentNames = new Set(recipes.map(r => r.name));
             const filtered = newRecipes.filter(r => !currentNames.has(r.name));
-            setRecipes([...recipes, ...filtered]);
-            alert(`Imported ${filtered.length} new recipes!`);
+
+            // Batch add imported recipes to database
+            Promise.all(filtered.map(r => AdminOrderService.addRecipe({
+                name: r.name,
+                ingredients: r.ingredients
+            }))).then(() => {
+                fetchRecipes();
+                alert(`Imported ${filtered.length} new recipes!`);
+            }).catch(e => {
+                console.error('Failed to import recipes', e);
+                alert('部分或全部菜谱导入失败');
+            });
         };
         reader.readAsBinaryString(file);
     };
@@ -599,7 +618,6 @@ const KitchenPrepPage: React.FC = () => {
                     {[
                         { id: 'production', label: 'In Production', icon: 'pending_actions' },
                         { id: 'history', label: 'Completed', icon: 'history' },
-                        { id: 'recipes', label: 'Recipes', icon: 'menu_book' }
                     ].map(tab => (
                         <button
                             key={tab.id}
@@ -684,54 +702,60 @@ const KitchenPrepPage: React.FC = () => {
                     </div>
                 )}
 
-                {/* ── Recipes Tab ── */}
-                {activeTab === 'recipes' && (
-                    <div className="space-y-6 animate-in fade-in duration-500">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Standard Recipe Library</h2>
-                            <div className="flex items-center gap-2">
-                                <label className="bg-emerald-50 text-emerald-600 px-4 py-2.5 rounded-2xl flex items-center gap-2 cursor-pointer hover:bg-emerald-100 transition-all active:scale-95 border border-emerald-100">
-                                    <span className="material-icons-round text-sm">upload_file</span>
-                                    <span className="text-[10px] font-black uppercase">Import Excel</span>
-                                    <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportExcel} />
-                                </label>
-                                <button onClick={handleExportExcel} className="bg-slate-100 text-slate-600 px-4 py-2.5 rounded-2xl flex items-center gap-2 hover:bg-slate-200 transition-all active:scale-95 border border-slate-200">
-                                    <span className="material-icons-round text-sm">download</span>
-                                    <span className="text-[10px] font-black uppercase">Export Excel</span>
-                                </button>
-                                <button onClick={handleOpenAddModal} className="bg-blue-600 text-white px-5 py-2.5 rounded-2xl flex items-center gap-2 active:scale-95 transition-all shadow-lg shadow-blue-500/20">
-                                    <span className="material-icons-round text-sm">add</span>
-                                    <span className="text-[10px] font-black uppercase">Add Recipe</span>
-                                </button>
-                            </div>
-                        </div>
+            </main>
 
+            {/* ── Separate Recipes Card ── */}
+            <div className="px-6 pb-6">
+                <div className="bg-white rounded-[12px] shadow-md border border-slate-100 overflow-hidden">
+                    <header className="p-4 border-b border-slate-50 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="material-icons-round text-blue-900 font-bold">menu_book</span>
+                            <h2 className="text-base font-bold text-blue-900 uppercase tracking-tight">RECIPES</h2>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <label className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer hover:bg-emerald-100 transition-all active:scale-95 border border-emerald-100">
+                                <span className="material-icons-round text-xs">upload_file</span>
+                                <span className="text-[9px] font-black uppercase">Import</span>
+                                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportExcel} />
+                            </label>
+                            <button onClick={handleExportExcel} className="bg-slate-50 text-slate-600 px-3 py-1.5 rounded-xl flex items-center gap-1.5 hover:bg-slate-100 transition-all active:scale-95 border border-slate-100">
+                                <span className="material-icons-round text-xs">download</span>
+                                <span className="text-[9px] font-black uppercase">Export</span>
+                            </button>
+                            <button onClick={handleOpenAddModal} className="bg-blue-600 text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-blue-500/10">
+                                <span className="material-icons-round text-xs">add</span>
+                                <span className="text-[9px] font-black uppercase">Add</span>
+                            </button>
+                        </div>
+                    </header>
+                    <div className="p-[16px]">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                             {recipes.map((recipe: Recipe) => (
-                                <div key={recipe.id} className="bg-white p-6 rounded-[32px] border border-slate-100 flex flex-col gap-4 transition-all hover:shadow-xl group relative cursor-pointer">
-                                    <div className="flex items-center gap-4" onClick={() => setSelectedRecipe(recipe)}>
-                                        <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-blue-600 border border-slate-100 shadow-inner group-hover:bg-blue-50 transition-all">
-                                            <span className="material-icons-round text-2xl">menu_book</span>
+                                <div key={recipe.id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3 transition-all hover:shadow-sm group relative cursor-pointer">
+                                    <div className="flex items-center gap-3" onClick={() => setSelectedRecipe(recipe)}>
+                                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-blue-600 border border-slate-100 shadow-sm group-hover:bg-blue-50 transition-all">
+                                            <span className="material-icons-round text-xl">menu_book</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm font-black text-slate-800 tracking-tight truncate">{recipe.name}</h3>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase mt-1 tracking-widest">{recipe.ingredients.length} Ingredients</p>
+                                            <h3 className="text-sm font-bold text-slate-800 tracking-tight truncate">{recipe.name}</h3>
+                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 tracking-widest">{recipe.ingredients.length} Ingredients</p>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all pt-2 border-t border-slate-50">
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEditModal(recipe); }} className="flex-1 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-center gap-1.5">
-                                            <span className="material-icons-round text-sm">edit</span> Edit
+                                    <div className="flex gap-2 pt-2 border-t border-slate-200/50">
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEditModal(recipe); }} className="flex-1 py-1.5 bg-white text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-center gap-1">
+                                            <span className="material-icons-round text-xs">edit</span> Edit
                                         </button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="flex-1 py-2.5 bg-slate-50 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center gap-1.5">
-                                            <span className="material-icons-round text-sm">delete_outline</span> Delete
+                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="flex-1 py-1.5 bg-white text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center gap-1">
+                                            <span className="material-icons-round text-xs">delete_outline</span> Delete
                                         </button>
                                     </div>
                                 </div>
                             ))}
                         </div>
                     </div>
-                )}
-            </main>
+                </div>
+            </div>
+
 
             {/* ── Recipe Details Modal ── */}
             {selectedRecipe && (

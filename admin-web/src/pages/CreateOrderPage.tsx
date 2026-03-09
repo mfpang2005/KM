@@ -41,13 +41,6 @@ const generateOrderRef = (): string => {
     return `ORD-${date}-${seq}`;
 };
 
-const PAYMENT_OPTIONS = [
-    { id: PaymentMethod.CASH, label: '现金 Cash', icon: 'payments' },
-    { id: PaymentMethod.BANK_TRANSFER, label: '转账 Transfer', icon: 'account_balance' },
-    { id: PaymentMethod.EWALLET, label: 'E-Wallet', icon: 'contactless' },
-    { id: PaymentMethod.CHEQUE, label: '支票 Cheque', icon: 'receipt' },
-];
-
 const EQUIPMENT_LIST = [
     "设备 (可选数量)", "汤匙", "烤鸡网", "叉子", "垃圾袋",
     "Food Tong", "盘子", "红烧桶", "高盖", "杯子", "篮子", "铁脚架", "装酱碗"
@@ -67,7 +60,7 @@ export const CreateOrderPage: React.FC = () => {
     const [remarks, setRemarks] = useState('');
     const [eventDate, setEventDate] = useState('');
     const [eventTime, setEventTime] = useState('');
-    const [payment, setPayment] = useState<string>(PaymentMethod.CASH);
+    const [depositAmount, setDepositAmount] = useState<number>(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderSnapshot | null>(null);
     const orderRef = useRef(generateOrderRef());
@@ -180,8 +173,8 @@ export const CreateOrderPage: React.FC = () => {
 
     /** 提交后台下单 */
     const handleSubmit = async () => {
-        if (!customerName.trim() || !customerPhone.trim()) {
-            alert('请填写客户姓名和联系电话');
+        if (!customerName.trim() || !customerPhone.trim() || !address.trim() || !eventDate.trim() || !eventTime.trim()) {
+            alert('请填写完整客户姓名、电话、地址、活动日期和时间');
             return;
         }
         if (cart.length === 0) {
@@ -212,7 +205,8 @@ export const CreateOrderPage: React.FC = () => {
                     .toLocaleTimeString('zh-MY', { hour: '2-digit', minute: '2-digit' }),
                 amount: totalAmount,
                 type: address.trim() ? 'delivery' : 'takeaway',
-                paymentMethod: payment as PaymentMethod,
+                paymentMethod: PaymentMethod.CASH, // Default to cash, finalized in Financials
+                deposit_amount: depositAmount,
                 driverId: undefined, // 強制不指派司机
                 equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
             };
@@ -229,13 +223,13 @@ export const CreateOrderPage: React.FC = () => {
                 remarks: remarks.trim(),
                 eventDate: eventDate.trim(),
                 eventTime: eventTime.trim(),
-                payment,
                 items: [...cart],
                 equipments: { ...equipments },
                 driverName: '待指派',
                 dueTime: payload.dueTime,
                 createdAt: new Date().toLocaleString('zh-MY', { hour12: false }),
                 status: payload.status,
+                payment: '待财务确认',
             });
         } catch (err) {
             console.error('Failed to create order', err);
@@ -255,7 +249,7 @@ export const CreateOrderPage: React.FC = () => {
         setRemarks('');
         setEventDate('');
         setEventTime('');
-        setPayment(PaymentMethod.CASH);
+        setDepositAmount(0);
         setEquipments(EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {}));
         setConfirmedOrder(null);
         orderRef.current = generateOrderRef();
@@ -264,7 +258,7 @@ export const CreateOrderPage: React.FC = () => {
     // ─── 订单确认成功界面 —— 全部明细 + 可打印收据─────────────────────
     if (confirmedOrder) {
         const activeEquip = Object.entries(confirmedOrder.equipments).filter(([, qty]) => qty > 0);
-        const paymentLabel = PAYMENT_OPTIONS.find(p => p.id === confirmedOrder.payment)?.label ?? confirmedOrder.payment;
+        const paymentLabel = confirmedOrder.payment || '待财务确认';
 
         return (
             <div className="max-w-2xl mx-auto animate-in fade-in duration-500" id="printable-order">
@@ -805,15 +799,16 @@ export const CreateOrderPage: React.FC = () => {
                                 />
                             </div>
                             <div>
-                                <label htmlFor="delivery-address" className="block text-xs font-black text-slate-400 mb-1.5">配送地址（选填）</label>
+                                <label htmlFor="delivery-address" className="block text-xs font-black text-slate-400 mb-1.5">地址 *</label>
                                 <textarea
                                     id="delivery-address"
                                     name="delivery-address"
                                     rows={2}
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium resize-none"
-                                    placeholder="留空视为到店自取..."
+                                    placeholder="请输入详细地址..."
                                     value={address}
                                     onChange={e => setAddress(e.target.value)}
+                                    required
                                 />
                             </div>
 
@@ -884,51 +879,56 @@ export const CreateOrderPage: React.FC = () => {
                                 />
                             </div>
 
+
                             {/* 活动日期和活动时间 */}
                             <div className="grid grid-cols-2 gap-3">
                                 <div>
                                     <label className="block text-xs font-black text-slate-400 mb-1.5 flex items-center gap-1">
                                         <span className="material-icons-round text-[13px] text-violet-500">event</span>
-                                        活动日期（选填）
+                                        活动日期 *
                                     </label>
                                     <input
                                         type="date"
-                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700"
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700 font-bold"
                                         value={eventDate}
                                         onChange={e => setEventDate(e.target.value)}
+                                        required
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-black text-slate-400 mb-1.5 flex items-center gap-1">
                                         <span className="material-icons-round text-[13px] text-violet-500">schedule</span>
-                                        活动时间（选填）
+                                        活动时间 *
                                     </label>
                                     <input
                                         type="time"
-                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700"
+                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700 font-bold"
                                         value={eventTime}
                                         onChange={e => setEventTime(e.target.value)}
+                                        required
                                     />
                                 </div>
                             </div>
 
-                            {/* 付款方式 */}
                             <div>
-                                <label className="block text-xs font-black text-slate-400 mb-1.5">付款方式</label>
-                                <div className="grid grid-cols-2 gap-2">
-                                    {PAYMENT_OPTIONS.map(opt => (
-                                        <button
-                                            key={opt.id}
-                                            type="button"
-                                            onClick={() => setPayment(opt.id)}
-                                            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all ${payment === opt.id ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-indigo-300'}`}
-                                        >
-                                            <span className="material-icons-round text-[14px]">{opt.icon}</span>
-                                            {opt.label}
-                                        </button>
-                                    ))}
+                                <label htmlFor="deposit-amount" className="block text-xs font-black text-slate-400 mb-1.5">定金 Deposit (RM)</label>
+                                <div className="relative">
+                                    <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">payments</span>
+                                    <input
+                                        id="deposit-amount"
+                                        name="deposit-amount"
+                                        type="number"
+                                        step="0.01"
+                                        min="0"
+                                        className="w-full pl-9 pr-4 py-2.5 bg-indigo-50/30 border border-indigo-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-black text-indigo-600"
+                                        placeholder="0.00"
+                                        value={depositAmount || ''}
+                                        onChange={e => setDepositAmount(parseFloat(e.target.value) || 0)}
+                                    />
                                 </div>
+                                <p className="text-[10px] text-slate-400 mt-1 font-bold italic">* 待收余款 Balance Due: RM {(totalAmount - depositAmount).toFixed(2)}</p>
                             </div>
+
                         </div>
                     </div>
 

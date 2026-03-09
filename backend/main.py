@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routers import super_admin
 from routers import admin_users
+from routers import recipes
 from routers import orders
 from routers import products
 from routers import users
@@ -36,6 +37,7 @@ app.add_middleware(
 )
 
 app.include_router(orders.router)
+app.include_router(recipes.router)
 app.include_router(products.router)
 app.include_router(users.router)
 app.include_router(admin_users.router)

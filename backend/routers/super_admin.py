@@ -79,22 +79,16 @@ async def get_stats_overview(
         .limit(200)
         .execute
     )
-    recent_orders = recent_resp.data or []
-
     # 拉取用户总数
     users_resp = await run_in_threadpool(supabase.table("users").select("id", count="exact").execute)
     total_users = users_resp.count if hasattr(users_resp, "count") else len(users_resp.data or [])
 
-    # 最近 5 条订单用于前端小组件
-    recent_5 = recent_orders[:5]
-
-    return StatsOverview(
-        total_orders=total_orders,
-        total_revenue=total_revenue,
-        total_users=total_users,
-        orders_by_status=status_counts,
-        recent_orders=recent_5,
-    )
+    return {
+        "total_orders": total_orders,
+        "total_revenue": total_revenue,
+        "total_users": total_users,
+        "orders_by_status": status_counts
+    }
 
 
 # ═══════════════════════════════════════════
@@ -281,84 +275,10 @@ async def get_all_orders(
     return response.data or []
 
 
-@router.patch("/orders/{order_id:path}/approve")
-async def approve_order(
-    order_id: str,
-    current_user: dict = Depends(require_super_admin),
-):
-    """
-    审批订单：将状态从 pending 修改为 preparing
-    """
-    from fastapi.concurrency import run_in_threadpool
-    # 验证订单当前状态
-    order_resp = await run_in_threadpool(supabase.table("orders").select("*").eq("id", order_id).execute)
-    if not order_resp.data:
-        raise HTTPException(status_code=404, detail="Order not found")
-        
-    order = order_resp.data[0]
-    if order.get("status") != "pending":
-        raise HTTPException(status_code=400, detail=f"Cannot approve order in {order.get('status')} status")
-        
-    # 更新状态为 preparing
-    update_data = {"status": "preparing"}
-    response = await run_in_threadpool(supabase.table("orders").update(update_data).eq("id", order_id).execute)
-    
-    # 记录审计日志
-    await _log_audit(
-        actor=current_user,
-        action="approve_order",
-        target=order_id,
-        detail={"old_status": "pending", "new_status": "preparing"},
-    )
-    
-    # GoEasy Notification
-    from services.goeasy import notify_order_update
-    await notify_order_update(response.data[0], action="approve")
-    
-    return response.data[0]
-
 # ═══════════════════════════════════════════
-# 7. 数据重置 (System Factory Reset)
+# 7. 数据重置 (已废弃，建议直接操作数据库)
 # ═══════════════════════════════════════════
 
-@router.post("/reset-data")
-async def reset_all_data(
-    current_user: dict = Depends(require_super_admin),
-):
-    """
-    重置所有交易数据到0（清除所有订单，将司机状态设为空闲）
-    """
-    from fastapi.concurrency import run_in_threadpool
-    try:
-        # Delete order items first (foreign key constraints)
-        await run_in_threadpool(supabase.table("order_items").delete().neq("id", "dummy").execute)
-        # Delete orders
-        await run_in_threadpool(supabase.table("orders").delete().neq("id", "dummy").execute)
-        
-        # Reset user vehicle statuses
-        await run_in_threadpool(supabase.table("users").update({"vehicle_status": "idle"}).neq("id", "dummy").execute)
-        
-        # Reset generic vehicles
-        await run_in_threadpool(supabase.table("vehicles").update({"status": "idle"}).neq("id", "dummy").execute)
-        
-        # Log this highly privileged action
-        await _log_audit(
-            actor=current_user,
-            action="reset_data",
-            target="all_records",
-            detail={"action": "deleted_all_orders_and_reset_status"},
-        )
-        
-        # GoEasy notification to trigger frontend reloads
-        from services.goeasy import publish_message
-        await publish_message({
-            "type": "system_reset",
-            "detail": "admin_triggered"
-        })
-        
-        return {"status": "success", "message": "All transaction data has been reset."}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/financials")
 async def get_financials(
@@ -377,13 +297,11 @@ async def get_financials(
     now = datetime.now(timezone.utc)
     today_str = now.strftime("%Y-%m-%d")
 
-    # Fetch orders based on range
-    # Since we use dueTime for filtering, we fetch a broader range and filter in Python
-    # for accuracy, or use Postgres date operators.
-    # To keep it consistent, we fetch this month's orders.
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
+    # Fetch orders from a wider 60-day window to ensure all active orders are included in metrics.
+    # This prevents missing orders created in previous months but due in the current month.
+    window_start = (now - timedelta(days=60)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     
-    query = supabase.table("orders").select("*").gte("created_at", month_start).neq("status", "cancelled")
+    query = supabase.table("orders").select("*").gte("created_at", window_start).neq("status", "cancelled")
     
     response = await run_in_threadpool(query.execute)
     all_orders = response.data or []
@@ -436,28 +354,174 @@ async def get_financials(
         if payment_status == "unpaid" and p_status not in ["pending", "unpaid"]:
             continue
 
-        # Period calculation (only PAID reflects in revenue)
-        if is_in_period and p_status == 'paid':
-            period_revenue += curr_amount
+        # Period calculation
+        if is_in_period:
+            deposit = o.get("deposit_amount") or 0
+            balance_due = curr_amount - deposit
             
-            # Payment Method Stats for period
-            method = o.get("paymentMethod") or "cash"
-            if method not in pm_stats:
-                pm_stats[method] = {"method": method, "amount": 0, "count": 0}
-            pm_stats[method]["amount"] += curr_amount
-            pm_stats[method]["count"] += 1
+            # Revenue = Deposits (all) + Balance (only if PAID)
+            rev_contribution = deposit + (balance_due if p_status == 'paid' else 0)
+            period_revenue += rev_contribution
+            
+            # Payment Method Stats for period (Pro-rated based on contribution to revenue)
+            if rev_contribution > 0:
+                method = o.get("paymentMethod") or "cash"
+                if method not in pm_stats:
+                    pm_stats[method] = {"method": method, "amount": 0, "count": 0}
+                pm_stats[method]["amount"] += rev_contribution
+                pm_stats[method]["count"] += 1
 
         # Today's specific cards
         if is_today:
             today_order_count += 1
-            if p_status == 'paid':
-                today_revenue += curr_amount
+            deposit = o.get("deposit_amount") or 0
+            balance_due = curr_amount - deposit
+            # Today Revenue = All deposits from today + today's PAID balances
+            today_revenue += deposit + (balance_due if p_status == 'paid' else 0)
+
+    # Calculate Global Total Unpaid Balance (Regardless of filters)
+    # We need to fetch all unpaid orders to get the real total, but for performance 
+    # and "heartbeat" feedback, we can base it on the current month's data if acceptable,
+    # OR better: run a quick separate count for true accuracy.
+    
+    unpaid_query = supabase.table("orders").select("amount, deposit_amount").in_("paymentStatus", ["pending", "unpaid"]).neq("status", "cancelled")
+    unpaid_response = await run_in_threadpool(unpaid_query.execute)
+    unpaid_orders = unpaid_response.data or []
+    total_unpaid_balance = sum((uo.get("amount") or 0) - (uo.get("deposit_amount") or 0) for uo in unpaid_orders)
 
     return {
         "periodRevenue": period_revenue,
         "todayRevenue": today_revenue,
-        "todayOrderCount": today_order_count,
+        "todayOrders": today_order_count,
+        "totalUnpaidBalance": total_unpaid_balance,
         "collections": list(pm_stats.values()),
-        "categorySales": [{"category": "Completed Sales", "amount": period_revenue}],
-        "hourlySales": []
+    }
+@router.get("/ai-summary")
+async def get_ai_summary(
+    current_user: dict = Depends(require_super_admin),
+):
+    """
+    AI 营业额监督助手：分析波动、预测趋势、检测异常
+    """
+    from fastapi.concurrency import run_in_threadpool
+    from datetime import datetime, timezone, timedelta
+    import dateutil.parser
+    import calendar
+
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    # 1. 获取过去 14 天的所有已完成订单用于计算平均值 (增加窗口冗余)
+    history_start = today_start - timedelta(days=14)
+    history_resp = await run_in_threadpool(
+        supabase.table("orders")
+        .select("amount, dueTime, created_at, paymentStatus, deposit_amount")
+        .gte("created_at", history_start.isoformat())
+        .neq("status", "cancelled")
+        .execute
+    )
+    history_orders = history_resp.data or []
+    
+    daily_revenue = {}
+    for o in history_orders:
+        amount = o.get("amount") or 0
+        deposit = o.get("deposit_amount") or 0
+        balance = amount - deposit
+        p_status = o.get("paymentStatus")
+        
+        # Contribution to revenue: deposit + (balance if paid)
+        rev_contribution = deposit + (balance if p_status == 'paid' else 0)
+        if rev_contribution <= 0: continue
+        
+        try:
+            dt_str = o.get("dueTime") or o.get("created_at")
+            dt = dateutil.parser.isoparse(dt_str).strftime("%Y-%m-%d")
+            daily_revenue[dt] = daily_revenue.get(dt, 0) + rev_contribution
+        except: continue
+
+    # 计算 7 天平均值 (不含今天)
+    today_str = now.strftime("%Y-%m-%d")
+    other_days_revenue = [v for k, v in daily_revenue.items() if k != today_str]
+    avg_7d = sum(other_days_revenue) / len(other_days_revenue) if other_days_revenue else 0
+    today_rev = daily_revenue.get(today_str, 0)
+
+    # 2. 计算月度环比增长 (MTD vs Last Month MTD)
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    # 上月同期起点与终点
+    last_month_end = (month_start - timedelta(days=1)).replace(day=now.day, hour=23, minute=59, second=59)
+    # 处理日期溢出（例如 3月31日对应2月28/29日）
+    last_month_days = calendar.monthrange((month_start - timedelta(days=1)).year, (month_start - timedelta(days=1)).month)[1]
+    if now.day > last_month_days:
+        last_month_end = last_month_end.replace(day=last_month_days)
+    
+    last_month_start = last_month_end.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # 获取本月至今与上月同期的订单
+    comparison_resp = await run_in_threadpool(
+        supabase.table("orders")
+        .select("amount, paymentStatus, deposit_amount, created_at")
+        .gte("created_at", last_month_start.isoformat())
+        .neq("status", "cancelled")
+        .execute
+    )
+    comp_orders = comparison_resp.data or []
+    
+    mtd_rev = 0
+    last_mtd_rev = 0
+    
+    for o in comp_orders:
+        amt = o.get("amount") or 0
+        dep = o.get("deposit_amount") or 0
+        p_stat = o.get("paymentStatus")
+        contrib = dep + ((amt - dep) if p_stat == 'paid' else 0)
+        
+        ca = dateutil.parser.isoparse(o.get("created_at"))
+        if ca >= month_start:
+            mtd_rev += contrib
+        elif last_month_start <= ca <= last_month_end:
+            last_mtd_rev += contrib
+
+    # 3. 线性预测本月总额
+    days_in_month = calendar.monthrange(now.year, now.month)[1]
+    predicted_total = (mtd_rev / now.day) * days_in_month if now.day > 0 else 0
+
+    # 4. 异常检测：高额未付订单 (> RM 500)
+    unpaid_high_value = [o for o in comp_orders if dateutil.parser.isoparse(o.get("created_at")) >= month_start and o.get("paymentStatus") != "paid" and float(o.get("amount", 0)) > 500]
+
+    # 5. 波动预警与分析
+    warnings = []
+    if avg_7d > 0 and today_rev < (avg_7d * 0.3):
+        warnings.append({
+            "type": "low_revenue",
+            "message": f"今日营收 (RM {today_rev:.2f}) 低于过去 7 天平均水平的 30%，建议检查运营。",
+            "severity": "warning"
+        })
+    
+    if last_mtd_rev > 0 and mtd_rev < last_mtd_rev * 0.8:
+        warnings.append({
+            "type": "mtd_decline",
+            "message": f"本月进度 (RM {mtd_rev:.2f}) 较上月同期 (RM {last_mtd_rev:.2f}) 落后超过 20%。",
+            "severity": "info"
+        })
+
+    return {
+        "today_vs_avg": {
+            "today": today_rev,
+            "avg_7d": avg_7d,
+            "ratio": (today_rev / avg_7d) if avg_7d > 0 else 1
+        },
+        "monthly_growth": (mtd_rev - last_mtd_rev) / last_mtd_rev if last_mtd_rev > 0 else 0,
+        "prediction": {
+            "current": mtd_rev,
+            "predicted": predicted_total,
+            "days_passed": now.day,
+            "total_days": days_in_month
+        },
+        "anomalies": [
+            {
+                "id": f"KM-{now.strftime('%y%m')}-XXX",
+                "amount": float(o.get("amount", 0)),
+                "status": "unpaid"
+            } for o in unpaid_high_value[:3]
+        ],
+        "warnings": warnings
     }

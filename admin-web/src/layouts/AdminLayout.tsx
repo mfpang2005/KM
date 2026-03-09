@@ -184,7 +184,7 @@ const AdminLayout: React.FC = () => {
 
                 <div
                     ref={scrollRef}
-                    className="flex-1 overflow-y-auto pt-24 px-10 pb-10 relative z-0 no-scrollbar"
+                    className="flex-1 overflow-y-auto pt-[120px] px-10 pb-10 relative z-0 no-scrollbar"
                 >
                     <div className="max-w-7xl mx-auto h-full">
                         <Outlet />

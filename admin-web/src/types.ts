@@ -51,6 +51,7 @@ export interface Order {
     delivery_photos?: string[];
     equipments?: Record<string, number>;
     remark?: string;
+    deposit_amount?: number;
 }
 
 export interface OrderCreate {
@@ -72,6 +73,7 @@ export interface OrderCreate {
     paymentMethod?: PaymentMethod;
     driverId?: string;
     equipments?: Record<string, number>;
+    deposit_amount?: number;
 }
 
 export interface User {
@@ -174,6 +176,36 @@ export interface CollectionStats {
 export interface FinanceData {
     periodRevenue: number;
     todayRevenue: number;
-    todayOrderCount: number;
+    todayOrders: number;
+    totalUnpaidBalance: number;
     collections: CollectionStats[];
+}
+
+export interface AiWarning {
+    type: string;
+    message: string;
+    severity: 'info' | 'warning' | 'error';
+}
+
+export interface AiAnomaly {
+    id: string;
+    amount: number;
+    status: string;
+}
+
+export interface AiSummary {
+    today_vs_avg: {
+        today: number;
+        avg_7d: number;
+        ratio: number;
+    };
+    monthly_growth: number;
+    prediction: {
+        current: number;
+        predicted: number;
+        days_passed: number;
+        total_days: number;
+    };
+    anomalies: AiAnomaly[];
+    warnings: AiWarning[];
 }

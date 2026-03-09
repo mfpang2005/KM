@@ -38,6 +38,20 @@ class PaymentMethod(str, Enum):
     CHEQUE = 'cheque'
 
 
+class Ingredient(BaseModel):
+    name: str
+    baseQty: float
+    unit: str
+
+
+class Recipe(BaseModel):
+    id: Optional[str] = None
+    name: str
+    ingredients: List[Ingredient]
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class OrderItem(BaseModel):
     id: str
     name: str
@@ -54,15 +68,14 @@ class OrderBase(BaseModel):
     status: OrderStatus
     dueTime: str
     amount: float
-    type: str  # 'dine-in' | 'takeaway' | 'delivery'
-    batch: Optional[str] = None
     driverId: Optional[str] = None
     paymentMethod: Optional[PaymentMethod] = None
     paymentStatus: Optional[str] = 'pending'
     delivery_photos: Optional[List[str]] = []
     equipments: Optional[dict] = {}
     calendar_event_id: Optional[str] = None
-    order_items: Optional[List[dict]] = []
+    deposit_amount: Optional[float] = 0.0
+    remark: Optional[str] = None
 
 
 class OrderCreate(OrderBase):
@@ -77,11 +90,11 @@ class OrderUpdate(BaseModel):
     status: Optional[OrderStatus] = None
     dueTime: Optional[str] = None
     amount: Optional[float] = None
-    type: Optional[str] = None
-    batch: Optional[str] = None
     driverId: Optional[str] = None
     paymentMethod: Optional[PaymentMethod] = None
     paymentStatus: Optional[str] = None
+    deposit_amount: Optional[float] = None
+    remark: Optional[str] = None
 
 
 class Order(OrderBase):
@@ -96,7 +109,6 @@ class Product(BaseModel):
     price: Optional[float] = None
     category: Optional[str] = None
     image_url: Optional[str] = None
-    stock: Optional[int] = 0
 
 
 class User(BaseModel):

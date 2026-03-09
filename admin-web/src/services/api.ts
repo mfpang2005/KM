@@ -68,7 +68,8 @@ export const SuperAdminService = {
     getFinanceSummary: async (range: 'today' | 'month' | 'all' = 'month'): Promise<{
         periodRevenue: number;
         todayRevenue: number;
-        todayOrderCount: number;
+        todayOrders: number;
+        totalUnpaidBalance: number;
         collections: Array<{ method: string; amount: number; count: number }>;
     }> => {
         const response = await api.get(`/super-admin/financials?range=${range}`);
@@ -88,6 +89,12 @@ export const SuperAdminService = {
     /** 后台直接建单 */
     create: async (order: OrderCreate): Promise<Order> => {
         const response = await api.post('/orders', order);
+        return response.data;
+    },
+
+    /** AI 营业额监督助手 */
+    getAiSummary: async (): Promise<any> => {
+        const response = await api.get('/super-admin/ai-summary');
         return response.data;
     }
 };
@@ -144,11 +151,24 @@ export const AdminOrderService = {
         await api.post(`/orders/${encodeURIComponent(orderId)}/kitchen-complete`);
     },
     /**
-     * 获取财务汇总（今日/本月已完成订单总额）
+     * 注意：Admin 首页已统一使用 SuperAdminService.getFinanceSummary 以获取更详尽的数据。
      */
-    getFinanceSummary: async (): Promise<{ daily: number; monthly: number; showFinance: boolean }> => {
-        const response = await api.get('/orders/finance-summary');
+
+    // ---- Recipe Management ----
+    getRecipes: async (): Promise<any[]> => {
+        const response = await api.get('/recipes');
         return response.data;
+    },
+    addRecipe: async (recipe: any): Promise<any> => {
+        const response = await api.post('/recipes', recipe);
+        return response.data;
+    },
+    updateRecipe: async (id: string, recipe: any): Promise<any> => {
+        const response = await api.put(`/recipes/${id}`, recipe);
+        return response.data;
+    },
+    deleteRecipe: async (id: string): Promise<void> => {
+        await api.delete(`/recipes/${id}`);
     },
 };
 

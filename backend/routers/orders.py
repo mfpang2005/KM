@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from typing import List, Optional
 from database import supabase
 from models import Order, OrderCreate, OrderUpdate, OrderStatus
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(
     prefix="/orders",
@@ -14,8 +15,11 @@ async def get_orders(
     sort_by: str = "created_at", 
     order: str = "desc"
 ):
-    from fastapi.concurrency import run_in_threadpool
-    query = supabase.table("orders").select("*")
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    window_start = (now - timedelta(days=60)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    
+    query = supabase.table("orders").select("*").gte("created_at", window_start)
     if status and status != 'all':
         query = query.eq("status", status)
     
@@ -31,119 +35,7 @@ async def get_orders(
 
 # ─── Finance Summary (Public for Admin Role) ──────────────────────────────────
 
-@router.get("/finance-summary")
-async def get_finance_summary():
-    """
-    公开的财务汇总端点，供前端 Admin 首页使用（无需 super_admin 权限）。
-    数据源对齐：
-    - TODAY REVENUE: delivery_date 为今日且 payment_status = 'paid'
-    - PENDING: delivery_date 为今日且 payment_status = 'pending' (已送达/待收)
-    """
-    from fastapi.concurrency import run_in_threadpool
-    from datetime import datetime, timezone, timedelta
-    import dateutil.parser
 
-    # Convert strictly to UTC+8 (Malaysia time) for daily grouping
-    malaysia_tz = timezone(timedelta(hours=8))
-    now = datetime.now(malaysia_tz)
-    today_str = now.strftime("%Y-%m-%d")
-
-    # Fetch ALL orders for this month to calculate metrics
-    # Using created_at for month boundary, but filtering by dueTime for 'Today'
-    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
-    
-    monthly_resp = await run_in_threadpool(
-        supabase.table("orders")
-        .select("id, customerName, amount, status, paymentStatus, dueTime, created_at")
-        .gte("created_at", month_start)
-        .execute
-    )
-    all_orders = monthly_resp.data or []
-
-    daily_revenue = 0
-    monthly_revenue = 0
-    daily_order_count = 0
-    pending_amount = 0
-    today_orders_list = []
-
-    for o in all_orders:
-        curr_amount = o.get("amount") or 0
-        due_time_raw = o.get("dueTime") or ""
-        
-        # Parse dueTime to check if it's today
-        is_today = False
-        try:
-            if due_time_raw:
-                # If it's ISO format
-                if "T" in due_time_raw:
-                    dt = dateutil.parser.isoparse(due_time_raw)
-                    if dt.tzinfo is None:
-                        dt = dt.replace(tzinfo=timezone.utc)
-                    if dt.astimezone(malaysia_tz).strftime("%Y-%m-%d") == today_str:
-                        is_today = True
-                # Fallback to created_at if dueTime is just a time string or empty
-                else:
-                    ca = dateutil.parser.isoparse(o.get("created_at"))
-                    if ca.tzinfo is None:
-                        ca = ca.replace(tzinfo=timezone.utc)
-                    if ca.astimezone(malaysia_tz).strftime("%Y-%m-%d") == today_str:
-                        is_today = True
-        except Exception:
-            # Final fallback
-            ca = dateutil.parser.isoparse(o.get("created_at"))
-            if ca.tzinfo is None:
-                ca = ca.replace(tzinfo=timezone.utc)
-            if ca.astimezone(malaysia_tz).strftime("%Y-%m-%d") == today_str:
-                is_today = True
-
-        # 1. 累计本月收入 (已支付的所有订单)
-        if o.get("paymentStatus") == "paid" and o.get("status") != "cancelled":
-            monthly_revenue += curr_amount
-
-        # 2. 今日数据
-        if is_today and o.get("status") != "cancelled":
-            daily_order_count += 1
-            
-            # 今日收入 (Today Revenue): 已支付
-            if o.get("paymentStatus") == "paid":
-                daily_revenue += curr_amount
-            
-            # 今日待收 (Pending): 未支付 (不管是否送达，只要是今天的订单且未付)
-            # 用户要求：已送达但 payment_status = false。
-            # 这里我们放宽一点：只要是今天的订单且未付，即算 Pending。
-            if o.get("paymentStatus") in ["pending", "unpaid"]:
-                pending_amount += curr_amount
-
-            today_orders_list.append({
-                "id": o.get("id"),
-                "customerName": o.get("customerName"),
-                "amount": curr_amount,
-                "paymentStatus": o.get("paymentStatus") or "pending",
-                "status": o.get("status")
-            })
-
-    # 系统配置读取 (Goal & Display)
-    goal = 0
-    show_finance = True
-    try:
-        cfg = supabase.table("system_config").select("key, value").in_("key", ["finance_goal", "finance_display"]).execute()
-        for item in cfg.data:
-            if item["key"] == "finance_goal":
-                goal = item["value"].get("amount", 0)
-            elif item["key"] == "finance_display":
-                show_finance = item["value"].get("enabled", True)
-    except Exception:
-        pass
-
-    return {
-        "daily": daily_revenue,
-        "monthly": monthly_revenue,
-        "monthlyGoal": goal,
-        "showFinance": show_finance,
-        "dailyOrderCount": daily_order_count,
-        "pendingAmount": pending_amount,
-        "todayOrders": today_orders_list
-    }
 
 
 # NOTE: 司机完成送餐后将照片 URL 列表写入对应订单，供 Admin 审阅
@@ -488,7 +380,6 @@ async def kitchen_complete(order_id: str):
     厨房确认整张订单完成，将 orders.status 更新为 ready，
     并通过 GoEasy 实时通知司机和管理员准备出发。
     """
-    from fastapi.concurrency import run_in_threadpool
     from services.goeasy import notify_kitchen_complete
 
     response = await run_in_threadpool(

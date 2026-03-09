@@ -69,11 +69,13 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
                         <h1 className={`font-black text-slate-800 tracking-tight transition-all duration-500 ${isCompact ? 'text-lg' : 'text-3xl'}`}>
                             {title}
                         </h1>
-                        {!isCompact && subtitle && (
-                            <p className="text-slate-500 text-sm mt-1 animate-in fade-in slide-in-from-top-1 duration-700">
-                                {subtitle}
-                            </p>
-                        )}
+                        <div className={`overflow-hidden transition-all duration-500 ${isCompact ? 'max-h-0 opacity-0' : 'max-h-10 opacity-100 mt-1'}`}>
+                            {subtitle && (
+                                <p className="text-slate-500 text-sm">
+                                    {subtitle}
+                                </p>
+                            )}
+                        </div>
                     </div>
 
                     {/* Compact Stats Bar */}
@@ -104,58 +106,65 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
                 </div>
             </div>
 
-            {/* Expanded Stats View */}
-            {!isCompact && showStats && (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8 animate-in fade-in slide-in-from-bottom-2 duration-700">
-                    <div
-                        onClick={() => handleStatClick('revenue')}
-                        className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
-                    >
-                        <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center transition-transform group-hover:scale-110">
-                            <span className="material-icons-round text-2xl">monetization_on</span>
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-1.5">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Revenue</p>
-                                <span className="material-icons-round text-[14px] text-slate-300 group-hover:text-primary transition-colors">arrow_outward</span>
+            {/* Expanded Stats View with Slide-up Logic */}
+            <div className={`grid grid-cols-1 md:grid-cols-3 gap-6 transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)]
+                ${isCompact
+                    ? 'opacity-0 pointer-events-none translate-y-[-20px] max-h-0 mt-0 overflow-hidden'
+                    : 'opacity-100 mt-8 max-h-[500px] translate-y-0'
+                }`}
+            >
+                {showStats && (
+                    <>
+                        <div
+                            onClick={() => handleStatClick('revenue')}
+                            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
+                        >
+                            <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center transition-transform group-hover:scale-110">
+                                <span className="material-icons-round text-2xl">monetization_on</span>
                             </div>
-                            <p className="text-2xl font-black text-slate-800 font-mono">RM {stats.todayRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Revenue</p>
+                                    <span className="material-icons-round text-[14px] text-slate-300 group-hover:text-primary transition-colors">arrow_outward</span>
+                                </div>
+                                <p className="text-2xl font-black text-slate-800 font-mono">RM {stats.todayRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            </div>
                         </div>
-                    </div>
 
-                    <div
-                        onClick={() => handleStatClick('orders')}
-                        className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
-                    >
-                        <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center transition-transform group-hover:scale-110">
-                            <span className="material-icons-round text-2xl">receipt_long</span>
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-1.5">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Orders</p>
-                                <span className="material-icons-round text-[14px] text-slate-300 group-hover:text-primary transition-colors">arrow_outward</span>
+                        <div
+                            onClick={() => handleStatClick('orders')}
+                            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
+                        >
+                            <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center transition-transform group-hover:scale-110">
+                                <span className="material-icons-round text-2xl">receipt_long</span>
                             </div>
-                            <p className="text-2xl font-black text-slate-800">{stats.todayOrdersCount}</p>
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Orders</p>
+                                    <span className="material-icons-round text-[14px] text-slate-300 group-hover:text-primary transition-colors">arrow_outward</span>
+                                </div>
+                                <p className="text-2xl font-black text-slate-800">{stats.todayOrdersCount}</p>
+                            </div>
                         </div>
-                    </div>
 
-                    <div
-                        onClick={() => handleStatClick('unpaid')}
-                        className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
-                    >
-                        <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center transition-transform group-hover:scale-110">
-                            <span className="material-icons-round text-2xl">account_balance_wallet</span>
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-1.5">
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Unpaid Balance</p>
-                                <span className="material-icons-round text-[14px] text-slate-300 group-hover:text-primary transition-colors">arrow_outward</span>
+                        <div
+                            onClick={() => handleStatClick('unpaid')}
+                            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
+                        >
+                            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center transition-transform group-hover:scale-110">
+                                <span className="material-icons-round text-2xl">account_balance_wallet</span>
                             </div>
-                            <p className="text-2xl font-black text-slate-800 font-mono">RM {stats.totalUnpaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            <div>
+                                <div className="flex items-center gap-1.5">
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Unpaid Balance</p>
+                                    <span className="material-icons-round text-[14px] text-slate-300 group-hover:text-primary transition-colors">arrow_outward</span>
+                                </div>
+                                <p className="text-2xl font-black text-slate-800 font-mono">RM {stats.totalUnpaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+                            </div>
                         </div>
-                    </div>
-                </div>
-            )}
+                    </>
+                )}
+            </div>
         </header>
     );
 };

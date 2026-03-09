@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, SuperAdminService, ProductService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { Order, Product } from '../types';
-import { OrderStatus, PaymentMethod } from '../types';
+import { OrderStatus } from '../types';
 import { PageHeader } from '../components/PageHeader';
 import { NotificationBell } from '../components/NotificationBell';
 
@@ -22,7 +22,6 @@ export const OrdersPage: React.FC = () => {
         const date = searchParams.get('date');
         const isReset = searchParams.get('reset') === 'true';
         const isCreate = searchParams.get('create') === 'true';
-        const isAssign = searchParams.get('assign') === 'true';
 
         if (isReset) {
             setStatusFilter('all');
@@ -30,15 +29,13 @@ export const OrdersPage: React.FC = () => {
             setDateFilter('all');
         } else if (isCreate) {
             setShowCreateModal(true);
-        } else if (isAssign) {
-            setStatusFilter(OrderStatus.PENDING);
         } else {
             if (status) setStatusFilter(status);
             if (search !== null) setSearchQuery(search);
             if (date) setDateFilter(date);
         }
     }, [searchParams]);
-    const [drivers, setDrivers] = useState<any[]>([]);
+
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [editingOrder, setEditingOrder] = useState<Order | null>(null);
@@ -48,12 +45,7 @@ export const OrdersPage: React.FC = () => {
     const [currentPage, setCurrentPage] = useState(1);
     const pageSize = 12;
 
-    // Assign Driver Modal State
-    const [showAssignModal, setShowAssignModal] = useState(false);
-    const [assignOrderId, setAssignOrderId] = useState<string | null>(null);
-    const [selectedDriverId, setSelectedDriverId] = useState<string>('');
-
-    // Delete Confirmation Modal State
+    // Modal States
     const [showDeleteModal, setShowDeleteModal] = useState(false);
     const [deleteOrderId, setDeleteOrderId] = useState<string | null>(null);
     const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
@@ -69,7 +61,8 @@ export const OrdersPage: React.FC = () => {
         customerPhone: '',
         address: '',
         type: 'delivery' as 'dine-in' | 'takeaway' | 'delivery',
-        paymentMethod: PaymentMethod.CASH as PaymentMethod,
+        remark: '',
+        deposit_amount: 0,
         eventDate: '',
         eventTime: '',
         items: [] as { product: Product, quantity: number, priceOverride?: number }[],
@@ -82,7 +75,6 @@ export const OrdersPage: React.FC = () => {
 
     const loadOrders = useCallback(async () => {
         try {
-            // NOTE: 直接读取 /orders 端点返回全部订单，与前端 App 共用同一数据源
             const response = await api.get(`/orders${statusFilter !== 'all' ? `?status=${statusFilter}` : ''}`);
             setOrders(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
@@ -92,26 +84,12 @@ export const OrdersPage: React.FC = () => {
         }
     }, [statusFilter]);
 
-    const fetchDrivers = useCallback(async () => {
-        try {
-            const users = await api.get('/super-admin/users');
-            if (Array.isArray(users.data)) {
-                setDrivers(users.data.filter((u: any) => u.role === 'driver'));
-            } else {
-                setDrivers([]);
-            }
-        } catch (error) {
-            console.error('Failed to load drivers', error);
-        }
-    }, []);
-
     const fetchProducts = useCallback(async () => {
         try {
             const data = await ProductService.getAll();
             const productsData = Array.isArray(data) ? data : [];
             setProducts(productsData);
 
-            // 初始化自定义价格映射
             const prices: Record<string, number> = {};
             productsData.forEach(p => {
                 prices[p.id] = p.price || 0;
@@ -123,19 +101,15 @@ export const OrdersPage: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        setLoading(true);
         loadOrders();
-        fetchDrivers();
         fetchProducts();
 
-        // NOTE: 使用 Supabase Realtime 替代 setInterval 轮询，实现 App 下单后 Admin 端即时柴新
         const channel = supabase
             .channel('orders-page-sync')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
                 () => {
-                    // 任意变更（INSERT/UPDATE/DELETE）都重新拉取最新订单列表
                     loadOrders();
                 }
             )
@@ -144,19 +118,16 @@ export const OrdersPage: React.FC = () => {
         return () => {
             supabase.removeChannel(channel);
         };
-    }, [loadOrders, fetchDrivers, fetchProducts]);
+    }, [loadOrders, fetchProducts]);
 
     const handleEditClick = (order: Order) => {
         const prices: Record<string, number> = { ...customPrices };
 
         const preparedItems = (order.items || []).map((i: any) => {
             const product = products.find(p => p.id === i.id) || { id: i.id, name: i.name, price: i.price, code: '' } as Product;
-
-            // 如果订单项有成交价，记录到 customPrices
             if (i.price !== undefined) {
                 prices[i.id] = Number(i.price);
             }
-
             return {
                 product,
                 quantity: i.quantity,
@@ -176,7 +147,8 @@ export const OrdersPage: React.FC = () => {
             customerPhone: order.customerPhone || '',
             address: order.address || '',
             type: order.type as any,
-            paymentMethod: order.paymentMethod || PaymentMethod.CASH,
+            remark: order.remark || '',
+            deposit_amount: order.deposit_amount || 0,
             items: preparedItems,
             equipments: order.equipments || {},
             driverId: order.driverId || null,
@@ -189,6 +161,12 @@ export const OrdersPage: React.FC = () => {
 
     const handleCreateOrder = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        if (!newOrder.customerName.trim() || !newOrder.customerPhone.trim() || !newOrder.address.trim() || !newOrder.eventDate.trim() || !newOrder.eventTime.trim()) {
+            alert('请填写完整客户姓名、电话、地址、活动日期和时间');
+            return;
+        }
+
         if (newOrder.items.length === 0) {
             alert("Please add at least one item to the order.");
             return;
@@ -212,76 +190,78 @@ export const OrdersPage: React.FC = () => {
                 try {
                     dueTime = new Date(`${newOrder.eventDate}T${newOrder.eventTime}:00`).toISOString();
                 } catch (e) {
-                    console.warn('Invalid custom date/time provided, falling back to existing dueTime');
+                    console.warn('Invalid custom date/time provided, falling back');
                 }
             }
 
             const payload = {
-                id: newOrder.id || undefined,
-                customerName: newOrder.customerName || 'Walk-in Customer',
-                customerPhone: newOrder.customerPhone || '-',
-                address: newOrder.address || '',
+                id: editingOrder ? editingOrder.id : undefined,
                 items: itemsPayload,
+                amount,
+                customerName: newOrder.customerName,
+                customerPhone: newOrder.customerPhone,
+                address: newOrder.address,
+                type: newOrder.type,
+                remark: newOrder.remark,
+                deposit_amount: newOrder.deposit_amount,
+                dueTime,
                 status: editingOrder ? editingOrder.status : OrderStatus.PENDING,
-                dueTime: dueTime,
-                amount: parseFloat(amount.toFixed(2)),
-                type: 'delivery',
-                paymentMethod: newOrder.paymentMethod,
-                driverId: newOrder.driverId || undefined,
-                equipments: newOrder.equipments
+                equipments: newOrder.equipments,
+                driverId: newOrder.driverId || undefined
             };
 
             if (editingOrder) {
-                await api.put(`/orders/${editingOrder.id}`, payload);
-                alert("Order successfully updated! (更新成功)");
+                await api.put(`/super-admin/orders/${editingOrder.id}`, payload);
             } else {
                 await SuperAdminService.create(payload as any);
-                alert("Order successfully created! (创建成功)");
             }
 
+            await loadOrders();
             setShowCreateModal(false);
             setEditingOrder(null);
             setProductSearchQuery('');
             setNewOrder({
-                id: '', customerName: '', customerPhone: '', address: '', type: 'delivery', paymentMethod: PaymentMethod.CASH, items: [], equipments: {}, driverId: null, eventDate: '', eventTime: ''
+                id: '',
+                customerName: '',
+                customerPhone: '',
+                address: '',
+                type: 'delivery',
+                remark: '',
+                deposit_amount: 0,
+                eventDate: '',
+                eventTime: '',
+                items: [],
+                equipments: {},
+                driverId: null
             });
-            setStatusFilter('all'); // 确保能看到新创建的订单
-            await loadOrders();
         } catch (error) {
             console.error('Failed to save order', error);
-            alert(`Failed to ${editingOrder ? 'update' : 'create'} order. Please check inputs.`);
+            alert('Failed to save order.');
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    const toggleOrderItem = (product: Product) => {
-        const existing = newOrder.items.find(i => i.product.id === product.id);
-        const currentPrice = customPrices[product.id] ?? product.price;
-
-        if (existing) {
-            setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.product.id !== product.id) });
+    const toggleOrderItem = (productId: string) => {
+        const exists = newOrder.items.find(i => i.product.id === productId);
+        if (exists) {
+            setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.product.id !== productId) });
         } else {
-            setNewOrder({ ...newOrder, items: [...newOrder.items, { product, quantity: 1, priceOverride: currentPrice }] });
+            const product = products.find(p => p.id === productId);
+            if (product) {
+                const price = customPrices[productId] ?? product.price;
+                setNewOrder({ ...newOrder, items: [...newOrder.items, { product, quantity: 1, priceOverride: price }] });
+            }
         }
     };
 
-    const handlePriceChange = (productId: string, value: string) => {
-        const newPrice = value === '' ? 0 : parseFloat(value);
-        if (isNaN(newPrice) || newPrice < 0) return;
-
-        setCustomPrices(prev => ({
-            ...prev,
-            [productId]: newPrice
-        }));
-
-        // 同时更新当前订单草稿中的价格
+    const handlePriceChange = (productId: string, price: string) => {
+        const num = parseFloat(price) || 0;
+        setCustomPrices(prev => ({ ...prev, [productId]: num }));
         setNewOrder(prev => ({
             ...prev,
             items: prev.items.map(item =>
-                item.product.id === productId
-                    ? { ...item, priceOverride: newPrice }
-                    : item
+                item.product.id === productId ? { ...item, priceOverride: num } : item
             )
         }));
     };
@@ -291,8 +271,7 @@ export const OrdersPage: React.FC = () => {
             ...newOrder,
             items: newOrder.items.map(item => {
                 if (item.product.id === productId) {
-                    const newQ = Math.max(1, item.quantity + delta);
-                    return { ...item, quantity: newQ };
+                    return { ...item, quantity: Math.max(1, item.quantity + delta) };
                 }
                 return item;
             })
@@ -313,7 +292,6 @@ export const OrdersPage: React.FC = () => {
             await loadOrders();
         } catch (error) {
             console.error('Failed to approve order', error);
-            alert('Approval failed.');
         }
     };
 
@@ -335,36 +313,14 @@ export const OrdersPage: React.FC = () => {
         try {
             await api.delete(`/orders/${deleteOrderId}`);
             await loadOrders();
-            handleRejectDelete(); // Close modal and reset state
-            alert("Order deleted successfully.");
-        } catch (error: any) {
+            handleRejectDelete();
+        } catch (error) {
             console.error('Failed to delete order', error);
-            const detail = error.response?.data?.detail || "Delete operation failed. Please try again.";
-            alert(detail);
         } finally {
             setIsDeleting(false);
         }
     };
 
-    const handleAssignDriverClick = (orderId: string) => {
-        setAssignOrderId(orderId);
-        setSelectedDriverId('');
-        setShowAssignModal(true);
-    };
-
-    const confirmAssignDriver = async () => {
-        if (!assignOrderId || !selectedDriverId) return;
-        try {
-            await api.post(`/orders/${assignOrderId}/assign`, { driver_id: selectedDriverId });
-            await loadOrders();
-            setShowAssignModal(false);
-            setAssignOrderId(null);
-            setSelectedDriverId('');
-        } catch (error) {
-            console.error('Failed to assign driver', error);
-            alert('Failed to assign driver.');
-        }
-    };
 
     /**
      * 直接在表格中更改订单状态（点击状态标签出现下拉菜单）
@@ -402,10 +358,15 @@ export const OrdersPage: React.FC = () => {
         const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
 
         let matchesDate = true;
-        if (dateFilter === 'today' && o.created_at) {
+        if (dateFilter === 'today') {
             const today = new Date().toDateString();
-            const orderDate = new Date(o.created_at).toDateString();
-            matchesDate = today === orderDate;
+            const orderDateValue = o.dueTime || o.created_at;
+            if (orderDateValue) {
+                const orderDate = new Date(orderDateValue).toDateString();
+                matchesDate = today === orderDate;
+            } else {
+                matchesDate = false;
+            }
         }
 
         return matchesSearch && matchesStatus && matchesDate;
@@ -566,16 +527,6 @@ export const OrdersPage: React.FC = () => {
                                                         <span className="material-icons-round text-[16px]">check_circle</span>
                                                     </button>
                                                 )}
-                                                {/* Assign Driver Logic for SuperAdmin */}
-                                                {['pending', 'preparing', 'ready'].includes(order.status) && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleAssignDriverClick(order.id); }}
-                                                        className="w-8 h-8 inline-flex items-center justify-center bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 hover:scale-110 transition-all shadow-sm group"
-                                                        title={order.driverId ? `Reassign (Current: ${order.driverId})` : "Assign Driver"}
-                                                    >
-                                                        <span className="material-icons-round text-[16px]">local_shipping</span>
-                                                    </button>
-                                                )}
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); setSelectedPrintOrder(order); }}
                                                     title="View Bill / Print"
@@ -729,7 +680,7 @@ export const OrdersPage: React.FC = () => {
                                             return (
                                                 <div
                                                     key={p.id}
-                                                    onClick={() => toggleOrderItem(p)}
+                                                    onClick={() => toggleOrderItem(p.id)}
                                                     className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${selected ? 'border-red-500 bg-red-50/30' : 'border-transparent bg-white shadow-sm hover:shadow-md'}`}
                                                 >
                                                     <div className="flex items-center gap-3">
@@ -790,35 +741,47 @@ export const OrdersPage: React.FC = () => {
                                         </div>
 
                                         <input
-                                            type="text" placeholder="Customer Name (Optional)"
+                                            type="text" placeholder="Customer Name *"
                                             value={newOrder.customerName} onChange={e => setNewOrder({ ...newOrder, customerName: e.target.value })}
                                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20"
+                                            required
                                         />
                                         <input
-                                            type="text" placeholder="Phone Number"
+                                            type="text" placeholder="Phone Number *"
                                             value={newOrder.customerPhone} onChange={e => setNewOrder({ ...newOrder, customerPhone: e.target.value })}
                                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20"
+                                            required
                                         />
                                         <textarea
                                             placeholder="Delivery Address *" required
                                             value={newOrder.address} onChange={e => setNewOrder({ ...newOrder, address: e.target.value })}
                                             className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20 resize-none h-20"
                                         />
-
-                                        <select
-                                            title="Payment Method"
-                                            value={newOrder.paymentMethod}
-                                            onChange={e => setNewOrder({ ...newOrder, paymentMethod: e.target.value as any })}
-                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-red-500/20"
-                                        >
-                                            <option value={PaymentMethod.CASH}>Cash</option>
-                                            <option value={PaymentMethod.EWALLET}>E-Wallet / QR</option>
-                                            <option value={PaymentMethod.BANK_TRANSFER}>Bank Transfer</option>
-                                        </select>
+                                        <textarea
+                                            placeholder="Remark (Optional)"
+                                            value={newOrder.remark} onChange={e => setNewOrder({ ...newOrder, remark: e.target.value })}
+                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20 resize-none h-20"
+                                        />
                                     </div>
 
                                     <hr className="border-slate-100" />
 
+                                    {/* Deposit Input */}
+                                    <div className="md:col-span-2">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">定金 Deposit (RM)</label>
+                                        <div className="relative group">
+                                            <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors">payments</span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                min="0"
+                                                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono font-bold"
+                                                placeholder="0.00"
+                                                value={newOrder.deposit_amount || ''}
+                                                onChange={(e) => setNewOrder({ ...newOrder, deposit_amount: parseFloat(e.target.value) || 0 })}
+                                            />
+                                        </div>
+                                    </div>
                                     <div>
                                         <h4 className="font-bold text-xs text-slate-500 mb-3 uppercase tracking-wider">Cart Items</h4>
                                         {newOrder.items.length === 0 ? (
@@ -888,37 +851,6 @@ export const OrdersPage: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <hr className="border-slate-100" />
-
-                                    <div>
-                                        <h4 className="font-bold text-xs text-slate-500 mb-3 uppercase tracking-wider">指派配送员 (Driver Assignment)</h4>
-                                        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-2">
-                                            {drivers.map((driver) => (
-                                                <button
-                                                    key={driver.id}
-                                                    onClick={() => setNewOrder({ ...newOrder, driverId: driver.id })}
-                                                    className={`min-w-[100px] p-2 rounded-xl border transition-all flex flex-col items-center gap-2 relative ${newOrder.driverId === driver.id ? 'bg-primary/5 border-primary shadow-sm' : 'bg-white border-slate-100'
-                                                        }`}
-                                                >
-                                                    <div className="w-10 h-10 bg-slate-100 rounded-full flex items-center justify-center text-slate-400 overflow-hidden">
-                                                        {driver.avatar_url ? (
-                                                            <img src={driver.avatar_url} alt={driver.name || driver.email} className="w-full h-full object-cover" />
-                                                        ) : (
-                                                            <span className="material-icons-round text-lg">person</span>
-                                                        )}
-                                                    </div>
-                                                    <div className="text-center w-full px-1">
-                                                        <p className="text-[10px] font-bold text-slate-800 truncate">{driver.name || driver.email.split('@')[0]}</p>
-                                                    </div>
-                                                    {newOrder.driverId === driver.id && (
-                                                        <div className="absolute top-1 right-1 text-primary">
-                                                            <span className="material-icons-round text-[12px]">check_circle</span>
-                                                        </div>
-                                                    )}
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>
                                 </div>
 
                                 {/* Footer summary & submit */}
@@ -949,59 +881,6 @@ export const OrdersPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Assign Driver Modal */}
-            {showAssignModal && (
-                <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-3xl shadow-xl w-full max-w-sm overflow-hidden flex flex-col items-center p-6 border border-slate-100 relative">
-                        <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center mb-4">
-                            <span className="material-icons-round text-2xl">local_shipping</span>
-                        </div>
-                        <h3 className="text-lg font-black text-slate-800 text-center">Assign Driver</h3>
-                        <p className="text-xs font-bold text-slate-500 text-center mt-1 mb-6">Order ID: {assignOrderId}</p>
-
-                        <div className="w-full space-y-2 max-h-60 overflow-y-auto custom-scrollbar pr-2 mb-6">
-                            {drivers.map(driver => (
-                                <button
-                                    key={driver.id}
-                                    onClick={() => setSelectedDriverId(driver.id)}
-                                    className={`w-full text-left px-4 py-3 rounded-xl border-2 transition-all flex items-center gap-3 ${selectedDriverId === driver.id ? 'border-primary bg-primary/5' : 'border-slate-100 hover:border-slate-200 focus:outline-none'}`}
-                                >
-                                    <div className="w-8 h-8 bg-slate-100 text-slate-500 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
-                                        {driver.avatar_url ? (
-                                            <img src={driver.avatar_url} alt={driver.name || driver.email} className="w-full h-full object-cover" />
-                                        ) : (
-                                            <span className="material-icons-round text-[16px]">person</span>
-                                        )}
-                                    </div>
-                                    <span className="font-bold text-sm text-slate-700 flex-1">{driver.name || driver.email.split('@')[0]}</span>
-                                    {selectedDriverId === driver.id && (
-                                        <span className="material-icons-round text-primary text-[18px]">check_circle</span>
-                                    )}
-                                </button>
-                            ))}
-                            {drivers.length === 0 && (
-                                <p className="text-center text-slate-400 text-xs py-4 font-bold">No dispatchers available</p>
-                            )}
-                        </div>
-
-                        <div className="flex gap-3 w-full">
-                            <button
-                                onClick={() => { setShowAssignModal(false); setAssignOrderId(null); setSelectedDriverId(''); }}
-                                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold rounded-xl transition-colors text-sm"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmAssignDriver}
-                                disabled={!selectedDriverId}
-                                className="flex-1 py-2.5 bg-primary hover:bg-primary-dark disabled:opacity-50 disabled:bg-primary text-white font-bold rounded-xl transition-all shadow-lg hover:-translate-y-0.5 text-sm"
-                            >
-                                Confirm
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
 
             {/* Delete Confirmation Modal */}
             {showDeleteModal && (
@@ -1279,17 +1158,17 @@ export const OrdersPage: React.FC = () => {
 
                                         <span className="text-slate-500 font-medium">Driver:</span>
                                         <span className="font-bold text-slate-900">
-                                            {selectedPrintOrder.driverId ? (drivers.find(d => d.id === selectedPrintOrder.driverId)?.name || 'Assigned') : 'Unassigned'}
+                                            {selectedPrintOrder.driverId ? 'Assigned' : 'Unassigned'}
                                         </span>
 
                                         <span className="text-slate-500 font-medium">Status:</span>
                                         <span className="font-bold text-slate-900 uppercase tracking-wider">{selectedPrintOrder.status}</span>
                                     </div>
 
-                                    {(selectedPrintOrder as any).remarks && (
-                                        <div className="mt-4 p-3 border border-dashed border-slate-300 rounded-lg bg-slate-50/50">
+                                    {(selectedPrintOrder as any).remark && (
+                                        <div className="mt-6 border-t border-slate-100 pt-6">
                                             <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Remarks</span>
-                                            <p className="text-sm print:text-xs font-medium text-slate-800">{(selectedPrintOrder as any).remarks}</p>
+                                            <p className="text-sm print:text-xs font-medium text-slate-800">{(selectedPrintOrder as any).remark}</p>
                                         </div>
                                     )}
                                 </div>
