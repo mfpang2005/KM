@@ -342,7 +342,6 @@ export const FinancePage: React.FC = () => {
                                                                     onBlur={(e) => {
                                                                         const val = parseFloat(e.target.value);
                                                                         if (!isNaN(val) && val !== 0) {
-                                                                            const newBalance = Math.max(0, (balance || 0) - val);
                                                                             handleUpdateField(order.id, 'deposit_amount', (order.deposit_amount || 0) + val); // Update deposit amount
                                                                             e.target.value = ''; // Reset after update
                                                                         }
@@ -377,7 +376,7 @@ export const FinancePage: React.FC = () => {
                     onClick={() => setLightboxUrl(null)}
                 >
                     <div className="relative max-w-5xl w-full flex flex-col items-center">
-                        <img src={lightboxUrl} alt="Evidence" className="max-w-full max-h-[85vh] rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10" />
+                        <img src={lightboxUrl || ''} alt="Evidence" className="max-w-full max-h-[85vh] rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10" />
                         <button
                             className="mt-10 px-12 py-4 glass-dark rounded-2xl font-black uppercase tracking-[0.3em] hover:bg-white hover:text-slate-900 transition-all duration-500 active:scale-95"
                             onClick={() => setLightboxUrl(null)}
