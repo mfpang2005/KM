@@ -269,7 +269,7 @@ const AccountManagement: React.FC = () => {
                                 </div>
                             )}
 
-                            <div className="grid grid-cols-3 gap-2 pt-6 border-t border-white/5">
+                            <div className="grid grid-cols-2 gap-2 pt-6 border-t border-white/5">
                                 <div className="text-center">
                                     <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Order Count</p>
                                     <p className="text-xl font-black text-white">{todayOrders.length}</p>
@@ -277,10 +277,6 @@ const AccountManagement: React.FC = () => {
                                 <div className="text-center border-x border-white/5">
                                     <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">已收 (RM)</p>
                                     <p className="text-xl font-mono font-black text-[#10b981]">{todayRevenue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
-                                </div>
-                                <div className="text-center">
-                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">待收 (RM)</p>
-                                    <p className="text-xl font-mono font-black text-[#ef4444]">{todayPending.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
                                 </div>
                             </div>
                         </div>
@@ -532,8 +528,7 @@ const AccountManagement: React.FC = () => {
                                 { label: '今日订单总数', value: `${todayOrders.length} 单`, icon: 'receipt_long' },
                                 { label: '今日总金额', value: `RM ${(todayRevenue + todayPending).toFixed(2)}`, icon: 'payments' },
                                 { label: '已收金额', value: `RM ${todayRevenue.toFixed(2)}`, icon: 'check_circle', color: 'text-emerald-400' },
-                                { label: '待收金额', value: `RM ${todayPending.toFixed(2)}`, icon: 'pending', color: 'text-rose-400' },
-                                { label: '回笼进度', value: `${collectionRate.toFixed(1)}%`, icon: 'trending_up', color: collectionRate >= 80 ? 'text-emerald-400' : 'text-amber-400' },
+                                { label: '已收金额', value: `RM ${todayRevenue.toFixed(2)}`, icon: 'check_circle', color: 'text-emerald-400' },
                             ].map(row => (
                                 <div key={row.label} className="flex items-center justify-between px-5 py-3.5">
                                     <div className="flex items-center gap-2.5">

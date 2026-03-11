@@ -175,9 +175,9 @@ export interface CollectionStats {
 
 export interface FinanceData {
     periodRevenue: number;
+    periodOrders: number;
     todayRevenue: number;
     todayOrders: number;
-    totalUnpaidBalance: number;
     collections: CollectionStats[];
 }
 

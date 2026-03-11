@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useLocation } from 'react-router-dom';
 import { SuperAdminService, AdminOrderService } from '../services/api';
 import { supabase } from '../lib/supabase';
-import type { Order, FinanceData, AiSummary } from '../types';
+import type { Order, FinanceData } from '../types';
 import { PageHeader } from '../components/PageHeader';
 
 export const FinancePage: React.FC = () => {
@@ -12,10 +12,8 @@ export const FinancePage: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-    const [aiSummary, setAiSummary] = useState<AiSummary | null>(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const { search } = useLocation();
-
 
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
@@ -33,14 +31,6 @@ export const FinancePage: React.FC = () => {
         }
     };
 
-    const loadAiSummary = async () => {
-        try {
-            const result = await SuperAdminService.getAiSummary();
-            setAiSummary(result);
-        } catch (error) {
-            console.error('Failed to load AI summary', error);
-        }
-    };
 
     const scrollToReconciliation = () => {
         const el = document.getElementById('payment-reconciliation');
@@ -48,11 +38,50 @@ export const FinancePage: React.FC = () => {
     };
 
     const handleUpdateField = async (orderId: string, field: string, value: any) => {
+        // --- Optimistic UI Update ---
+        // 1. Snapshot previous state
+        const originalOrders = [...orders];
+        const originalData = data ? { ...data } : null;
+
+        // 2. Find and update the order locally
+        const updatedOrders = orders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+        setOrders(updatedOrders);
+
+        // 3. If field is paymentStatus, update revenue stats optimistically
+        if (field === 'paymentStatus' && data) {
+            const order = orders.find(o => o.id === orderId);
+            if (order) {
+                const oldStatus = order.paymentStatus || 'unpaid';
+                const newStatus = value;
+                const balance = order.amount - (order.deposit_amount || 0);
+
+                // If changing to 'paid', increase revenue. If changing from 'paid', decrease.
+                let revDiff = 0;
+                if (oldStatus !== 'paid' && newStatus === 'paid') revDiff = balance;
+                else if (oldStatus === 'paid' && newStatus !== 'paid') revDiff = -balance;
+
+                if (revDiff !== 0) {
+                    setData({
+                        ...data,
+                        periodRevenue: data.periodRevenue + revDiff,
+                        todayRevenue: data.todayRevenue + revDiff // Simplification: assuming it might affect today
+                    });
+                }
+            }
+        }
+
         try {
             const { error } = await supabase.from('orders').update({ [field]: value }).eq('id', orderId);
             if (error) throw error;
+            
+            // Success: silently refresh to ensure server consistency
+            loadData(true);
         } catch (err) {
             console.error(`Failed to update ${field}`, err);
+            // Rollback on failure
+            setOrders(originalOrders);
+            setData(originalData);
+            alert(`Failed to update ${field}. Please try again.`);
         }
     };
 
@@ -69,7 +98,6 @@ export const FinancePage: React.FC = () => {
 
     useEffect(() => {
         loadData();
-        loadAiSummary();
 
         const handleScroll = () => {
             setIsCollapsed(window.scrollY > 100);
@@ -81,7 +109,6 @@ export const FinancePage: React.FC = () => {
             .channel('finance-room')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
                 loadData(true);
-                loadAiSummary();
             })
             .subscribe();
 
@@ -126,6 +153,7 @@ export const FinancePage: React.FC = () => {
                     <PageHeader
                         title="Financials / 财务数据"
                         subtitle="Real-time net revenue and tax tracking"
+                        showStats={false}
                         actions={
                             <div className="flex bg-white/50 backdrop-blur p-1 rounded-2xl border border-slate-200">
                                 {(['today', 'month', 'all'] as const).map((r) => (
@@ -143,70 +171,47 @@ export const FinancePage: React.FC = () => {
                 </div>
 
                 {/* Metrics Bar */}
-                <div className={`grid transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] px-1 ${isCollapsed ? 'grid-cols-4 gap-4 max-w-7xl mx-auto' : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mt-4'}`}>
-                    {/* 1. Today Revenue */}
+                <div className={`grid transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] px-1 ${isCollapsed ? 'grid-cols-2 gap-4 max-w-7xl mx-auto' : 'grid-cols-1 md:grid-cols-2 gap-6 mt-4'}`}>
+                    {/* 1. Period Revenue */}
                     <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:-translate-y-1'}`}>
                         <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-slate-900 group-hover:scale-110'}`}>
                             <span className={`material-icons-round ${isCollapsed ? 'text-lg text-emerald-500' : 'text-4xl'}`}>payments</span>
                         </div>
                         <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
-                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>Today Rev</p>
+                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>
+                                {range === 'today' ? 'Today' : range === 'month' ? 'Month' : 'Total'} Rev
+                            </p>
                             <div className="flex items-baseline gap-0.5">
                                 <span className={`font-black text-emerald-500/60 font-mono transition-all duration-500 ${isCollapsed ? 'text-xs' : 'text-xl'}`}>RM</span>
                                 <h2 className={`font-black text-slate-800 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
-                                    {(data?.todayRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    {(data?.periodRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                 </h2>
                             </div>
                         </div>
                     </div>
 
-                    {/* 2. Today Orders */}
+                    {/* 2. Period Orders */}
                     <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:-translate-y-1'}`}>
                         <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-slate-900 group-hover:scale-110'}`}>
                             <span className={`material-icons-round ${isCollapsed ? 'text-lg text-indigo-500' : 'text-4xl'}`}>receipt_long</span>
                         </div>
                         <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
-                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>Orders</p>
+                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>
+                                {range === 'today' ? 'Today' : range === 'month' ? 'Month' : 'Total'} Orders
+                            </p>
                             <h2 className={`font-black text-slate-800 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
-                                {data?.todayOrders || 0}
+                                {data?.periodOrders || 0}
                             </h2>
                         </div>
                     </div>
 
-                    {/* 3. Total Unpaid Balance */}
-                    <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-red-100 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(239,68,68,0.04)] hover:-translate-y-1'}`}>
-                        <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-red-500 group-hover:scale-110'}`}>
-                            <span className={`material-icons-round ${isCollapsed ? 'text-lg text-red-500' : 'text-4xl'}`}>warning</span>
-                        </div>
-                        <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
-                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-red-400 mr-1' : 'text-[10px] text-red-400 mb-3'}`}>Unpaid</p>
-                            <div className="flex items-baseline gap-0.5">
-                                <span className={`font-black text-red-500/60 font-mono transition-all duration-500 ${isCollapsed ? 'text-xs' : 'text-xl'}`}>RM</span>
-                                <h2 className={`font-black text-red-600 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
-                                    {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                </h2>
-                            </div>
-                        </div>
-                    </div>
 
-                    {/* 4. Monthly Growth */}
-                    <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-slate-900 p-6 rounded-[32px] shadow-xl hover:-translate-y-1'}`}>
-                        <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-white'}`}>
-                            <span className={`material-icons-round ${isCollapsed ? 'text-lg text-indigo-400' : 'text-4xl'}`}>auto_graph</span>
-                        </div>
-                        <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
-                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-indigo-400 mr-1' : 'text-[10px] text-indigo-400 mb-3'}`}>Growth</p>
-                            <h2 className={`font-black tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm text-slate-800' : 'text-3xl text-white'}`}>
-                                {aiSummary?.monthly_growth !== undefined ? (aiSummary.monthly_growth * 100).toFixed(1) : '0.0'}%
-                            </h2>
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 gap-8 mt-8">
                 {/* Payment Breakdown */}
-                <div className="lg:col-span-2 bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden flex flex-col">
+                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
                     <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
                         <h4 className="font-black text-slate-800 text-sm uppercase tracking-wider">Payment Collections</h4>
                         <span className="material-icons-round text-slate-300">pie_chart</span>
@@ -249,48 +254,6 @@ export const FinancePage: React.FC = () => {
                                 })}
                             </div>
                         )}
-                    </div>
-                </div>
-
-                {/* Info Card - AI Status (Replacing Financial Policy) */}
-                <div className="bg-slate-900 rounded-[32px] p-8 text-white flex flex-col shadow-xl border border-white/5 text-left">
-                    <div className="flex items-center gap-4 mb-8">
-                        <div className="w-12 h-12 rounded-2xl bg-indigo-500/20 flex items-center justify-center border border-indigo-500/20">
-                            <span className="material-icons-round text-indigo-400">insights</span>
-                        </div>
-                        <h4 className="font-black text-sm uppercase tracking-widest text-left">Growth Analytics</h4>
-                    </div>
-
-                    <div className="space-y-6 flex-1">
-                        <div>
-                            <div className="flex justify-between items-end mb-2">
-                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest text-left">MTD Growth (MoM)</p>
-                                <p className="text-xs font-black font-mono">
-                                    {(aiSummary?.monthly_growth || 0) >= 0 ? '+' : ''}{((aiSummary?.monthly_growth || 0) * 100).toFixed(1)}%
-                                </p>
-                            </div>
-                            <div className="w-full h-2 bg-white/5 rounded-full overflow-hidden">
-                                <div
-                                    className={`h-full transition-all duration-1000 ${(aiSummary?.today_vs_avg.ratio || 0) < 0.3 ? 'bg-red-500' : 'bg-indigo-500'
-                                        }`}
-                                    style={{ width: `${Math.min((aiSummary?.today_vs_avg.ratio || 0) * 100, 100)}%` }}
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <p className="text-xs text-slate-400 leading-relaxed font-medium text-left">
-                                AI Supervisor is actively monitoring {range} transactions. System health is optimal based on historical seasonality.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="mt-8 p-4 bg-white/5 rounded-2xl border border-white/5 flex items-center justify-between">
-                        <div className="text-left">
-                            <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-1 text-left">AI Audit</p>
-                            <p className="text-[10px] text-slate-500 text-left">Stability: High</p>
-                        </div>
-                        <span className="material-icons-round text-emerald-400 text-lg">verified</span>
                     </div>
                 </div>
             </div>
@@ -362,15 +325,17 @@ export const FinancePage: React.FC = () => {
                                             </select>
                                         </td>
                                         <td className="px-8 py-4">
-                                            <button
-                                                onClick={() => handleUpdateField(order.id, 'paymentStatus', order.paymentStatus === 'paid' ? 'unpaid' : 'paid')}
-                                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all ${order.paymentStatus === 'paid'
+                                            <select
+                                                value={order.paymentStatus || 'unpaid'}
+                                                onChange={(e) => handleUpdateField(order.id, 'paymentStatus', e.target.value)}
+                                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border-none cursor-pointer focus:ring-2 focus:ring-offset-2 ${order.paymentStatus === 'paid'
                                                     ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
                                                     : 'bg-red-500 text-white shadow-sm shadow-red-500/20'
                                                     }`}
                                             >
-                                                {order.paymentStatus || 'unpaid'}
-                                            </button>
+                                                <option value="paid" className="bg-white text-slate-800">PAID</option>
+                                                <option value="unpaid" className="bg-white text-slate-800">UNPAID</option>
+                                            </select>
                                         </td>
                                         <td className="px-8 py-4">
                                             <input

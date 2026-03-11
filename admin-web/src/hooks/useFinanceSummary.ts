@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { AdminOrderService } from '../services/api';
+import { SuperAdminService } from '../services/api';
 import type { FinanceSummary } from '../types';
 
 /**
@@ -15,8 +15,13 @@ export const useFinanceSummary = () => {
     const fetchSummary = useCallback(async (showLoading = false) => {
         if (showLoading) setLoading(true);
         try {
-            const data = await AdminOrderService.getFinanceSummary();
-            setSummary(data);
+            // 统一调用 SuperAdminService 并映射字段
+            const data = await SuperAdminService.getFinanceSummary('month');
+            setSummary({
+                daily: data.todayRevenue,
+                monthly: data.periodRevenue,
+                showFinance: true // 默认显示，或从 system_config 读取
+            });
             setError(null);
         } catch (err: any) {
             console.error('[useFinanceSummary] Failed to fetch finance summary:', err);

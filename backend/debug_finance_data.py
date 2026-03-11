@@ -27,8 +27,9 @@ def check_orders():
     for o in orders:
         dt_raw = o.get("dueTime")
         amount = o.get("amount") or 0
-        p_status = o.get("paymentStatus")
+        p_status = o.get("paymentStatus") or "pending"
         status = o.get("status")
+        deposit = o.get("deposit_amount") or 0
         
         is_today = False
         try:
@@ -45,7 +46,9 @@ def check_orders():
         except:
             pass
             
-        print(f"ID: {o['id']} | Customer: {repr(o['customerName'])} | Amount: {amount} | P.Status: {p_status} | Status: {status} | dueTime: {dt_raw} | Today: {is_today}")
+        # 使用 safe print 避免 Windows 编码问题
+        customer = str(o.get('customerName')).encode('ascii', 'ignore').decode('ascii')
+        print(f"ID: {o['id'][:8]} | Amt: {amount} | Dep: {deposit} | P.Stat: {p_status} | Stat: {status} | Today: {is_today}")
 
 if __name__ == "__main__":
     check_orders()

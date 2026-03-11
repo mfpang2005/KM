@@ -5,7 +5,6 @@ import { SuperAdminService } from '../services/api';
 export interface GlobalStats {
     todayRevenue: number;
     todayOrdersCount: number;
-    totalUnpaid: number;
 }
 
 /**
@@ -14,8 +13,7 @@ export interface GlobalStats {
 export const useGlobalStats = () => {
     const [stats, setStats] = useState<GlobalStats>({
         todayRevenue: 0,
-        todayOrdersCount: 0,
-        totalUnpaid: 0
+        todayOrdersCount: 0
     });
     const [loading, setLoading] = useState(true);
 
@@ -24,19 +22,9 @@ export const useGlobalStats = () => {
             // Fetch financial stats
             const finance = await SuperAdminService.getFinanceSummary('today');
 
-            // Fetch total unpaid amount (all time or filtered by relevant criteria if needed)
-            // For now, let's get all 'unpaid' orders total
-            const { data: unpaidOrders } = await supabase
-                .from('orders')
-                .select('amount')
-                .not('paymentStatus', 'eq', 'paid');
-
-            const totalUnpaid = (unpaidOrders || []).reduce((acc, curr) => acc + (curr.amount || 0), 0);
-
             setStats({
                 todayRevenue: finance.todayRevenue || 0,
-                todayOrdersCount: finance.todayOrderCount || 0,
-                totalUnpaid: totalUnpaid
+                todayOrdersCount: finance.todayOrders || 0
             });
         } catch (error) {
             console.error('[useGlobalStats] Error fetching stats:', error);

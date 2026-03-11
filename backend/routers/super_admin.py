@@ -291,7 +291,7 @@ async def get_financials(
     统一逻辑：使用 dueTime 作为交付日期过滤。
     """
     from fastapi.concurrency import run_in_threadpool
-    from datetime import datetime, timezone
+    from datetime import datetime, timezone, timedelta
     import dateutil.parser
 
     now = datetime.now(timezone.utc)
@@ -307,6 +307,7 @@ async def get_financials(
     all_orders = response.data or []
 
     period_revenue = 0
+    period_order_count = 0
     today_revenue = 0
     today_order_count = 0
     pm_stats: dict = {}
@@ -356,6 +357,7 @@ async def get_financials(
 
         # Period calculation
         if is_in_period:
+            period_order_count += 1
             deposit = o.get("deposit_amount") or 0
             balance_due = curr_amount - deposit
             
@@ -391,6 +393,7 @@ async def get_financials(
 
     return {
         "periodRevenue": period_revenue,
+        "periodOrders": period_order_count,
         "todayRevenue": today_revenue,
         "todayOrders": today_order_count,
         "totalUnpaidBalance": total_unpaid_balance,

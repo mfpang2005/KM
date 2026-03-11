@@ -30,7 +30,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
         return () => scrollContainer.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const handleStatClick = (type: 'revenue' | 'orders' | 'unpaid') => {
+    const handleStatClick = (type: 'revenue' | 'orders') => {
         switch (type) {
             case 'revenue':
                 // Navigate to Finance and scroll to reconciliation
@@ -43,14 +43,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
             case 'orders':
                 // Navigate to Orders with today filter
                 navigate('/orders?date=today');
-                break;
-            case 'unpaid':
-                // Navigate to Finance with unpaid filter
-                navigate('/finance?filter=unpaid');
-                setTimeout(() => {
-                    const el = document.getElementById('payment-reconciliation');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
                 break;
         }
     };
@@ -91,10 +83,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
                                 <div className="flex flex-col cursor-pointer group" onClick={() => handleStatClick('orders')}>
                                     <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Orders</span>
                                     <span className="text-xs font-black text-blue-600">{stats.todayOrdersCount}</span>
-                                </div>
-                                <div className="flex flex-col cursor-pointer group" onClick={() => handleStatClick('unpaid')}>
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Unpaid Bill</span>
-                                    <span className="text-xs font-black text-rose-600 font-mono">RM {stats.totalUnpaid.toFixed(0)}</span>
                                 </div>
                             </div>
                         </div>
@@ -147,21 +135,6 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
                             </div>
                         </div>
 
-                        <div
-                            onClick={() => handleStatClick('unpaid')}
-                            className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm flex items-center gap-5 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer group"
-                        >
-                            <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center transition-transform group-hover:scale-110">
-                                <span className="material-icons-round text-2xl">account_balance_wallet</span>
-                            </div>
-                            <div>
-                                <div className="flex items-center gap-1.5">
-                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Unpaid Balance</p>
-                                    <span className="material-icons-round text-[14px] text-slate-300 group-hover:text-primary transition-colors">arrow_outward</span>
-                                </div>
-                                <p className="text-2xl font-black text-slate-800 font-mono">RM {stats.totalUnpaid.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
-                            </div>
-                        </div>
                     </>
                 )}
             </div>
