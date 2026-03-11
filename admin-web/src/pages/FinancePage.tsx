@@ -228,7 +228,7 @@ export const FinancePage: React.FC = () => {
                 <div className="lg:col-span-1">
                     <div className="glass-card rounded-[40px] p-8 h-full">
                         <div className="flex items-center justify-between mb-8">
-                            <h4 className="font-black text-slate-800 text-sm uppercase tracking-[0.2em]">Collection Mix</h4>
+                            <h4 className="font-black text-slate-800 text-sm uppercase tracking-[0.2em]">Collection Data</h4>
                             <span className="material-icons-round text-slate-300">donut_large</span>
                         </div>
                         
