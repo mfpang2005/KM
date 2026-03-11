@@ -174,7 +174,7 @@ export const FinancePage: React.FC = () => {
             <div className={`sticky top-4 z-[70] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isCollapsed ? 'translate-y-0' : 'translate-y-0'}`}>
                 <div className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-4 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[24px] shadow-2xl border border-white/10 scale-95' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'}`}>
                     
-                    {/* Revenue Card */}
+                    {/* 1. Revenue Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
                         <div className="flex items-center justify-between mb-3">
                             <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
@@ -190,36 +190,7 @@ export const FinancePage: React.FC = () => {
                         </div>
                     </div>
 
-                    {/* Orders Card */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl self-center'}`}>
-                        <div className="flex items-center justify-between mb-2">
-                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[9px] text-slate-600'}`}>
-                                {range} Orders
-                            </p>
-                            {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-xl">shopping_bag</span>}
-                        </div>
-                        <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-2xl text-slate-800'}`}>
-                            {data?.periodOrders || 0}
-                        </h2>
-                    </div>
-
-                    {/* Unpaid Card (Neon Flow) */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : `p-5 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
-                        <div className="flex items-center justify-between mb-3">
-                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-[10px] text-slate-600'}`}>
-                                Unpaid Total
-                            </p>
-                            {!isCollapsed && <span className={`material-icons-round text-2xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>}
-                        </div>
-                        <div className="flex items-baseline gap-1">
-                            <span className={`font-black font-mono-finance ${isCollapsed ? 'text-xs text-red-400' : 'text-lg text-red-500'}`}>RM</span>
-                            <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-3xl text-slate-800'}`}>
-                                {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                            </h2>
-                        </div>
-                    </div>
-
-                    {/* Collection Data Card */}
+                    {/* 2. Collection Data Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2 overflow-hidden' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
                         <div className="flex items-center justify-between mb-3">
                             <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
@@ -238,6 +209,35 @@ export const FinancePage: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+                    </div>
+
+                    {/* 3. Unpaid Card (Neon Flow) */}
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : `p-5 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
+                        <div className="flex items-center justify-between mb-3">
+                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-[10px] text-slate-600'}`}>
+                                Unpaid Total
+                            </p>
+                            {!isCollapsed && <span className={`material-icons-round text-2xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>}
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                            <span className={`font-black font-mono-finance ${isCollapsed ? 'text-xs text-red-400' : 'text-lg text-red-500'}`}>RM</span>
+                            <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-3xl text-slate-800'}`}>
+                                {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </h2>
+                        </div>
+                    </div>
+
+                    {/* 4. Orders Card */}
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl self-center'}`}>
+                        <div className="flex items-center justify-between mb-2">
+                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[9px] text-slate-600'}`}>
+                                {range} Orders
+                            </p>
+                            {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-xl">shopping_bag</span>}
+                        </div>
+                        <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-2xl text-slate-800'}`}>
+                            {data?.periodOrders || 0}
+                        </h2>
                     </div>
                 </div>
             </div>
