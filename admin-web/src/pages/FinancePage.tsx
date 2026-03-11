@@ -177,7 +177,7 @@ export const FinancePage: React.FC = () => {
                     {/* Revenue Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-400'}`}>
+                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
                                 {range} Revenue
                             </p>
                             {!isCollapsed && <span className="material-icons-round text-emerald-500/20 text-2xl">analytics</span>}
@@ -193,7 +193,7 @@ export const FinancePage: React.FC = () => {
                     {/* Orders Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl self-center'}`}>
                         <div className="flex items-center justify-between mb-2">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[9px] text-slate-400'}`}>
+                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[9px] text-slate-600'}`}>
                                 {range} Orders
                             </p>
                             {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-xl">shopping_bag</span>}
@@ -206,7 +206,7 @@ export const FinancePage: React.FC = () => {
                     {/* Unpaid Card (Neon Flow) */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : `p-5 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-[10px] text-slate-400'}`}>
+                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-[10px] text-slate-600'}`}>
                                 Unpaid Total
                             </p>
                             {!isCollapsed && <span className={`material-icons-round text-2xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>}
@@ -222,7 +222,7 @@ export const FinancePage: React.FC = () => {
                     {/* Collection Data Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2 overflow-hidden' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-400'}`}>
+                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
                                 Collection Data
                             </p>
                             {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-2xl">receipt_long</span>}
