@@ -51,7 +51,9 @@ export interface Order {
     delivery_photos?: string[];
     equipments?: Record<string, number>;
     remark?: string;
-    deposit_amount?: number;
+    order_number?: string;
+    payment_received?: number;
+    balance?: number;
 }
 
 export interface OrderCreate {
@@ -73,7 +75,9 @@ export interface OrderCreate {
     paymentMethod?: PaymentMethod;
     driverId?: string;
     equipments?: Record<string, number>;
-    deposit_amount?: number;
+    payment_received?: number;
+    balance?: number;
+    order_number?: string;
 }
 
 export interface User {

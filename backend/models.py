@@ -74,8 +74,24 @@ class OrderBase(BaseModel):
     delivery_photos: Optional[List[str]] = []
     equipments: Optional[dict] = {}
     calendar_event_id: Optional[str] = None
-    deposit_amount: Optional[float] = 0.0
+    payment_received: Optional[float] = 0.0
+    balance: Optional[float] = 0.0
     remark: Optional[str] = None
+    order_number: Optional[str] = None
+
+    @model_validator(mode='after')
+    def validate_finance_logic(self) -> 'OrderBase':
+        # Formula: Balance = Amount - Payment Received
+        self.balance = round((self.amount or 0.0) - (self.payment_received or 0.0), 2)
+        
+        # Automation: Status based on Balance
+        if self.balance <= 0:
+            self.paymentStatus = 'paid'
+        elif self.paymentStatus == 'paid' and self.balance > 0:
+            # If manually set to paid but balance exists, keep as unpaid or whatever was there
+            self.paymentStatus = 'unpaid'
+        
+        return self
 
 
 class OrderCreate(OrderBase):
@@ -93,8 +109,21 @@ class OrderUpdate(BaseModel):
     driverId: Optional[str] = None
     paymentMethod: Optional[PaymentMethod] = None
     paymentStatus: Optional[str] = None
-    deposit_amount: Optional[float] = None
+    payment_received: Optional[float] = None
+    balance: Optional[float] = None
     remark: Optional[str] = None
+    order_number: Optional[str] = None
+
+    @model_validator(mode='after')
+    def validate_finance_update(self) -> 'OrderUpdate':
+        # If both amount and payment are provided, we can re-calculate balance
+        # If only one is provided, we can't fully validate here without the original values
+        # However, we can set a flag or just let the router handle the partial logic
+        if self.amount is not None and self.payment_received is not None:
+            self.balance = round(self.amount - self.payment_received, 2)
+            if self.balance <= 0:
+                self.paymentStatus = 'paid'
+        return self
 
 
 class Order(OrderBase):

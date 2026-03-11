@@ -62,7 +62,7 @@ export const OrdersPage: React.FC = () => {
         address: '',
         type: 'delivery' as 'dine-in' | 'takeaway' | 'delivery',
         remark: '',
-        deposit_amount: 0,
+        payment_received: 0,
         eventDate: '',
         eventTime: '',
         items: [] as { product: Product, quantity: number, priceOverride?: number }[],
@@ -148,7 +148,7 @@ export const OrdersPage: React.FC = () => {
             address: order.address || '',
             type: order.type as any,
             remark: order.remark || '',
-            deposit_amount: order.deposit_amount || 0,
+            payment_received: order.payment_received || 0,
             items: preparedItems,
             equipments: order.equipments || {},
             driverId: order.driverId || null,
@@ -203,7 +203,7 @@ export const OrdersPage: React.FC = () => {
                 address: newOrder.address,
                 type: newOrder.type,
                 remark: newOrder.remark,
-                deposit_amount: newOrder.deposit_amount,
+                payment_received: newOrder.payment_received,
                 dueTime,
                 status: editingOrder ? editingOrder.status : OrderStatus.PENDING,
                 equipments: newOrder.equipments,
@@ -227,7 +227,7 @@ export const OrdersPage: React.FC = () => {
                 address: '',
                 type: 'delivery',
                 remark: '',
-                deposit_amount: 0,
+                payment_received: 0,
                 eventDate: '',
                 eventTime: '',
                 items: [],
@@ -473,7 +473,7 @@ export const OrdersPage: React.FC = () => {
                                     <React.Fragment key={order.id}>
                                         <tr className="hover:bg-slate-50 transition-colors group">
                                             <td className="px-6 py-4 whitespace-nowrap">
-                                                <p className="font-mono font-bold text-slate-800">{order.id}</p>
+                                                <p className="font-mono font-bold text-slate-800">{order.order_number || order.id}</p>
                                                 <p className="text-xs text-slate-500 uppercase">{order.type}</p>
                                             </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
@@ -777,8 +777,8 @@ export const OrdersPage: React.FC = () => {
                                                 min="0"
                                                 className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono font-bold"
                                                 placeholder="0.00"
-                                                value={newOrder.deposit_amount || ''}
-                                                onChange={(e) => setNewOrder({ ...newOrder, deposit_amount: parseFloat(e.target.value) || 0 })}
+                                                value={newOrder.payment_received || ''}
+                                                onChange={(e) => setNewOrder({ ...newOrder, payment_received: parseFloat(e.target.value) || 0 })}
                                             />
                                         </div>
                                     </div>

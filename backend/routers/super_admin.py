@@ -313,11 +313,11 @@ async def get_financials(
     pm_stats: dict = {}
 
     for o in all_orders:
-        curr_amount = o.get("amount") or 0
+        curr_amount = float(o.get("amount") or 0.0)
+        payment = float(o.get("payment_received") or 0.0)
         due_time_raw = o.get("dueTime") or ""
-        p_status = o.get("paymentStatus") or "pending"
         
-        # Parse dueTime
+        # Parse timing
         is_today = False
         is_in_period = False
         try:
@@ -334,11 +334,9 @@ async def get_financials(
                 else: # all
                     is_in_period = True
             else:
-                # Fallback to created_at
                 ca = dateutil.parser.isoparse(o.get("created_at"))
                 ca_str = ca.strftime("%Y-%m-%d")
-                if ca_str == today_str:
-                    is_today = True
+                if ca_str == today_str: is_today = True
                 
                 if range == "today":
                     if ca_str == today_str: is_in_period = True
@@ -349,54 +347,36 @@ async def get_financials(
         except Exception:
             continue
 
-        # Filter by payment_status parameter from request (if applicable)
-        if payment_status == "paid" and p_status != "paid":
-            continue
-        if payment_status == "unpaid" and p_status not in ["pending", "unpaid"]:
-            continue
-
         # Period calculation
         if is_in_period:
             period_order_count += 1
-            deposit = o.get("deposit_amount") or 0
-            balance_due = curr_amount - deposit
+            period_revenue += payment
             
-            # Revenue = Deposits (all) + Balance (only if PAID)
-            rev_contribution = deposit + (balance_due if p_status == 'paid' else 0)
-            period_revenue += rev_contribution
-            
-            # Payment Method Stats for period (Pro-rated based on contribution to revenue)
-            if rev_contribution > 0:
+            # Payment Method Stats
+            if payment > 0:
                 method = o.get("paymentMethod") or "cash"
                 if method not in pm_stats:
                     pm_stats[method] = {"method": method, "amount": 0, "count": 0}
-                pm_stats[method]["amount"] += rev_contribution
+                pm_stats[method]["amount"] += payment
                 pm_stats[method]["count"] += 1
-
-        # Today's specific cards
+        
+        # Today's Revenue (regardless of range filter, for top card consistency)
         if is_today:
+            today_revenue += payment
             today_order_count += 1
-            deposit = o.get("deposit_amount") or 0
-            balance_due = curr_amount - deposit
-            # Today Revenue = All deposits from today + today's PAID balances
-            today_revenue += deposit + (balance_due if p_status == 'paid' else 0)
 
-    # Calculate Global Total Unpaid Balance (Regardless of filters)
-    # We need to fetch all unpaid orders to get the real total, but for performance 
-    # and "heartbeat" feedback, we can base it on the current month's data if acceptable,
-    # OR better: run a quick separate count for true accuracy.
-    
-    unpaid_query = supabase.table("orders").select("amount, deposit_amount").in_("paymentStatus", ["pending", "unpaid"]).neq("status", "cancelled")
+    # Global Unpaid Total: SUM(amount - payment_received)
+    unpaid_query = supabase.table("orders").select("amount, payment_received").neq("status", "cancelled").gt("amount", 0)
     unpaid_response = await run_in_threadpool(unpaid_query.execute)
     unpaid_orders = unpaid_response.data or []
-    total_unpaid_balance = sum((uo.get("amount") or 0) - (uo.get("deposit_amount") or 0) for uo in unpaid_orders)
+    total_unpaid_balance = sum(round((uo.get("amount") or 0) - (uo.get("payment_received") or 0), 2) for uo in unpaid_orders)
 
     return {
-        "periodRevenue": period_revenue,
+        "periodRevenue": round(period_revenue, 2),
         "periodOrders": period_order_count,
-        "todayRevenue": today_revenue,
+        "todayRevenue": round(today_revenue, 2),
         "todayOrders": today_order_count,
-        "totalUnpaidBalance": total_unpaid_balance,
+        "totalUnpaidBalance": round(total_unpaid_balance, 2),
         "collections": list(pm_stats.values()),
     }
 @router.get("/ai-summary")
@@ -417,7 +397,7 @@ async def get_ai_summary(
     history_start = today_start - timedelta(days=14)
     history_resp = await run_in_threadpool(
         supabase.table("orders")
-        .select("amount, dueTime, created_at, paymentStatus, deposit_amount")
+        .select("amount, dueTime, created_at, paymentStatus, payment_received")
         .gte("created_at", history_start.isoformat())
         .neq("status", "cancelled")
         .execute
@@ -426,19 +406,13 @@ async def get_ai_summary(
     
     daily_revenue = {}
     for o in history_orders:
-        amount = o.get("amount") or 0
-        deposit = o.get("deposit_amount") or 0
-        balance = amount - deposit
-        p_status = o.get("paymentStatus")
-        
-        # Contribution to revenue: deposit + (balance if paid)
-        rev_contribution = deposit + (balance if p_status == 'paid' else 0)
-        if rev_contribution <= 0: continue
+        payment = o.get("payment_received") or 0.0
+        if payment <= 0: continue
         
         try:
             dt_str = o.get("dueTime") or o.get("created_at")
             dt = dateutil.parser.isoparse(dt_str).strftime("%Y-%m-%d")
-            daily_revenue[dt] = daily_revenue.get(dt, 0) + rev_contribution
+            daily_revenue[dt] = daily_revenue.get(dt, 0) + payment
         except: continue
 
     # 计算 7 天平均值 (不含今天)
@@ -461,7 +435,7 @@ async def get_ai_summary(
     # 获取本月至今与上月同期的订单
     comparison_resp = await run_in_threadpool(
         supabase.table("orders")
-        .select("amount, paymentStatus, deposit_amount, created_at")
+        .select("amount, paymentStatus, payment_received, created_at")
         .gte("created_at", last_month_start.isoformat())
         .neq("status", "cancelled")
         .execute
@@ -472,16 +446,14 @@ async def get_ai_summary(
     last_mtd_rev = 0
     
     for o in comp_orders:
-        amt = o.get("amount") or 0
-        dep = o.get("deposit_amount") or 0
-        p_stat = o.get("paymentStatus")
-        contrib = dep + ((amt - dep) if p_stat == 'paid' else 0)
+        amt = float(o.get("amount") or 0.0)
+        pay = float(o.get("payment_received") or 0.0)
         
         ca = dateutil.parser.isoparse(o.get("created_at"))
         if ca >= month_start:
-            mtd_rev += contrib
+            mtd_rev += pay
         elif last_month_start <= ca <= last_month_end:
-            last_mtd_rev += contrib
+            last_mtd_rev += pay
 
     # 3. 线性预测本月总额
     days_in_month = calendar.monthrange(now.year, now.month)[1]

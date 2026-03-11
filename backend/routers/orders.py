@@ -161,7 +161,14 @@ async def create_order(order: OrderCreate):
                 except:
                     pass
         new_num = max_num + 1
-        order_data['id'] = f"{prefix}{new_num:03d}"
+        new_id = f"{prefix}{new_num:03d}"
+        order_data['id'] = new_id
+        if 'order_number' not in order_data or not order_data['order_number']:
+            order_data['order_number'] = f"{today_str[6:]}/{new_num:03d}" if "/" in today_str else f"{new_num:03d}"
+            # Let's simplify and just use the suffix if logic gets complex, 
+            # but user likes 11/003 (DD/NNN).
+            from datetime import datetime
+            order_data['order_number'] = f"{datetime.now().strftime('%d')}/{new_num:03d}"
 
     # Sync to calendar BEFORE inserting into DB to get the event ID (if calendar is configured)
     calendar_event_id = sync_order_to_calendar(order_data)
@@ -216,16 +223,11 @@ async def create_order(order: OrderCreate):
     raise HTTPException(status_code=500, detail="Order creation failed after max retries")
 
 @router.put("/{order_id:path}", response_model=Order)
-async def update_order(order_id: str, order: dict):
+async def update_order(order_id: str, order: OrderUpdate):
     from services.google_calendar import sync_order_to_calendar
     
-    order_data = {k: v for k, v in order.items() if v is not None}
-    
-    # Handle Enum to string conversion if needed
-    if "status" in order_data and hasattr(order_data["status"], "value"):
-        order_data["status"] = order_data["status"].value
-    if "paymentMethod" in order_data and hasattr(order_data["paymentMethod"], "value"):
-        order_data["paymentMethod"] = order_data["paymentMethod"].value
+    # model_dump handles Enum to string and applies validation/automation from model_validator
+    order_data = order.model_dump(exclude_none=True)
     
     # Retrieve old order to gracefully get calendar_event_id (using * to avoid PGRST204 if missing)
     try:
@@ -287,22 +289,26 @@ async def update_order_status(order_id: str, status: OrderStatus):
 async def partial_update_order(order_id: str, update: OrderUpdate):
     from services.google_calendar import sync_order_to_calendar
     
-    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
-    if not update_data:
-        raise HTTPException(status_code=400, detail="No fields to update")
-        
-    # Handle Enum to string conversion if needed
-    if "status" in update_data:
-        update_data["status"] = update_data["status"].value if hasattr(update_data["status"], "value") else update_data["status"]
-    if "paymentMethod" in update_data:
-        update_data["paymentMethod"] = update_data["paymentMethod"].value if hasattr(update_data["paymentMethod"], "value") else update_data["paymentMethod"]
-
-    # First fetch the existing full order to have all data for calendar sync
+    # First fetch the existing full order to have all data for calendar sync and balance calc
     old_res = supabase.table("orders").select("*").eq("id", order_id).execute()
     if not old_res.data:
         raise HTTPException(status_code=404, detail="Order not found")
         
     old_order = old_res.data[0]
+    
+    # ENFORCE FINANCE LOGIC ON PARTIAL UPDATE
+    # If amount or payment_received changed, recalculate balance & status
+    new_amount = update_data.get("amount", old_order.get("amount", 0.0))
+    new_payment = update_data.get("payment_received", old_order.get("payment_received", 0.0))
+    
+    if "amount" in update_data or "payment_received" in update_data:
+        update_data["balance"] = round(new_amount - new_payment, 2)
+        if update_data["balance"] <= 0:
+            update_data["paymentStatus"] = "paid"
+        else:
+            # If it was paid but now balance > 0, set to unpaid
+            if old_order.get("paymentStatus") == "paid" or update_data.get("paymentStatus") == "paid":
+                 update_data["paymentStatus"] = "unpaid"
     
     # Merge existing data with updates for Calendar sync
     merged_data = {**old_order, **update_data}

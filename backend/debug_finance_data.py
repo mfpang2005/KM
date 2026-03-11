@@ -19,7 +19,7 @@ def check_orders():
     today_str = now_my.strftime("%Y-%m-%d")
     print(f"Malaysia time (today): {today_str}")
 
-    res = supabase.table("orders").select("id, customerName, amount, status, paymentStatus, dueTime, created_at, deposit_amount").execute()
+    res = supabase.table("orders").select("id, customerName, amount, status, paymentStatus, dueTime, created_at, payment_received").execute()
     orders = res.data or []
     
     print(f"Found {len(orders)} orders in total.")
@@ -29,7 +29,7 @@ def check_orders():
         amount = o.get("amount") or 0
         p_status = o.get("paymentStatus") or "pending"
         status = o.get("status")
-        deposit = o.get("deposit_amount") or 0
+        payment = o.get("payment_received") or 0
         
         is_today = False
         try:
@@ -46,9 +46,8 @@ def check_orders():
         except:
             pass
             
-        # 使用 safe print 避免 Windows 编码问题
         customer = str(o.get('customerName')).encode('ascii', 'ignore').decode('ascii')
-        print(f"ID: {o['id'][:8]} | Amt: {amount} | Dep: {deposit} | P.Stat: {p_status} | Stat: {status} | Today: {is_today}")
+        print(f"ID: {o['id'][:8]} | Amt: {amount} | Pay: {payment} | P.Stat: {p_status} | Stat: {status} | Today: {is_today}")
 
 if __name__ == "__main__":
     check_orders()

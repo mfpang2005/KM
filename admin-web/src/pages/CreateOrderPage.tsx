@@ -60,7 +60,7 @@ export const CreateOrderPage: React.FC = () => {
     const [remarks, setRemarks] = useState('');
     const [eventDate, setEventDate] = useState('');
     const [eventTime, setEventTime] = useState('');
-    const [depositAmount, setDepositAmount] = useState<number>(0);
+    const [paymentReceived, setPaymentReceived] = useState<number>(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderSnapshot | null>(null);
     const orderRef = useRef(generateOrderRef());
@@ -206,7 +206,8 @@ export const CreateOrderPage: React.FC = () => {
                 amount: totalAmount,
                 type: address.trim() ? 'delivery' : 'takeaway',
                 paymentMethod: PaymentMethod.CASH, // Default to cash, finalized in Financials
-                deposit_amount: depositAmount,
+                payment_received: paymentReceived,
+                order_number: undefined, // Let backend generate initial DD/NNN
                 driverId: undefined, // 強制不指派司机
                 equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
             };
@@ -249,7 +250,7 @@ export const CreateOrderPage: React.FC = () => {
         setRemarks('');
         setEventDate('');
         setEventTime('');
-        setDepositAmount(0);
+        setPaymentReceived(0);
         setEquipments(EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {}));
         setConfirmedOrder(null);
         orderRef.current = generateOrderRef();
@@ -922,11 +923,11 @@ export const CreateOrderPage: React.FC = () => {
                                         min="0"
                                         className="w-full pl-9 pr-4 py-2.5 bg-indigo-50/30 border border-indigo-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-black text-indigo-600"
                                         placeholder="0.00"
-                                        value={depositAmount || ''}
-                                        onChange={e => setDepositAmount(parseFloat(e.target.value) || 0)}
+                                        value={paymentReceived || ''}
+                                        onChange={e => setPaymentReceived(parseFloat(e.target.value) || 0)}
                                     />
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-1 font-bold italic">* 待收余款 Balance Due: RM {(totalAmount - depositAmount).toFixed(2)}</p>
+                                <p className="text-[10px] text-slate-400 mt-1 font-bold italic">* 待收余款 Balance Due: RM {(totalAmount - paymentReceived).toFixed(2)}</p>
                             </div>
 
                         </div>

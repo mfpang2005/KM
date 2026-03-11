@@ -41,7 +41,6 @@ export const FinancePage: React.FC = () => {
         const originalOrders = [...orders];
         const originalData = data ? { ...data } : null;
 
-        // Find the specific order to calculate impacts
         const order = orders.find(o => o.id === orderId);
         if (!order) return;
 
@@ -49,69 +48,82 @@ export const FinancePage: React.FC = () => {
         let nextOrders = [...orders];
         let nextData = data ? { ...data } : null;
 
-        // 1. Logic for Deposit Amount (Repayments)
-        if (field === 'deposit_amount' && nextData) {
-            const delta = value - (order.deposit_amount || 0);
-            nextData.periodRevenue += delta;
-            nextData.todayRevenue += delta;
-            nextData.totalUnpaidBalance -= delta;
+        const total = order.amount || 0;
 
-            // Auto-complete status if fully paid
-            if (value >= order.amount && order.paymentStatus !== 'paid') {
-                updatePayload.paymentStatus = 'paid';
-                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value, paymentStatus: 'paid' } : o);
-            } else {
-                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+        // 1. Math Logic for Payment Received
+        if (field === 'payment_received') {
+            const payment = parseFloat(value) || 0;
+            const delta = payment - (order.payment_received || 0);
+            const newBalance = Math.max(0, total - payment);
+            const newStatus = newBalance <= 0 ? 'paid' : 'unpaid';
+
+            updatePayload = {
+                ...updatePayload,
+                payment_received: payment,
+                balance: newBalance,
+                paymentStatus: newStatus,
+                amount: total
+            };
+
+            if (nextData) {
+                nextData.periodRevenue += delta;
+                nextData.totalUnpaidBalance -= delta;
             }
-        } 
-        // 2. Logic for Payment Status Toggle
-        else if (field === 'paymentStatus' && nextData) {
-            const oldStatus = (order.paymentStatus || 'unpaid').toLowerCase();
-            const newStatus = (value as string).toLowerCase();
-            const balance = order.amount - (order.deposit_amount || 0);
 
-            if (oldStatus !== 'paid' && newStatus === 'paid') {
-                // Changing to PAID: Assume remaining balance is now received
-                if (balance > 0) {
-                    updatePayload.deposit_amount = order.amount;
-                    nextData.periodRevenue += balance;
-                    nextData.todayRevenue += balance;
-                    nextData.totalUnpaidBalance -= balance;
-                    nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value, deposit_amount: order.amount } : o);
-                } else {
-                    nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+            nextOrders = nextOrders.map(o => o.id === orderId ? { 
+                ...o, 
+                payment_received: payment, 
+                balance: newBalance,
+                paymentStatus: newStatus 
+            } : o);
+        } 
+        // 2. Manual Status Override
+        else if (field === 'paymentStatus') {
+            const newStatus = value.toLowerCase();
+            
+            if (newStatus === 'paid') {
+                const prevPayment = order.payment_received || 0;
+                const delta = total - prevPayment;
+
+                updatePayload = {
+                    ...updatePayload,
+                    paymentStatus: 'paid',
+                    payment_received: total,
+                    balance: 0,
+                    amount: total
+                };
+
+                if (nextData) {
+                    nextData.periodRevenue += delta;
+                    nextData.totalUnpaidBalance -= delta;
                 }
-            } else if (oldStatus === 'paid' && newStatus !== 'paid') {
-                // Reverting PAID: This is rare but we need to keep it consistent
-                // For simplicity, we keep the deposit_amount as is (we don't "return" cash)
-                // But it adds back to unpaid balance
-                nextData.totalUnpaidBalance += balance; // balance would be 0 if it was truly paid
-                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+
+                nextOrders = nextOrders.map(o => o.id === orderId ? { 
+                    ...o, 
+                    paymentStatus: 'paid', 
+                    payment_received: total, 
+                    balance: 0 
+                } : o);
             } else {
-                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+                // If set to unpaid, keep current payments but force status string
+                updatePayload = { ...updatePayload, paymentStatus: 'unpaid' };
+                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, paymentStatus: 'unpaid' } : o);
             }
-        } 
-        // 3. Simple field update
+        }
         else {
             nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
         }
 
-        // Apply optimistic updates
         setOrders(nextOrders);
         if (nextData) setData(nextData);
 
         try {
             const { error } = await supabase.from('orders').update(updatePayload).eq('id', orderId);
             if (error) throw error;
-            
-            // Success: silently refresh to ensure server consistency
-            loadData(true);
         } catch (err) {
             console.error(`Failed to update ${field}`, err);
-            // Rollback on failure
             setOrders(originalOrders);
             setData(originalData);
-            alert(`Failed to update ${field}. Please try again.`);
         }
     };
 
@@ -304,82 +316,102 @@ export const FinancePage: React.FC = () => {
                             <table className="w-full text-left border-collapse table-fixed">
                                 <thead>
                                     <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">
-                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">#</th>
-                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Date</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Customer</th>
-                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Method</th>
-                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Status</th>
-                                        <th className="px-4 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Total</th>
-                                        <th className="px-4 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Balance</th>
-                                        <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Payment</th>
-                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50 w-48">Remark</th>
+                                        <th className="px-4 py-4 text-left bg-slate-50/50"># (Order ID)</th>
+                                        <th className="px-4 py-4 text-left bg-slate-50/50">Date</th>
+                                        <th className="px-6 py-4 text-left bg-slate-50/50">Customer</th>
+                                        <th className="px-4 py-4 text-left bg-slate-50/50">Method</th>
+                                        <th className="px-4 py-4 text-right bg-slate-50/50">Total</th>
+                                        <th className="px-4 py-4 text-center bg-slate-50/50">Payment (实收)</th>
+                                        <th className="px-4 py-4 text-right bg-slate-50/50">Balance (余额)</th>
+                                        <th className="px-4 py-4 text-center bg-slate-50/50">Status</th>
+                                        <th className="px-6 py-4 text-left bg-slate-50/50 w-48">Remark</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100/50">
                                     {orders
                                         .filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter)
                                         .map((order) => {
-                                            const balance = order.amount - (order.deposit_amount || 0);
-                                            const isUnpaid = order.paymentStatus !== 'paid';
+                                            const balance = (order.amount || 0) - (order.payment_received || 0);
+                                            const isUnpaid = (order.paymentStatus || 'unpaid').toLowerCase() !== 'paid';
                                             return (
                                                 <tr key={order.id} className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${isUnpaid ? 'bg-red-50/5' : ''}`}>
-                                                    {isUnpaid && <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />}
-                                                    <td className="px-4 py-3 font-mono-finance text-[11px] text-indigo-600 font-bold tracking-tight">
-                                                        {order.id.slice(-6).toUpperCase() || '-'}
+                                                    <td className="px-4 py-3 align-middle font-mono-finance text-[11px] text-indigo-600 font-bold tracking-tight relative">
+                                                        <input
+                                                            key={`${order.id}-${order.order_number || order.id}`}
+                                                            type="text"
+                                                            defaultValue={order.order_number || order.id}
+                                                            onBlur={(e) => {
+                                                                if (e.target.value !== (order.order_number || order.id)) {
+                                                                    handleUpdateField(order.id, 'order_number', e.target.value);
+                                                                }
+                                                            }}
+                                                            className="bg-transparent border-none p-0 w-full focus:ring-0 text-indigo-600 font-bold font-mono-finance cursor-edit"
+                                                            title="Click to edit Order ID"
+                                                        />
                                                     </td>
-                                                    <td className="px-4 py-3 font-mono-finance text-[10px] text-slate-500">
+                                                    <td className="px-4 py-3 align-middle font-mono-finance text-[10px] text-slate-500">
                                                         {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '-'}
                                                     </td>
-                                                    <td className="px-6 py-3">
+                                                    <td className="px-6 py-3 align-middle">
                                                         <p className="text-xs font-bold text-slate-800 tracking-tight">{order.customerName || 'Walk-in'}</p>
                                                         <p className="text-[10px] text-slate-400 mt-0.5">{order.customerPhone || '-'}</p>
                                                     </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-4 py-3 align-middle">
                                                         <div className="flex items-center gap-1.5 text-slate-500">
                                                             <span className="material-icons-round text-xs">{getPaymentIcon(order.paymentMethod || 'cash')}</span>
-                                                            <span className="text-[10px] font-bold uppercase tracking-tighter truncate max-w-[60px]">{order.paymentMethod || 'CASH'}</span>
+                                                            <select
+                                                                value={order.paymentMethod || 'cash'}
+                                                                onChange={(e) => handleUpdateField(order.id, 'paymentMethod', e.target.value)}
+                                                                className="bg-transparent border-none p-0 text-[10px] font-bold uppercase tracking-tighter focus:ring-0 cursor-pointer text-slate-600 hover:text-indigo-600 transition-colors outline-none appearance-none"
+                                                            >
+                                                                <option value="cash">Cash</option>
+                                                                <option value="bank_transfer">Bank Transfer</option>
+                                                                <option value="ewallet">E-Wallet</option>
+                                                                <option value="cheque">Cheque</option>
+                                                            </select>
                                                         </div>
                                                     </td>
-                                                    <td className="px-4 py-3">
-                                                        <select
-                                                            value={order.paymentStatus}
-                                                            onChange={(e) => handleUpdateField(order.id, 'paymentStatus', e.target.value)}
-                                                            className={`text-[9px] font-black px-2 py-1 rounded-full border transition-all cursor-pointer uppercase tracking-widest outline-none
-                                                                ${order.paymentStatus?.toLowerCase() === 'paid' 
-                                                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
-                                                                    : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'}`}
-                                                        >
-                                                            <option value="paid">PAID</option>
-                                                            <option value="unpaid">UNPAID</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="px-4 py-3 text-right font-mono-finance text-[11px] font-bold text-slate-800">
+                                                    <td className="px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-bold text-slate-800">
                                                         {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                                     </td>
-                                                    <td className={`px-4 py-3 text-right font-mono-finance text-[11px] font-black ${(balance || 0) > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                                                        {(balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td className="px-4 py-3">
+                                                    <td className="px-4 py-3 align-middle">
                                                         <div className="flex items-center justify-center">
                                                             <div className="relative group">
                                                                 <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">RM</span>
                                                                 <input
+                                                                    key={`${order.id}-${order.payment_received}`}
                                                                     type="number"
                                                                     step="0.01"
                                                                     placeholder="0.00"
-                                                                    className="w-20 pl-7 pr-2 py-1 bg-slate-50 border border-slate-100 rounded-lg text-[11px] font-mono-finance font-bold focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
+                                                                    className="w-28 pl-7 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-mono-finance font-black focus:ring-2 focus:ring-indigo-500/20 focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                                                                    defaultValue={order.payment_received || 0}
                                                                     onBlur={(e) => {
-                                                                        const val = parseFloat(e.target.value);
-                                                                        if (!isNaN(val) && val !== 0) {
-                                                                            handleUpdateField(order.id, 'deposit_amount', (order.deposit_amount || 0) + val); // Update deposit amount
-                                                                            e.target.value = ''; // Reset after update
+                                                                        const val = parseFloat(e.target.value) || 0;
+                                                                        if (val !== (order.payment_received || 0)) {
+                                                                            handleUpdateField(order.id, 'payment_received', val);
                                                                         }
                                                                     }}
                                                                 />
                                                             </div>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-3">
+                                                    <td className={`px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-black ${(balance || 0) > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                                        {(balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td className="px-4 py-3 align-middle">
+                                                        <select
+                                                            value={order.paymentStatus || 'unpaid'}
+                                                            onChange={(e) => handleUpdateField(order.id, 'paymentStatus', e.target.value)}
+                                                            className={`text-[9px] font-black px-3 py-1.5 rounded-full border transition-all uppercase tracking-widest block text-center w-full appearance-none cursor-pointer outline-none shadow-sm
+                                                                ${(order.paymentStatus || 'unpaid').toLowerCase() === 'paid'
+                                                                    ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/20' 
+                                                                    : 'bg-red-500 text-white border-red-400 shadow-red-500/20'}`}
+                                                        >
+                                                            <option value="paid" className="bg-white text-slate-900">PAID</option>
+                                                            <option value="unpaid" className="bg-white text-slate-900">UNPAID</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-6 py-3 align-middle">
                                                         <input
                                                             type="text"
                                                             defaultValue={order.remark || ''}
