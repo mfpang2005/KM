@@ -275,13 +275,15 @@ export const FinancePage: React.FC = () => {
                             <table className="w-full text-left border-collapse table-fixed">
                                 <thead>
                                     <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">
-                                        <th className="px-6 py-3 w-16">#</th>
-                                        <th className="px-6 py-3 w-32">Customer</th>
-                                        <th className="px-6 py-3 w-28">Total</th>
-                                        <th className="px-6 py-3 w-24">Method</th>
-                                        <th className="px-6 py-3 w-28 text-red-500">Balance</th>
-                                        <th className="px-6 py-3 w-32">Remark</th>
-                                        <th className="px-6 py-3 w-24 text-center">Action</th>
+                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">#</th>
+                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Date</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Customer</th>
+                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Method</th>
+                                        <th className="px-4 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Status</th>
+                                        <th className="px-4 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Total</th>
+                                        <th className="px-4 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Balance</th>
+                                        <th className="px-4 py-4 text-center text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Payment</th>
+                                        <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50 w-48">Remark</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100/50">
@@ -292,53 +294,71 @@ export const FinancePage: React.FC = () => {
                                             const isUnpaid = order.paymentStatus !== 'paid';
                                             return (
                                                 <tr key={order.id} className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${isUnpaid ? 'bg-red-50/5' : ''}`}>
-                                                    <td className="px-6 py-2.5">
-                                                        {isUnpaid && <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />}
-                                                        <span className="font-mono-finance font-bold text-slate-400 text-[11px]">{order.id.slice(-6).toUpperCase()}</span>
+                                                    {isUnpaid && <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />}
+                                                    <td className="px-4 py-3 font-mono-finance text-[11px] text-indigo-600 font-bold tracking-tight">
+                                                        {order.id.slice(-6).toUpperCase() || '-'}
                                                     </td>
-                                                    <td className="px-6 py-2.5 truncate">
-                                                        <p className="font-black text-slate-800 text-xs tracking-tight">{order.customerName}</p>
-                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">{order.customerPhone}</p>
+                                                    <td className="px-4 py-3 font-mono-finance text-[10px] text-slate-500">
+                                                        {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '-'}
                                                     </td>
-                                                    <td className="px-6 py-2.5 font-mono-finance font-black text-slate-600 text-xs">
-                                                        RM{order.amount.toFixed(2)}
+                                                    <td className="px-6 py-3">
+                                                        <p className="text-xs font-bold text-slate-800 tracking-tight">{order.customerName || 'Walk-in'}</p>
+                                                        <p className="text-[10px] text-slate-400 mt-0.5">{order.customerPhone || '-'}</p>
                                                     </td>
-                                                    <td className="px-6 py-2.5">
-                                                        <select
-                                                            value={order.paymentMethod || 'cash'}
-                                                            onChange={(e) => handleUpdateField(order.id, 'paymentMethod', e.target.value)}
-                                                            className="bg-transparent border-none p-0 text-[10px] font-black uppercase text-slate-400 hover:text-indigo-600 focus:text-indigo-600 focus:outline-none cursor-pointer transition-colors"
-                                                        >
-                                                            <option value="cash">Cash</option>
-                                                            <option value="bank_transfer">Transfer</option>
-                                                            <option value="cheque">Cheque</option>
-                                                            <option value="ewallet">E-Wallet</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="px-6 py-2.5">
-                                                        <div className={`inline-flex px-3 py-1 rounded-full font-mono-finance font-black text-xs ${balance > 0 ? 'bg-red-50 text-red-600 ring-1 ring-red-100 shadow-sm shadow-red-500/10' : 'text-slate-300'}`}>
-                                                            RM{balance.toFixed(2)}
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center gap-1.5 text-slate-500">
+                                                            <span className="material-icons-round text-xs">{getPaymentIcon(order.paymentMethod || 'cash')}</span>
+                                                            <span className="text-[10px] font-bold uppercase tracking-tighter truncate max-w-[60px]">{order.paymentMethod || 'CASH'}</span>
                                                         </div>
                                                     </td>
-                                                    <td className="px-6 py-2.5">
+                                                    <td className="px-4 py-3">
+                                                        <select
+                                                            value={order.paymentStatus}
+                                                            onChange={(e) => handleUpdateField(order.id, 'paymentStatus', e.target.value)}
+                                                            className={`text-[9px] font-black px-2 py-1 rounded-full border transition-all cursor-pointer uppercase tracking-widest outline-none
+                                                                ${order.paymentStatus?.toLowerCase() === 'paid' 
+                                                                    ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+                                                                    : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'}`}
+                                                        >
+                                                            <option value="paid">PAID</option>
+                                                            <option value="unpaid">UNPAID</option>
+                                                        </select>
+                                                    </td>
+                                                    <td className="px-4 py-3 text-right font-mono-finance text-[11px] font-bold text-slate-800">
+                                                        {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td className={`px-4 py-3 text-right font-mono-finance text-[11px] font-black ${(balance || 0) > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                                                        {(balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                                    </td>
+                                                    <td className="px-4 py-3">
+                                                        <div className="flex items-center justify-center">
+                                                            <div className="relative group">
+                                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">RM</span>
+                                                                <input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    placeholder="0.00"
+                                                                    className="w-20 pl-7 pr-2 py-1 bg-slate-50 border border-slate-100 rounded-lg text-[11px] font-mono-finance font-bold focus:ring-1 focus:ring-indigo-500 focus:bg-white transition-all outline-none"
+                                                                    onBlur={(e) => {
+                                                                        const val = parseFloat(e.target.value);
+                                                                        if (!isNaN(val) && val !== 0) {
+                                                                            const newBalance = Math.max(0, (balance || 0) - val);
+                                                                            handleUpdateField(order.id, 'deposit_amount', (order.deposit_amount || 0) + val); // Update deposit amount
+                                                                            e.target.value = ''; // Reset after update
+                                                                        }
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-3">
                                                         <input
                                                             type="text"
                                                             defaultValue={order.remark || ''}
                                                             onBlur={(e) => handleUpdateField(order.id, 'remark', e.target.value)}
-                                                            className="w-full bg-transparent border-none p-0 text-[10px] font-bold text-slate-400 placeholder:text-slate-200 focus:text-slate-800 focus:outline-none transition-all"
-                                                            placeholder="..."
+                                                            className="w-full bg-transparent border-b border-transparent hover:border-slate-200 focus:border-indigo-500 transition-all outline-none text-[10px] text-slate-600 py-1"
+                                                            placeholder="Add remark..."
                                                         />
-                                                    </td>
-                                                    <td className="px-6 py-2.5 text-center">
-                                                        <button
-                                                            onClick={() => handleUpdateField(order.id, 'paymentStatus', isUnpaid ? 'paid' : 'unpaid')}
-                                                            className={`px-4 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-500 shadow-sm active:scale-95 ${!isUnpaid
-                                                                ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20'
-                                                                : 'bg-white text-slate-400 hover:bg-slate-900 hover:text-white border border-slate-100'
-                                                                }`}
-                                                        >
-                                                            {isUnpaid ? 'Confirm' : 'Paid'}
-                                                        </button>
                                                     </td>
                                                 </tr>
                                             );
