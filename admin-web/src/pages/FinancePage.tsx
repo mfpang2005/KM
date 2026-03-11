@@ -297,9 +297,10 @@ export const FinancePage: React.FC = () => {
                                         <th className="px-6 py-3 w-16">#</th>
                                         <th className="px-6 py-3 w-32">Customer</th>
                                         <th className="px-6 py-3 w-28">Total</th>
-                                        <th className="px-6 py-3 w-28 text-emerald-600">Deposit</th>
-                                        <th className="px-6 py-3 w-32 text-red-500">Balance</th>
-                                        <th className="px-6 py-3 w-28 text-center">Action</th>
+                                        <th className="px-6 py-3 w-24">Method</th>
+                                        <th className="px-6 py-3 w-28 text-red-500">Balance</th>
+                                        <th className="px-6 py-3 w-32">Remark</th>
+                                        <th className="px-6 py-3 w-24 text-center">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100/50">
@@ -321,13 +322,31 @@ export const FinancePage: React.FC = () => {
                                                     <td className="px-6 py-2.5 font-mono-finance font-black text-slate-600 text-xs">
                                                         RM{order.amount.toFixed(2)}
                                                     </td>
-                                                    <td className="px-6 py-2.5 font-mono-finance font-black text-emerald-600 text-xs">
-                                                        RM{(order.deposit_amount || 0).toFixed(2)}
+                                                    <td className="px-6 py-2.5">
+                                                        <select
+                                                            value={order.paymentMethod || 'cash'}
+                                                            onChange={(e) => handleUpdateField(order.id, 'paymentMethod', e.target.value)}
+                                                            className="bg-transparent border-none p-0 text-[10px] font-black uppercase text-slate-400 hover:text-indigo-600 focus:text-indigo-600 focus:outline-none cursor-pointer transition-colors"
+                                                        >
+                                                            <option value="cash">Cash</option>
+                                                            <option value="bank_transfer">Transfer</option>
+                                                            <option value="cheque">Cheque</option>
+                                                            <option value="ewallet">E-Wallet</option>
+                                                        </select>
                                                     </td>
                                                     <td className="px-6 py-2.5">
                                                         <div className={`inline-flex px-3 py-1 rounded-full font-mono-finance font-black text-xs ${balance > 0 ? 'bg-red-50 text-red-600 ring-1 ring-red-100 shadow-sm shadow-red-500/10' : 'text-slate-300'}`}>
                                                             RM{balance.toFixed(2)}
                                                         </div>
+                                                    </td>
+                                                    <td className="px-6 py-2.5">
+                                                        <input
+                                                            type="text"
+                                                            defaultValue={order.remark || ''}
+                                                            onBlur={(e) => handleUpdateField(order.id, 'remark', e.target.value)}
+                                                            className="w-full bg-transparent border-none p-0 text-[10px] font-bold text-slate-400 placeholder:text-slate-200 focus:text-slate-800 focus:outline-none transition-all"
+                                                            placeholder="..."
+                                                        />
                                                     </td>
                                                     <td className="px-6 py-2.5 text-center">
                                                         <button
