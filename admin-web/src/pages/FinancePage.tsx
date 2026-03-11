@@ -172,7 +172,7 @@ export const FinancePage: React.FC = () => {
 
             {/* 2. Metrics Bar (Sticky Mini-Dashboard Logic) */}
             <div className={`sticky top-4 z-[70] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isCollapsed ? 'translate-y-0' : 'translate-y-0'}`}>
-                <div className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-3 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[24px] shadow-2xl border border-white/10 scale-95' : 'grid-cols-1 md:grid-cols-3'}`}>
+                <div className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-4 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[24px] shadow-2xl border border-white/10 scale-95' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'}`}>
                     
                     {/* Revenue Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
@@ -218,55 +218,35 @@ export const FinancePage: React.FC = () => {
                             </h2>
                         </div>
                     </div>
+
+                    {/* Collection Data Card */}
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2 overflow-hidden' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
+                        <div className="flex items-center justify-between mb-3">
+                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-400'}`}>
+                                Collection Data
+                            </p>
+                            {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-2xl">receipt_long</span>}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            {data?.collections.slice(0, 3).map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5 overflow-hidden">
+                                        <span className="material-icons-round text-[10px] text-slate-300">{getPaymentIcon(item.method)}</span>
+                                        <span className="text-[9px] font-black text-slate-500 truncate uppercase tracking-tight">{getPaymentLabel(item.method)}</span>
+                                    </div>
+                                    <span className="text-[9px] font-black text-slate-800 font-mono-finance">RM{item.amount.toLocaleString()}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
             </div>
 
             {/* 3. Main Content Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
+            <div className="grid grid-cols-1 gap-8 mt-12">
                 
-                {/* 3a. Payment Breakdown (Side Panel) */}
-                <div className="lg:col-span-1">
-                    <div className="glass-card rounded-[40px] p-8 h-full">
-                        <div className="flex items-center justify-between mb-8">
-                            <h4 className="font-black text-slate-800 text-sm uppercase tracking-[0.2em]">Collection Data</h4>
-                            <span className="material-icons-round text-slate-300">donut_large</span>
-                        </div>
-                        
-                        <div className="space-y-8">
-                            {data?.collections.map((item, idx) => {
-                                const percent = (item.amount / (data.periodRevenue || 1)) * 100;
-                                return (
-                                    <div key={idx} className="group cursor-default">
-                                        <div className="flex items-center justify-between mb-3">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 shadow-sm group-hover:shadow-indigo-500/20">
-                                                    <span className="material-icons-round text-xl">{getPaymentIcon(item.method)}</span>
-                                                </div>
-                                                <div>
-                                                    <p className="text-sm font-black text-slate-800 tracking-tight">{getPaymentLabel(item.method)}</p>
-                                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">{item.count} Txns</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <p className="text-sm font-black text-slate-800 font-mono-finance">RM {item.amount.toFixed(2)}</p>
-                                                <p className="text-[10px] text-indigo-500 font-black uppercase tracking-widest">{percent.toFixed(1)}%</p>
-                                            </div>
-                                        </div>
-                                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                            <div
-                                                className="h-full bg-slate-900 group-hover:bg-indigo-600 transition-all duration-700 ease-out shadow-sm"
-                                                style={{ width: `${percent}%` }}
-                                            />
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
-                    </div>
-                </div>
-
-                {/* 3b. Transaction Table (Main Panel) */}
-                <div className="lg:col-span-2 space-y-6">
+                {/* 3a. Transaction Table (Full Width) */}
+                <div className="space-y-6">
                     <div className="glass-card rounded-[40px] overflow-hidden">
                         {/* Table Controls */}
                         <div className="px-8 py-6 border-b border-white/60 flex items-center justify-between bg-white/30">
