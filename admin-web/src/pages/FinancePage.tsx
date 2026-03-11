@@ -228,7 +228,7 @@ export const FinancePage: React.FC = () => {
                     </div>
 
                     {/* 4. Orders Card */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl self-center'}`}>
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl'}`}>
                         <div className="flex items-center justify-between mb-2">
                             <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-xs text-slate-700'}`}>
                                 {range} Orders
@@ -248,16 +248,15 @@ export const FinancePage: React.FC = () => {
                 {/* 3a. Transaction Table (Full Width) */}
                 <div className="space-y-6">
                     <div className="glass-card rounded-[40px] overflow-hidden">
-                        {/* Table Controls */}
-                        <div className="px-8 py-6 border-b border-white/60 flex items-center justify-between bg-white/30">
-                            <div>
+                        <div className="px-8 py-5 border-b border-white/60 flex items-center justify-between bg-white/30">
+                            <div className="flex items-center gap-6">
                                 <h4 className="font-bold text-slate-800 text-sm uppercase tracking-[0.1em]">Live Reconciliation</h4>
-                                <div className="flex items-center gap-2 mt-3">
+                                <div className="flex bg-slate-100/40 p-1 rounded-full border border-slate-200/50">
                                     {(['all', 'paid', 'unpaid'] as const).map(s => (
                                         <button
                                             key={s}
                                             onClick={() => setStatusFilter(s)}
-                                            className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] transition-all duration-300 ${statusFilter === s ? 'bg-slate-900 text-white shadow-lg' : 'bg-white/60 text-slate-400 hover:text-slate-600 border border-slate-100'}`}
+                                            className={`px-4 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] transition-all duration-300 ${statusFilter === s ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
                                         >
                                             {s}
                                         </button>
