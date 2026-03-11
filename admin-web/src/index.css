@@ -2,8 +2,49 @@
 @tailwind components;
 @tailwind utilities;
 
-html, body, #root {
-    @apply h-full w-full bg-slate-50 text-slate-800 m-0 p-0 font-sans;
+@layer base {
+    html, body, #root {
+        @apply h-full w-full bg-slate-50 text-slate-800 m-0 p-0 font-sans antialiased;
+    }
+}
+
+@layer components {
+    .glass-card {
+        @apply bg-white/40 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.04)];
+    }
+
+    .glass-dark {
+        @apply bg-slate-900/90 backdrop-blur-2xl border border-white/10 shadow-2xl text-white;
+    }
+
+    .inner-border {
+        @apply relative after:absolute after:inset-0 after:rounded-[inherit] after:border after:border-white/20 after:pointer-events-none;
+    }
+
+    .font-mono-finance {
+        font-family: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+    }
+
+    .neon-flow-red {
+        background: linear-gradient(90deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.4), rgba(239, 68, 68, 0.1));
+        background-size: 200% auto;
+        animation: flowLight 3s linear infinite;
+        border: 1px solid rgba(239, 68, 68, 0.5);
+    }
+
+    .breathing-red {
+        animation: breathe 2s ease-in-out infinite;
+    }
+}
+
+@keyframes flowLight {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+@keyframes breathe {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(0.98); }
 }
 
 /* 隐藏滚动条但保留滚动功能 */

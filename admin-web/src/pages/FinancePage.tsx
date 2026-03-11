@@ -147,242 +147,219 @@ export const FinancePage: React.FC = () => {
     };
 
     return (
-        <div className="pb-20">
-            {/* Sticky Header Wrapper */}
-            <div className={`sticky top-0 z-[60] transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] ${isCollapsed ? 'bg-white/80 backdrop-blur-md shadow-lg border-b border-slate-100 py-3 mb-4' : 'bg-transparent py-0 mb-0'}`}>
-                <div className={`transition-all duration-500 overflow-hidden ${isCollapsed ? 'max-h-0 opacity-0 mb-0' : 'max-h-[200px] opacity-100'}`}>
-                    <PageHeader
-                        title="Financials / 财务数据"
-                        subtitle="Real-time net revenue and tax tracking"
-                        showStats={false}
-                        actions={
-                            <div className="flex bg-white/50 backdrop-blur p-1 rounded-2xl border border-slate-200">
-                                {(['today', 'month', 'all'] as const).map((r) => (
-                                    <button
-                                        key={r}
-                                        onClick={() => setRange(r)}
-                                        className={`px-5 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${range === r ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-                                    >
-                                        {r}
-                                    </button>
-                                ))}
-                            </div>
-                        }
-                    />
-                </div>
+        <div className="pb-20 max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8">
+            {/* 1. Header & Controls */}
+            <div className="pt-8 pb-4">
+                <PageHeader
+                    title="Financials / 财务数据"
+                    subtitle="Real-time net revenue and debt tracking"
+                    showStats={false}
+                    actions={
+                        <div className="flex bg-white/40 backdrop-blur-xl p-1 rounded-2xl border border-white/60 shadow-sm">
+                            {(['today', 'month', 'all'] as const).map((r) => (
+                                <button
+                                    key={r}
+                                    onClick={() => setRange(r)}
+                                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${range === r ? 'bg-slate-900 text-white shadow-xl scale-105' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}
+                                >
+                                    {r}
+                                </button>
+                            ))}
+                        </div>
+                    }
+                />
+            </div>
 
-                {/* Metrics Bar */}
-                <div className={`grid transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] px-1 ${isCollapsed ? 'grid-cols-3 gap-4 max-w-7xl mx-auto' : 'grid-cols-1 md:grid-cols-3 gap-6 mt-4'}`}>
-                    {/* 1. Period Revenue */}
-                    <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:-translate-y-1'}`}>
-                        <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-slate-900 group-hover:scale-110'}`}>
-                            <span className={`material-icons-round ${isCollapsed ? 'text-lg text-emerald-500' : 'text-4xl'}`}>payments</span>
-                        </div>
-                        <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
-                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>
-                                {range === 'today' ? 'Today' : range === 'month' ? 'Month' : 'Total'} Rev
+            {/* 2. Metrics Bar (Sticky Mini-Dashboard Logic) */}
+            <div className={`sticky top-4 z-[70] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isCollapsed ? 'translate-y-0' : 'translate-y-0'}`}>
+                <div className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-3 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[24px] shadow-2xl border border-white/10 scale-95' : 'grid-cols-1 md:grid-cols-3'}`}>
+                    
+                    {/* Revenue Card */}
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card p-8 rounded-[40px] hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[11px] text-slate-400'}`}>
+                                {range} Revenue
                             </p>
-                            <div className="flex items-baseline gap-0.5">
-                                <span className={`font-black text-emerald-500/60 font-mono transition-all duration-500 ${isCollapsed ? 'text-xs' : 'text-xl'}`}>RM</span>
-                                <h2 className={`font-black text-slate-800 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
-                                    {(data?.periodRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                </h2>
-                            </div>
+                            {!isCollapsed && <span className="material-icons-round text-emerald-500/20 text-3xl">analytics</span>}
                         </div>
-                    </div>
-
-                    {/* 2. Period Orders */}
-                    <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:-translate-y-1'}`}>
-                        <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-slate-900 group-hover:scale-110'}`}>
-                            <span className={`material-icons-round ${isCollapsed ? 'text-lg text-indigo-500' : 'text-4xl'}`}>receipt_long</span>
-                        </div>
-                        <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
-                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>
-                                {range === 'today' ? 'Today' : range === 'month' ? 'Month' : 'Total'} Orders
-                            </p>
-                            <h2 className={`font-black text-slate-800 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
-                                {data?.periodOrders || 0}
+                        <div className="flex items-baseline gap-1">
+                            <span className={`font-black text-emerald-500 font-mono-finance ${isCollapsed ? 'text-xs' : 'text-xl'}`}>RM</span>
+                            <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-4xl text-slate-800'}`}>
+                                {(data?.periodRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h2>
                         </div>
                     </div>
 
-                    {/* 3. Total Unpaid Balance */}
-                    <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:-translate-y-1'}`}>
-                        <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-slate-900 group-hover:scale-110'}`}>
-                            <span className={`material-icons-round ${isCollapsed ? 'text-lg text-red-500' : 'text-4xl'}`}>error_outline</span>
+                    {/* Orders Card */}
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card p-8 rounded-[40px] hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[11px] text-slate-400'}`}>
+                                {range} Orders
+                            </p>
+                            {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-3xl">shopping_bag</span>}
                         </div>
-                        <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
-                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>
+                        <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-4xl text-slate-800'}`}>
+                            {data?.periodOrders || 0}
+                        </h2>
+                    </div>
+
+                    {/* Unpaid Card (Neon Flow) */}
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : `p-8 rounded-[40px] hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
+                        <div className="flex items-center justify-between mb-4">
+                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-[11px] text-slate-400'}`}>
                                 Unpaid Total
                             </p>
-                            <div className="flex items-baseline gap-0.5">
-                                <span className={`font-black text-red-500/60 font-mono transition-all duration-500 ${isCollapsed ? 'text-xs' : 'text-xl'}`}>RM</span>
-                                <h2 className={`font-black text-slate-800 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
-                                    {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                </h2>
-                            </div>
+                            {!isCollapsed && <span className={`material-icons-round text-3xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>}
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                            <span className={`font-black font-mono-finance ${isCollapsed ? 'text-xs text-red-400' : 'text-xl text-red-500'}`}>RM</span>
+                            <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-4xl text-slate-800'}`}>
+                                {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </h2>
                         </div>
                     </div>
-
-
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-8 mt-8">
-                {/* Payment Breakdown */}
-                <div className="bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden flex flex-col">
-                    <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between">
-                        <h4 className="font-black text-slate-800 text-sm uppercase tracking-wider">Payment Collections</h4>
-                        <span className="material-icons-round text-slate-300">pie_chart</span>
-                    </div>
-                    <div className="p-8 flex-1">
-                        {!data?.collections || data.collections.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center py-10 opacity-40">
-                                <span className="material-icons-round text-4xl mb-2">empty_dashboard</span>
-                                <p className="text-xs font-bold uppercase tracking-widest">No data for this range</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-6">
-                                {data.collections.map((item, idx) => {
-                                    const percent = (item.amount / (data.periodRevenue || 1)) * 100;
-                                    return (
-                                        <div key={idx} className="group">
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors">
-                                                        <span className="material-icons-round">{getPaymentIcon(item.method)}</span>
-                                                    </div>
-                                                    <div>
-                                                        <p className="text-sm font-black text-slate-800">{getPaymentLabel(item.method)}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold uppercase">{item.count} Transactions</p>
-                                                    </div>
+            {/* 3. Main Content Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mt-12">
+                
+                {/* 3a. Payment Breakdown (Side Panel) */}
+                <div className="lg:col-span-1">
+                    <div className="glass-card rounded-[40px] p-8 h-full">
+                        <div className="flex items-center justify-between mb-8">
+                            <h4 className="font-black text-slate-800 text-sm uppercase tracking-[0.2em]">Collection Mix</h4>
+                            <span className="material-icons-round text-slate-300">donut_large</span>
+                        </div>
+                        
+                        <div className="space-y-8">
+                            {data?.collections.map((item, idx) => {
+                                const percent = (item.amount / (data.periodRevenue || 1)) * 100;
+                                return (
+                                    <div key={idx} className="group cursor-default">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-indigo-600 group-hover:text-white transition-all duration-500 shadow-sm group-hover:shadow-indigo-500/20">
+                                                    <span className="material-icons-round text-xl">{getPaymentIcon(item.method)}</span>
                                                 </div>
-                                                <div className="text-right">
-                                                    <p className="text-sm font-black text-slate-800 font-mono">RM {item.amount.toFixed(2)}</p>
-                                                    <p className="text-[10px] text-slate-400 font-bold uppercase">{percent.toFixed(1)}%</p>
+                                                <div>
+                                                    <p className="text-sm font-black text-slate-800 tracking-tight">{getPaymentLabel(item.method)}</p>
+                                                    <p className="text-[9px] text-slate-400 font-black uppercase tracking-widest">{item.count} Txns</p>
                                                 </div>
                                             </div>
-                                            <div className="w-full h-1.5 bg-slate-50 rounded-full overflow-hidden">
-                                                <div
-                                                    className="h-full bg-slate-900 group-hover:bg-indigo-600 transition-all duration-500"
-                                                    style={{ width: `${percent}%` }}
-                                                />
+                                            <div className="text-right">
+                                                <p className="text-sm font-black text-slate-800 font-mono-finance">RM {item.amount.toFixed(2)}</p>
+                                                <p className="text-[10px] text-indigo-500 font-black uppercase tracking-widest">{percent.toFixed(1)}%</p>
                                             </div>
                                         </div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Transaction List & Payment Reconciliation */}
-            <div id="payment-reconciliation" className="mt-8 bg-white rounded-[32px] border border-slate-100 shadow-sm overflow-hidden">
-                <div className="px-8 py-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
-                    <div>
-                        <h4 className="font-black text-slate-800 text-sm uppercase tracking-wider">Payment Reconciliation</h4>
-                        <div className="flex items-center gap-2 mt-1">
-                            {(['all', 'paid', 'unpaid'] as const).map(s => (
-                                <button
-                                    key={s}
-                                    onClick={() => setStatusFilter(s)}
-                                    className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest transition-all ${statusFilter === s ? 'bg-slate-900 text-white' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'}`}
-                                >
-                                    {s}
-                                </button>
-                            ))}
+                                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                                            <div
+                                                className="h-full bg-slate-900 group-hover:bg-indigo-600 transition-all duration-700 ease-out shadow-sm"
+                                                style={{ width: `${percent}%` }}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
                         </div>
                     </div>
                 </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-50">
-                                <th className="px-8 py-4">Order ID</th>
-                                <th className="px-8 py-4">Customer</th>
-                                <th className="px-8 py-4">Total</th>
-                                <th className="px-8 py-4 text-emerald-600">Deposit</th>
-                                <th className="px-8 py-4 text-red-500">Balance</th>
-                                <th className="px-8 py-4">Method</th>
-                                <th className="px-8 py-4">Status</th>
-                                <th className="px-8 py-4">Remark</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-50 text-sm">
-                            {orders
-                                .filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter)
-                                .map((order) => (
-                                    <tr key={order.id} className="hover:bg-slate-50/50 transition-colors group">
-                                        <td className="px-8 py-4 font-mono font-bold text-slate-800">{order.id.slice(0, 8)}</td>
-                                        <td className="px-8 py-4">
-                                            <p className="font-bold text-slate-800">{order.customerName}</p>
-                                            <p className="text-[10px] text-slate-400 font-bold uppercase">{order.customerPhone}</p>
-                                        </td>
-                                        <td className="px-8 py-4 font-black text-slate-800 font-mono">
-                                            <span className="text-[10px] text-slate-400 mr-0.5 font-sans">RM</span>
-                                            {order.amount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="px-8 py-4 font-black text-emerald-600 font-mono">
-                                            <span className="text-[10px] text-emerald-300 mr-0.5 font-sans">RM</span>
-                                            {(order.deposit_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="px-8 py-4 font-black text-red-600 font-mono">
-                                            <span className="text-[10px] text-red-300 mr-0.5 font-sans">RM</span>
-                                            {(order.amount - (order.deposit_amount || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <select
-                                                value={order.paymentMethod || 'cash'}
-                                                onChange={(e) => handleUpdateField(order.id, 'paymentMethod', e.target.value)}
-                                                className="bg-slate-50 border border-slate-100 rounded-lg px-2 py-1 text-[11px] font-black uppercase text-slate-600 focus:ring-1 focus:ring-indigo-500 focus:outline-none cursor-pointer"
-                                            >
-                                                <option value="cash">Cash</option>
-                                                <option value="bank_transfer">Transfer</option>
-                                                <option value="cheque">Cheque</option>
-                                                <option value="ewallet">E-Wallet</option>
-                                            </select>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <select
-                                                value={order.paymentStatus || 'unpaid'}
-                                                onChange={(e) => handleUpdateField(order.id, 'paymentStatus', e.target.value)}
-                                                className={`px-3 py-1.5 rounded-xl font-black text-[10px] uppercase tracking-widest transition-all border-none cursor-pointer focus:ring-2 focus:ring-offset-2 ${order.paymentStatus === 'paid'
-                                                    ? 'bg-emerald-500 text-white shadow-sm shadow-emerald-500/20'
-                                                    : 'bg-red-500 text-white shadow-sm shadow-red-500/20'
-                                                    }`}
-                                            >
-                                                <option value="paid" className="bg-white text-slate-800">PAID</option>
-                                                <option value="unpaid" className="bg-white text-slate-800">UNPAID</option>
-                                            </select>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <input
-                                                type="text"
-                                                defaultValue={order.remark || ''}
-                                                onBlur={(e) => handleUpdateField(order.id, 'remark', e.target.value)}
-                                                onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
-                                                placeholder="..."
-                                                className="w-full bg-slate-50 border-none rounded-lg px-3 py-2 text-xs text-slate-600 placeholder:text-slate-300 focus:ring-1 focus:ring-indigo-100 transition-all font-medium"
-                                            />
-                                        </td>
+
+                {/* 3b. Transaction Table (Main Panel) */}
+                <div className="lg:col-span-2 space-y-6">
+                    <div className="glass-card rounded-[40px] overflow-hidden">
+                        {/* Table Controls */}
+                        <div className="px-8 py-6 border-b border-white/60 flex items-center justify-between bg-white/30">
+                            <div>
+                                <h4 className="font-black text-slate-800 text-sm uppercase tracking-[0.2em]">Live Reconciliation</h4>
+                                <div className="flex items-center gap-2 mt-3">
+                                    {(['all', 'paid', 'unpaid'] as const).map(s => (
+                                        <button
+                                            key={s}
+                                            onClick={() => setStatusFilter(s)}
+                                            className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] transition-all duration-300 ${statusFilter === s ? 'bg-slate-900 text-white shadow-lg' : 'bg-white/60 text-slate-400 hover:text-slate-600 border border-slate-100'}`}
+                                        >
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={scrollToReconciliation} className="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all shadow-sm">
+                                <span className="material-icons-round">unfold_more</span>
+                            </button>
+                        </div>
+
+                        {/* High-Density Table */}
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left border-collapse table-fixed">
+                                <thead>
+                                    <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">
+                                        <th className="px-6 py-3 w-16">#</th>
+                                        <th className="px-6 py-3 w-32">Customer</th>
+                                        <th className="px-6 py-3 w-28">Total</th>
+                                        <th className="px-6 py-3 w-28 text-emerald-600">Deposit</th>
+                                        <th className="px-6 py-3 w-32 text-red-500">Balance</th>
+                                        <th className="px-6 py-3 w-28 text-center">Action</th>
                                     </tr>
-                                ))}
-                        </tbody>
-                    </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100/50">
+                                    {orders
+                                        .filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter)
+                                        .map((order) => {
+                                            const balance = order.amount - (order.deposit_amount || 0);
+                                            const isUnpaid = order.paymentStatus !== 'paid';
+                                            return (
+                                                <tr key={order.id} className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${isUnpaid ? 'bg-red-50/5' : ''}`}>
+                                                    <td className="px-6 py-2.5">
+                                                        {isUnpaid && <div className="absolute left-0 top-0 bottom-0 w-[4px] bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]" />}
+                                                        <span className="font-mono-finance font-bold text-slate-400 text-[11px]">{order.id.slice(-6).toUpperCase()}</span>
+                                                    </td>
+                                                    <td className="px-6 py-2.5 truncate">
+                                                        <p className="font-black text-slate-800 text-xs tracking-tight">{order.customerName}</p>
+                                                        <p className="text-[9px] text-slate-400 font-bold uppercase">{order.customerPhone}</p>
+                                                    </td>
+                                                    <td className="px-6 py-2.5 font-mono-finance font-black text-slate-600 text-xs">
+                                                        RM{order.amount.toFixed(2)}
+                                                    </td>
+                                                    <td className="px-6 py-2.5 font-mono-finance font-black text-emerald-600 text-xs">
+                                                        RM{(order.deposit_amount || 0).toFixed(2)}
+                                                    </td>
+                                                    <td className="px-6 py-2.5">
+                                                        <div className={`inline-flex px-3 py-1 rounded-full font-mono-finance font-black text-xs ${balance > 0 ? 'bg-red-50 text-red-600 ring-1 ring-red-100 shadow-sm shadow-red-500/10' : 'text-slate-300'}`}>
+                                                            RM{balance.toFixed(2)}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-2.5 text-center">
+                                                        <button
+                                                            onClick={() => handleUpdateField(order.id, 'paymentStatus', isUnpaid ? 'paid' : 'unpaid')}
+                                                            className={`px-4 py-1.5 rounded-xl font-black text-[9px] uppercase tracking-widest transition-all duration-500 shadow-sm active:scale-95 ${!isUnpaid
+                                                                ? 'bg-emerald-500 text-white hover:bg-emerald-600 shadow-emerald-500/20'
+                                                                : 'bg-white text-slate-400 hover:bg-slate-900 hover:text-white border border-slate-100'
+                                                                }`}
+                                                        >
+                                                            {isUnpaid ? 'Confirm' : 'Paid'}
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Lightbox Modal */}
+            {/* 4. Lightbox Modal */}
             {lightboxUrl && (
                 <div
-                    className="fixed inset-0 z-[100] bg-slate-900/90 backdrop-blur-sm flex items-center justify-center p-6 animate-in fade-in duration-300"
+                    className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-500"
                     onClick={() => setLightboxUrl(null)}
                 >
-                    <div className="relative max-w-4xl w-full flex flex-col items-center">
-                        <img src={lightboxUrl} alt="Evidence" className="max-w-full max-h-[80vh] rounded-3xl shadow-2xl border border-white/10" />
+                    <div className="relative max-w-5xl w-full flex flex-col items-center">
+                        <img src={lightboxUrl} alt="Evidence" className="max-w-full max-h-[85vh] rounded-[40px] shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10" />
                         <button
-                            className="mt-6 px-8 py-3 bg-white text-slate-900 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-100 transition-all active:scale-95"
+                            className="mt-10 px-12 py-4 glass-dark rounded-2xl font-black uppercase tracking-[0.3em] hover:bg-white hover:text-slate-900 transition-all duration-500 active:scale-95"
                             onClick={() => setLightboxUrl(null)}
                         >
                             Close Preview
