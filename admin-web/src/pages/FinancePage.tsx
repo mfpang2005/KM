@@ -64,7 +64,8 @@ export const FinancePage: React.FC = () => {
                     setData({
                         ...data,
                         periodRevenue: data.periodRevenue + revDiff,
-                        todayRevenue: data.todayRevenue + revDiff // Simplification: assuming it might affect today
+                        todayRevenue: data.todayRevenue + revDiff,
+                        totalUnpaidBalance: data.totalUnpaidBalance - revDiff // revDiff is positive if status became PAID
                     });
                 }
             }
@@ -171,7 +172,7 @@ export const FinancePage: React.FC = () => {
                 </div>
 
                 {/* Metrics Bar */}
-                <div className={`grid transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] px-1 ${isCollapsed ? 'grid-cols-2 gap-4 max-w-7xl mx-auto' : 'grid-cols-1 md:grid-cols-2 gap-6 mt-4'}`}>
+                <div className={`grid transition-all duration-500 ease-[cubic-bezier(0.4,0,0.2,1)] px-1 ${isCollapsed ? 'grid-cols-3 gap-4 max-w-7xl mx-auto' : 'grid-cols-1 md:grid-cols-3 gap-6 mt-4'}`}>
                     {/* 1. Period Revenue */}
                     <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:-translate-y-1'}`}>
                         <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-slate-900 group-hover:scale-110'}`}>
@@ -202,6 +203,24 @@ export const FinancePage: React.FC = () => {
                             <h2 className={`font-black text-slate-800 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
                                 {data?.periodOrders || 0}
                             </h2>
+                        </div>
+                    </div>
+
+                    {/* 3. Total Unpaid Balance */}
+                    <div className={`relative group overflow-hidden transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-0 flex items-center gap-2' : 'bg-white/40 backdrop-blur-xl border border-white/60 p-6 rounded-[32px] shadow-[0_8px_32px_rgba(0,0,0,0.04)] hover:-translate-y-1'}`}>
+                        <div className={`transition-all duration-500 ${isCollapsed ? 'scale-75 opacity-100' : 'absolute top-0 right-0 p-4 opacity-10 text-slate-900 group-hover:scale-110'}`}>
+                            <span className={`material-icons-round ${isCollapsed ? 'text-lg text-red-500' : 'text-4xl'}`}>error_outline</span>
+                        </div>
+                        <div className={`${isCollapsed ? 'flex items-baseline gap-1' : ''}`}>
+                            <p className={`font-black uppercase tracking-widest transition-all duration-500 ${isCollapsed ? 'text-[8px] text-slate-400 mr-1' : 'text-[10px] text-slate-400 mb-3'}`}>
+                                Unpaid Total
+                            </p>
+                            <div className="flex items-baseline gap-0.5">
+                                <span className={`font-black text-red-500/60 font-mono transition-all duration-500 ${isCollapsed ? 'text-xs' : 'text-xl'}`}>RM</span>
+                                <h2 className={`font-black text-slate-800 tracking-tighter font-mono transition-all duration-500 ${isCollapsed ? 'text-sm' : 'text-3xl'}`}>
+                                    {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </h2>
+                            </div>
                         </div>
                     </div>
 

@@ -178,6 +178,7 @@ export interface FinanceData {
     periodOrders: number;
     todayRevenue: number;
     todayOrders: number;
+    totalUnpaidBalance: number;
     collections: CollectionStats[];
 }
 
