@@ -172,10 +172,12 @@ export const FinancePage: React.FC = () => {
 
             {/* 2. Metrics Bar (Sticky Mini-Dashboard Logic) */}
             <div className={`sticky top-4 z-[70] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isCollapsed ? 'translate-y-0' : 'translate-y-0'}`}>
-                <div className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-4 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[24px] shadow-2xl border border-white/10 scale-95' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-4'}`}>
+                <div 
+                    className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-4 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[24px] shadow-2xl border border-white/10 scale-95' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-[2fr_2fr_2fr_1fr]'}`}
+                >
                     
                     {/* 1. Revenue Card */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 h-auto' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
                         <div className="flex items-center justify-between mb-3">
                             <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-xs text-slate-700'}`}>
                                 {range} Revenue
@@ -191,7 +193,7 @@ export const FinancePage: React.FC = () => {
                     </div>
 
                     {/* 2. Collection Data Card */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2 overflow-hidden' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 overflow-hidden h-auto' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
                         <div className="flex items-center justify-between mb-3">
                             <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-xs text-slate-700'}`}>
                                 Collection Data
@@ -212,7 +214,7 @@ export const FinancePage: React.FC = () => {
                     </div>
 
                     {/* 3. Unpaid Card (Neon Flow) */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : `p-5 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 h-auto' : `px-5 h-36 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
                         <div className="flex items-center justify-between mb-3">
                             <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-xs text-slate-700'}`}>
                                 Unpaid Total
@@ -228,7 +230,7 @@ export const FinancePage: React.FC = () => {
                     </div>
 
                     {/* 4. Orders Card */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl'}`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 h-auto' : 'glass-card px-3 h-36 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl'}`}>
                         <div className="flex items-center justify-between mb-2">
                             <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-xs text-slate-700'}`}>
                                 {range} Orders
