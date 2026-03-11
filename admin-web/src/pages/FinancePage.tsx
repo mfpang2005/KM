@@ -191,7 +191,7 @@ export const FinancePage: React.FC = () => {
                     </div>
 
                     {/* Orders Card */}
-                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-3xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl self-center'}`}>
+                    <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl self-center'}`}>
                         <div className="flex items-center justify-between mb-2">
                             <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[9px] text-slate-400'}`}>
                                 {range} Orders
