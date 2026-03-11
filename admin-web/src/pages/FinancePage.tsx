@@ -38,41 +38,70 @@ export const FinancePage: React.FC = () => {
     };
 
     const handleUpdateField = async (orderId: string, field: string, value: any) => {
-        // --- Optimistic UI Update ---
-        // 1. Snapshot previous state
         const originalOrders = [...orders];
         const originalData = data ? { ...data } : null;
 
-        // 2. Find and update the order locally
-        const updatedOrders = orders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
-        setOrders(updatedOrders);
+        // Find the specific order to calculate impacts
+        const order = orders.find(o => o.id === orderId);
+        if (!order) return;
 
-        // 3. If field is paymentStatus, update revenue stats optimistically
-        if (field === 'paymentStatus' && data) {
-            const order = orders.find(o => o.id === orderId);
-            if (order) {
-                const oldStatus = order.paymentStatus || 'unpaid';
-                const newStatus = value;
-                const balance = order.amount - (order.deposit_amount || 0);
+        let updatePayload: any = { [field]: value };
+        let nextOrders = [...orders];
+        let nextData = data ? { ...data } : null;
 
-                // If changing to 'paid', increase revenue. If changing from 'paid', decrease.
-                let revDiff = 0;
-                if (oldStatus !== 'paid' && newStatus === 'paid') revDiff = balance;
-                else if (oldStatus === 'paid' && newStatus !== 'paid') revDiff = -balance;
+        // 1. Logic for Deposit Amount (Repayments)
+        if (field === 'deposit_amount' && nextData) {
+            const delta = value - (order.deposit_amount || 0);
+            nextData.periodRevenue += delta;
+            nextData.todayRevenue += delta;
+            nextData.totalUnpaidBalance -= delta;
 
-                if (revDiff !== 0) {
-                    setData({
-                        ...data,
-                        periodRevenue: data.periodRevenue + revDiff,
-                        todayRevenue: data.todayRevenue + revDiff,
-                        totalUnpaidBalance: data.totalUnpaidBalance - revDiff // revDiff is positive if status became PAID
-                    });
-                }
+            // Auto-complete status if fully paid
+            if (value >= order.amount && order.paymentStatus !== 'paid') {
+                updatePayload.paymentStatus = 'paid';
+                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value, paymentStatus: 'paid' } : o);
+            } else {
+                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
             }
+        } 
+        // 2. Logic for Payment Status Toggle
+        else if (field === 'paymentStatus' && nextData) {
+            const oldStatus = (order.paymentStatus || 'unpaid').toLowerCase();
+            const newStatus = (value as string).toLowerCase();
+            const balance = order.amount - (order.deposit_amount || 0);
+
+            if (oldStatus !== 'paid' && newStatus === 'paid') {
+                // Changing to PAID: Assume remaining balance is now received
+                if (balance > 0) {
+                    updatePayload.deposit_amount = order.amount;
+                    nextData.periodRevenue += balance;
+                    nextData.todayRevenue += balance;
+                    nextData.totalUnpaidBalance -= balance;
+                    nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value, deposit_amount: order.amount } : o);
+                } else {
+                    nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+                }
+            } else if (oldStatus === 'paid' && newStatus !== 'paid') {
+                // Reverting PAID: This is rare but we need to keep it consistent
+                // For simplicity, we keep the deposit_amount as is (we don't "return" cash)
+                // But it adds back to unpaid balance
+                nextData.totalUnpaidBalance += balance; // balance would be 0 if it was truly paid
+                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+            } else {
+                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
+            }
+        } 
+        // 3. Simple field update
+        else {
+            nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
         }
 
+        // Apply optimistic updates
+        setOrders(nextOrders);
+        if (nextData) setData(nextData);
+
         try {
-            const { error } = await supabase.from('orders').update({ [field]: value }).eq('id', orderId);
+            const { error } = await supabase.from('orders').update(updatePayload).eq('id', orderId);
             if (error) throw error;
             
             // Success: silently refresh to ensure server consistency
