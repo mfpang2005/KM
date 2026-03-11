@@ -4,6 +4,8 @@ import { SuperAdminService, AdminOrderService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { Order, FinanceData } from '../types';
 import { PageHeader } from '../components/PageHeader';
+import { FinanceTableRow } from '../components/FinanceTableRow';
+import { useFinanceActions } from '../hooks/useFinanceActions';
 
 export const FinancePage: React.FC = () => {
     const [range, setRange] = useState<'today' | 'month' | 'all'>('month');
@@ -14,6 +16,9 @@ export const FinancePage: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
     const [isCollapsed, setIsCollapsed] = useState(false);
     const { search } = useLocation();
+
+    // Use customized hook for logic
+    const { handleUpdateField } = useFinanceActions(setOrders, setData);
 
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
@@ -35,96 +40,6 @@ export const FinancePage: React.FC = () => {
     const scrollToReconciliation = () => {
         const el = document.getElementById('payment-reconciliation');
         if (el) el.scrollIntoView({ behavior: 'smooth' });
-    };
-
-    const handleUpdateField = async (orderId: string, field: string, value: any) => {
-        const originalOrders = [...orders];
-        const originalData = data ? { ...data } : null;
-
-        const order = orders.find(o => o.id === orderId);
-        if (!order) return;
-
-        let updatePayload: any = { [field]: value };
-        let nextOrders = [...orders];
-        let nextData = data ? { ...data } : null;
-
-        const total = order.amount || 0;
-
-        // 1. Math Logic for Payment Received
-        if (field === 'payment_received') {
-            const payment = parseFloat(value) || 0;
-            const delta = payment - (order.payment_received || 0);
-            const newBalance = Math.max(0, total - payment);
-            const newStatus = newBalance <= 0 ? 'paid' : 'unpaid';
-
-            updatePayload = {
-                ...updatePayload,
-                payment_received: payment,
-                balance: newBalance,
-                paymentStatus: newStatus,
-                amount: total
-            };
-
-            if (nextData) {
-                nextData.periodRevenue += delta;
-                nextData.totalUnpaidBalance -= delta;
-            }
-
-            nextOrders = nextOrders.map(o => o.id === orderId ? { 
-                ...o, 
-                payment_received: payment, 
-                balance: newBalance,
-                paymentStatus: newStatus 
-            } : o);
-        } 
-        // 2. Manual Status Override
-        else if (field === 'paymentStatus') {
-            const newStatus = value.toLowerCase();
-            
-            if (newStatus === 'paid') {
-                const prevPayment = order.payment_received || 0;
-                const delta = total - prevPayment;
-
-                updatePayload = {
-                    ...updatePayload,
-                    paymentStatus: 'paid',
-                    payment_received: total,
-                    balance: 0,
-                    amount: total
-                };
-
-                if (nextData) {
-                    nextData.periodRevenue += delta;
-                    nextData.totalUnpaidBalance -= delta;
-                }
-
-                nextOrders = nextOrders.map(o => o.id === orderId ? { 
-                    ...o, 
-                    paymentStatus: 'paid', 
-                    payment_received: total, 
-                    balance: 0 
-                } : o);
-            } else {
-                // If set to unpaid, keep current payments but force status string
-                updatePayload = { ...updatePayload, paymentStatus: 'unpaid' };
-                nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, paymentStatus: 'unpaid' } : o);
-            }
-        }
-        else {
-            nextOrders = nextOrders.map(o => o.id === orderId ? { ...o, [field]: value } : o);
-        }
-
-        setOrders(nextOrders);
-        if (nextData) setData(nextData);
-
-        try {
-            const { error } = await supabase.from('orders').update(updatePayload).eq('id', orderId);
-            if (error) throw error;
-        } catch (err) {
-            console.error(`Failed to update ${field}`, err);
-            setOrders(originalOrders);
-            setData(originalData);
-        }
     };
 
     useEffect(() => {
@@ -330,99 +245,14 @@ export const FinancePage: React.FC = () => {
                                 <tbody className="divide-y divide-slate-100/50">
                                     {orders
                                         .filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter)
-                                        .map((order) => {
-                                            const balance = (order.amount || 0) - (order.payment_received || 0);
-                                            const isUnpaid = (order.paymentStatus || 'unpaid').toLowerCase() !== 'paid';
-                                            return (
-                                                <tr key={order.id} className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${isUnpaid ? 'bg-red-50/5' : ''}`}>
-                                                    <td className="px-4 py-3 align-middle font-mono-finance text-[11px] text-indigo-600 font-bold tracking-tight relative">
-                                                        <input
-                                                            key={`${order.id}-${order.order_number || order.id}`}
-                                                            type="text"
-                                                            defaultValue={order.order_number || order.id}
-                                                            onBlur={(e) => {
-                                                                if (e.target.value !== (order.order_number || order.id)) {
-                                                                    handleUpdateField(order.id, 'order_number', e.target.value);
-                                                                }
-                                                            }}
-                                                            className="bg-transparent border-none p-0 w-full focus:ring-0 text-indigo-600 font-bold font-mono-finance cursor-edit"
-                                                            title="Click to edit Order ID"
-                                                        />
-                                                    </td>
-                                                    <td className="px-4 py-3 align-middle font-mono-finance text-[10px] text-slate-500">
-                                                        {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '-'}
-                                                    </td>
-                                                    <td className="px-6 py-3 align-middle">
-                                                        <p className="text-xs font-bold text-slate-800 tracking-tight">{order.customerName || 'Walk-in'}</p>
-                                                        <p className="text-[10px] text-slate-400 mt-0.5">{order.customerPhone || '-'}</p>
-                                                    </td>
-                                                    <td className="px-4 py-3 align-middle">
-                                                        <div className="flex items-center gap-1.5 text-slate-500">
-                                                            <span className="material-icons-round text-xs">{getPaymentIcon(order.paymentMethod || 'cash')}</span>
-                                                            <select
-                                                                value={order.paymentMethod || 'cash'}
-                                                                onChange={(e) => handleUpdateField(order.id, 'paymentMethod', e.target.value)}
-                                                                className="bg-transparent border-none p-0 text-[10px] font-bold uppercase tracking-tighter focus:ring-0 cursor-pointer text-slate-600 hover:text-indigo-600 transition-colors outline-none appearance-none"
-                                                            >
-                                                                <option value="cash">Cash</option>
-                                                                <option value="bank_transfer">Bank Transfer</option>
-                                                                <option value="ewallet">E-Wallet</option>
-                                                                <option value="cheque">Cheque</option>
-                                                            </select>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-bold text-slate-800">
-                                                        {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td className="px-4 py-3 align-middle">
-                                                        <div className="flex items-center justify-center">
-                                                            <div className="relative group">
-                                                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">RM</span>
-                                                                <input
-                                                                    key={`${order.id}-${order.payment_received}`}
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    placeholder="0.00"
-                                                                    className="w-28 pl-7 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-mono-finance font-black focus:ring-2 focus:ring-indigo-500/20 focus:bg-white focus:border-indigo-500 transition-all outline-none"
-                                                                    defaultValue={order.payment_received || 0}
-                                                                    onBlur={(e) => {
-                                                                        const val = parseFloat(e.target.value) || 0;
-                                                                        if (val !== (order.payment_received || 0)) {
-                                                                            handleUpdateField(order.id, 'payment_received', val);
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className={`px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-black ${(balance || 0) > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                                                        {(balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                                                    </td>
-                                                    <td className="px-4 py-3 align-middle">
-                                                        <select
-                                                            value={order.paymentStatus || 'unpaid'}
-                                                            onChange={(e) => handleUpdateField(order.id, 'paymentStatus', e.target.value)}
-                                                            className={`text-[9px] font-black px-3 py-1.5 rounded-full border transition-all uppercase tracking-widest block text-center w-full appearance-none cursor-pointer outline-none shadow-sm
-                                                                ${(order.paymentStatus || 'unpaid').toLowerCase() === 'paid'
-                                                                    ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/20' 
-                                                                    : 'bg-red-500 text-white border-red-400 shadow-red-500/20'}`}
-                                                        >
-                                                            <option value="paid" className="bg-white text-slate-900">PAID</option>
-                                                            <option value="unpaid" className="bg-white text-slate-900">UNPAID</option>
-                                                        </select>
-                                                    </td>
-                                                    <td className="px-6 py-3 align-middle">
-                                                        <input
-                                                            type="text"
-                                                            defaultValue={order.remark || ''}
-                                                            onBlur={(e) => handleUpdateField(order.id, 'remark', e.target.value)}
-                                                            className="w-full bg-transparent border-b border-transparent hover:border-slate-200 focus:border-indigo-500 transition-all outline-none text-[10px] text-slate-600 py-1"
-                                                            placeholder="Add remark..."
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
+                                        .map((order) => (
+                                            <FinanceTableRow 
+                                                key={order.id} 
+                                                order={order} 
+                                                onUpdateField={handleUpdateField}
+                                                getPaymentIcon={getPaymentIcon}
+                                            />
+                                        ))}
                                 </tbody>
                             </table>
                         </div>
