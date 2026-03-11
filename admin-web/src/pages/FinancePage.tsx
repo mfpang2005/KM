@@ -160,7 +160,7 @@ export const FinancePage: React.FC = () => {
                                 <button
                                     key={r}
                                     onClick={() => setRange(r)}
-                                    className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${range === r ? 'bg-slate-900 text-white shadow-xl scale-105' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}
+                                    className={`px-6 py-2 rounded-xl text-[10px] font-bold uppercase tracking-widest transition-all duration-300 ${range === r ? 'bg-slate-900 text-white shadow-xl scale-105' : 'text-slate-400 hover:text-slate-600 hover:bg-white/50'}`}
                                 >
                                     {r}
                                 </button>
@@ -177,7 +177,7 @@ export const FinancePage: React.FC = () => {
                     {/* Revenue Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
+                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
                                 {range} Revenue
                             </p>
                             {!isCollapsed && <span className="material-icons-round text-emerald-500/20 text-2xl">analytics</span>}
@@ -193,7 +193,7 @@ export const FinancePage: React.FC = () => {
                     {/* Orders Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : 'glass-card px-3 py-4 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl self-center'}`}>
                         <div className="flex items-center justify-between mb-2">
-                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[9px] text-slate-600'}`}>
+                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[9px] text-slate-600'}`}>
                                 {range} Orders
                             </p>
                             {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-xl">shopping_bag</span>}
@@ -206,7 +206,7 @@ export const FinancePage: React.FC = () => {
                     {/* Unpaid Card (Neon Flow) */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2' : `p-5 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-[10px] text-slate-600'}`}>
+                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-[10px] text-slate-600'}`}>
                                 Unpaid Total
                             </p>
                             {!isCollapsed && <span className={`material-icons-round text-2xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>}
@@ -222,7 +222,7 @@ export const FinancePage: React.FC = () => {
                     {/* Collection Data Card */}
                     <div className={`group inner-border transition-all duration-500 ${isCollapsed ? 'bg-transparent border-none p-2 overflow-hidden' : 'glass-card p-5 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.3em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
+                            <p className={`font-bold uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-[10px] text-slate-600'}`}>
                                 Collection Data
                             </p>
                             {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-2xl">receipt_long</span>}
@@ -251,7 +251,7 @@ export const FinancePage: React.FC = () => {
                         {/* Table Controls */}
                         <div className="px-8 py-6 border-b border-white/60 flex items-center justify-between bg-white/30">
                             <div>
-                                <h4 className="font-black text-slate-800 text-sm uppercase tracking-[0.2em]">Live Reconciliation</h4>
+                                <h4 className="font-bold text-slate-800 text-sm uppercase tracking-[0.1em]">Live Reconciliation</h4>
                                 <div className="flex items-center gap-2 mt-3">
                                     {(['all', 'paid', 'unpaid'] as const).map(s => (
                                         <button
