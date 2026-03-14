@@ -313,7 +313,6 @@ async def get_financials(
     pm_stats: dict = {}
 
     for o in all_orders:
-        curr_amount = float(o.get("amount") or 0.0)
         payment = float(o.get("payment_received") or 0.0)
         due_time_raw = o.get("dueTime") or ""
         
@@ -365,11 +364,11 @@ async def get_financials(
             today_revenue += payment
             today_order_count += 1
 
-    # Global Unpaid Total: SUM(amount - payment_received)
-    unpaid_query = supabase.table("orders").select("amount, payment_received").neq("status", "cancelled").gt("amount", 0)
+    # Global Unpaid Total: SUM(balance)
+    unpaid_query = supabase.table("orders").select("balance").neq("status", "cancelled").gt("balance", 0)
     unpaid_response = await run_in_threadpool(unpaid_query.execute)
     unpaid_orders = unpaid_response.data or []
-    total_unpaid_balance = sum(round((uo.get("amount") or 0) - (uo.get("payment_received") or 0), 2) for uo in unpaid_orders)
+    total_unpaid_balance = sum(round(float(uo.get("balance") or 0.0), 2) for uo in unpaid_orders)
 
     return {
         "periodRevenue": round(period_revenue, 2),

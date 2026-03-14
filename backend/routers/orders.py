@@ -297,6 +297,8 @@ async def partial_update_order(order_id: str, update: OrderUpdate):
     old_order = old_res.data[0]
     
     # ENFORCE FINANCE LOGIC ON PARTIAL UPDATE
+    update_data = update.model_dump(exclude_none=True)
+    
     # If amount or payment_received changed, recalculate balance & status
     new_amount = update_data.get("amount", old_order.get("amount", 0.0))
     new_payment = update_data.get("payment_received", old_order.get("payment_received", 0.0))
@@ -306,9 +308,7 @@ async def partial_update_order(order_id: str, update: OrderUpdate):
         if update_data["balance"] <= 0:
             update_data["paymentStatus"] = "paid"
         else:
-            # If it was paid but now balance > 0, set to unpaid
-            if old_order.get("paymentStatus") == "paid" or update_data.get("paymentStatus") == "paid":
-                 update_data["paymentStatus"] = "unpaid"
+            update_data["paymentStatus"] = "unpaid"
     
     # Merge existing data with updates for Calendar sync
     merged_data = {**old_order, **update_data}

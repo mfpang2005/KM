@@ -51,10 +51,15 @@ const App: React.FC = () => {
 
     return (
         <HashRouter>
-            <div className="flex justify-center min-h-screen bg-slate-100">
-                <div className="w-full max-w-md bg-white shadow-2xl overflow-hidden relative flex flex-col min-h-screen">
-                    <Routes>
-                        <Route path="/login" element={<Login onLogin={(role) => setUser(role)} />} />
+            <div className="min-h-screen bg-slate-100 flex flex-col">
+                <Routes>
+                    <Route path="/login" element={
+                        <div className="flex justify-center min-h-screen bg-slate-100">
+                            <div className="w-full max-w-md bg-white shadow-2xl overflow-hidden relative flex flex-col min-h-screen">
+                                <Login onLogin={(role) => setUser(role)} />
+                            </div>
+                        </div>
+                    } />
 
                         <Route element={<MainLayout user={user} />}>
                             {/* Admin Routes — super_admin 也可访问 */}
@@ -84,7 +89,6 @@ const App: React.FC = () => {
 
                         <Route path="/" element={<Navigate to="/login" />} />
                     </Routes>
-                </div>
             </div>
         </HashRouter>
     );

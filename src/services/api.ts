@@ -2,6 +2,16 @@ import axios from 'axios';
 import { Order, OrderCreate, OrderStatus, Product, User, UserRole } from '../../types';
 import { supabase } from '../lib/supabase';
 
+export interface Customer {
+    id: string;
+    name: string;
+    phone: string;
+    address?: string;
+    remark?: string;
+    created_at?: string;
+    updated_at?: string;
+}
+
 const API_URL = '/api';
 
 export const api = axios.create({
@@ -206,5 +216,27 @@ export const VehicleService = {
         const response = await api.post(`/vehicles/${vehicleId}/unassign`, { user_id: driverId });
         return response.data;
     }
+};
+
+export const CustomerService = {
+    getAll: async (q?: string): Promise<Customer[]> => {
+        const response = await api.get('/customers', { params: { q } });
+        return response.data;
+    },
+    getById: async (id: string): Promise<Customer> => {
+        const response = await api.get(`/customers/${id}`);
+        return response.data;
+    },
+    create: async (customer: Omit<Customer, 'id'>): Promise<Customer> => {
+        const response = await api.post('/customers', customer);
+        return response.data;
+    },
+    update: async (id: string, customer: Partial<Customer>): Promise<Customer> => {
+        const response = await api.patch(`/customers/${id}`, customer);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/customers/${id}`);
+    },
 };
 

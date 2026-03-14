@@ -87,6 +87,12 @@ const OrderManagement: React.FC = () => {
     const [scanCode, setScanCode] = useState('');
     const [scanError, setScanError] = useState(false);
 
+    // Filter & Pagination state
+    const [dateFilter, setDateFilter] = useState<'all' | 'today'>('all'); // 默认显示全部，或根据用户习惯设为 today
+    const [currentPage, setCurrentPage] = useState(1);
+    const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+    const pageSize = 10;
+
     const statusColors: Record<string, string> = {
         [OrderStatus.PENDING]: 'bg-yellow-50 text-yellow-600 border border-yellow-200',
         [OrderStatus.PREPARING]: 'bg-blue-50 text-blue-600 border border-blue-200',
@@ -110,9 +116,33 @@ const OrderManagement: React.FC = () => {
             const matchesSearch =
                 order.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 order.id.toLowerCase().includes(searchQuery.toLowerCase());
-            return matchesTab && matchesSearch;
+
+            let matchesDate = true;
+            if (dateFilter === 'today') {
+                const today = new Date().toDateString();
+                // 优先检查活动时间 dueTime，其次是创建时间
+                const orderDateValue = order.dueTime || (order as any).created_at;
+                if (orderDateValue) {
+                    const orderDate = new Date(orderDateValue).toDateString();
+                    matchesDate = today === orderDate;
+                } else {
+                    matchesDate = false;
+                }
+            }
+
+            return matchesTab && matchesSearch && matchesDate;
         });
-    }, [orders, tab, searchQuery]);
+    }, [orders, tab, searchQuery, dateFilter]);
+
+    const totalPages = Math.ceil(filteredOrders.length / pageSize);
+    const paginatedOrders = useMemo(() => {
+        return filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    }, [filteredOrders, currentPage]);
+
+    // 重置分页
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [tab, searchQuery, dateFilter]);
 
     const handleDownloadPDF = (order: Order) => {
         setPrintingOrder(order);
@@ -186,13 +216,15 @@ const OrderManagement: React.FC = () => {
             }
             return item;
         });
-        setEditingOrder({ ...editingOrder, items: newItems });
+        const newAmount = newItems.reduce((sum, item) => sum + (Number(item.price || 0) * item.quantity), 0);
+        setEditingOrder({ ...editingOrder, items: newItems, amount: newAmount });
     };
 
     const removeEditItem = (id: string) => {
         if (!editingOrder) return;
         const newItems = editingOrder.items.filter(item => item.id !== id);
-        setEditingOrder({ ...editingOrder, items: newItems });
+        const newAmount = newItems.reduce((sum, item) => sum + (Number(item.price || 0) * item.quantity), 0);
+        setEditingOrder({ ...editingOrder, items: newItems, amount: newAmount });
     };
 
     const addEditItemByProduct = (product: Product) => {
@@ -201,11 +233,31 @@ const OrderManagement: React.FC = () => {
         if (existing) {
             updateEditItemQty(product.id, 1);
         } else {
+            const newItems = [...editingOrder.items, { 
+                id: product.id, 
+                name: product.name, 
+                quantity: 1, 
+                price: product.price // Using current product price as default
+            }];
+            const newAmount = newItems.reduce((sum, item) => sum + (Number(item.price || 0) * item.quantity), 0);
             setEditingOrder({
                 ...editingOrder,
-                items: [...editingOrder.items, { id: product.id, name: product.name, quantity: 1 }]
+                items: newItems,
+                amount: newAmount
             });
         }
+    };
+
+    const updateEditItemPrice = (id: string, newPrice: number) => {
+        if (!editingOrder) return;
+        const newItems = editingOrder.items.map(item => {
+            if (item.id === id) {
+                return { ...item, price: newPrice };
+            }
+            return item;
+        });
+        const newAmount = newItems.reduce((sum, item) => sum + (Number(item.price || 0) * item.quantity), 0);
+        setEditingOrder({ ...editingOrder, items: newItems, amount: newAmount });
     };
 
     /**
@@ -500,20 +552,41 @@ const OrderManagement: React.FC = () => {
             )}
 
             {/* Header */}
-            <header className="pt-12 pb-4 px-6 bg-white flex flex-col gap-4 sticky top-0 z-30 no-print shadow-sm">
-                <div className="flex items-center gap-4">
-                    <button onClick={() => navigate('/admin')} className="text-slate-400 p-1 active:scale-90 transition-transform">
-                        <span className="material-icons-round">arrow_back</span>
-                    </button>
-                    <h1 className="text-xl font-bold text-slate-900">订单管理</h1>
+            <header className="pt-12 pb-6 px-6 bg-white flex flex-col gap-6 sticky top-0 z-30 no-print shadow-sm">
+                <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                        <button onClick={() => navigate('/admin')} className="w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full active:scale-90 transition-transform">
+                            <span className="material-icons-round">arrow_back</span>
+                        </button>
+                        <div>
+                            <h1 className="text-xl font-black text-slate-900 tracking-tight">订单管理</h1>
+                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Order Management Flow</p>
+                        </div>
+                    </div>
+                    
+                    {/* Date Filters (Aligned with Backend logic) */}
+                    <div className="flex bg-slate-100 p-1 rounded-2xl shrink-0">
+                        <button 
+                            onClick={() => setDateFilter('today')}
+                            className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${dateFilter === 'today' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                        >
+                            今日
+                        </button>
+                        <button 
+                            onClick={() => setDateFilter('all')}
+                            className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${dateFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
+                        >
+                            全部
+                        </button>
+                    </div>
                 </div>
 
-                <div className="relative">
-                    <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-[18px]">search</span>
+                <div className="relative group">
+                    <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-primary transition-colors">search</span>
                     <input
                         type="text"
-                        className="w-full pl-10 pr-4 py-2 bg-[#f1f3f5] border-none rounded-full text-xs font-medium focus:ring-1 focus:ring-primary/20 placeholder:text-slate-300"
-                        placeholder="搜索订单 (姓名或编号)"
+                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 outline-none transition-all placeholder:text-slate-200"
+                        placeholder="搜索客户姓名、电话或订单编号..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
                     />
@@ -521,145 +594,149 @@ const OrderManagement: React.FC = () => {
             </header>
 
             {/* Tabs */}
-            <div className="bg-white px-4 flex gap-6 border-b border-slate-50 overflow-x-auto no-scrollbar sticky top-[132px] z-20 no-print shadow-sm">
+            <div className="bg-white px-6 flex gap-8 border-b border-slate-50 overflow-x-auto no-scrollbar sticky top-[168px] z-20 no-print shadow-sm">
                 {['all', ...Object.values(OrderStatus)].map(t => (
                     <button
                         key={t}
                         onClick={() => setTab(t as any)}
-                        className={`py - 3 px - 1 text - [11px] font - bold whitespace - nowrap border - b - 2 transition - all relative ${tab === t ? 'text-primary' : 'border-transparent text-slate-400'
-                            } `}
+                        className={`py-4 text-[11px] font-black whitespace-nowrap transition-all relative ${tab === t ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
+                            }`}
                     >
                         {t === 'all' ? '全部订单' : statusLabels[t as OrderStatus]}
-                        {tab === t && <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-primary animate-in fade-in duration-300"></div>}
+                        {tab === t && (
+                            <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full animate-in slide-in-from-bottom-1 duration-300"></div>
+                        )}
                     </button>
                 ))}
             </div>
 
             {/* List */}
-            <main className="flex-1 relative overflow-hidden pb-32 no-print bg-[#f8f6f6]">
+            <main className="flex-1 relative overflow-hidden pb-4 no-print bg-[#f8f6f6]">
                 <PullToRefresh onRefresh={loadOrders}>
-                    <div className="p-4 space-y-4 min-h-full">
+                    <div className="p-6 space-y-6 min-h-full pb-32">
                         {isLoading ? (
                             Array.from({ length: 3 }).map((_, i) => (
-                                <div key={i} className="bg-white p-5 rounded-[32px] shadow-sm flex flex-col gap-4 border border-slate-100/50 animate-pulse">
+                                <div key={i} className="bg-white p-6 rounded-[32px] shadow-sm flex flex-col gap-5 border border-slate-100 animate-pulse">
                                     <div className="flex justify-between items-start">
                                         <div className="flex flex-col gap-2">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-3 h-3 rounded-full bg-slate-200"></div>
-                                                <div className="w-32 h-5 bg-slate-200 rounded-lg"></div>
+                                                <div className="w-3.5 h-3.5 rounded-full bg-slate-100" />
+                                                <div className="w-32 h-6 bg-slate-100 rounded-lg" />
                                             </div>
-                                            <div className="w-20 h-3 bg-slate-200 rounded-md ml-5"></div>
-                                            <div className="w-48 h-3 bg-slate-200 rounded-md ml-5 mt-1"></div>
+                                            <div className="w-48 h-3 bg-slate-100 rounded-md ml-6" />
                                         </div>
-                                        <div className="w-16 h-6 bg-slate-200 rounded-lg"></div>
+                                        <div className="w-16 h-6 bg-slate-100 rounded-lg" />
                                     </div>
-
-                                    <div className="bg-slate-50 p-5 rounded-[24px] space-y-3">
-                                        <div className="w-full h-3 bg-slate-200 rounded-md"></div>
-                                        <div className="w-2/3 h-3 bg-slate-200 rounded-md"></div>
+                                    <div className="bg-slate-50 p-6 rounded-[24px] space-y-3">
+                                        <div className="w-full h-3 bg-slate-100 rounded-md" />
+                                        <div className="w-2/3 h-3 bg-slate-100 rounded-md" />
                                     </div>
-
                                     <div className="flex items-center justify-between mt-1">
-                                        <div className="flex flex-col gap-2">
-                                            <div className="w-24 h-6 bg-slate-200 rounded-lg"></div>
-                                            <div className="w-16 h-3 bg-slate-200 rounded-md"></div>
-                                        </div>
-                                        <div className="flex gap-2.5">
-                                            <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
-                                            <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
-                                            <div className="w-10 h-10 bg-slate-200 rounded-full"></div>
+                                        <div className="w-24 h-8 bg-slate-100 rounded-lg" />
+                                        <div className="flex gap-2">
+                                            <div className="w-10 h-10 bg-slate-100 rounded-full" />
+                                            <div className="w-10 h-10 bg-slate-100 rounded-full" />
                                         </div>
                                     </div>
                                 </div>
                             ))
-                        ) : filteredOrders.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-slate-200">
-                                <span className="material-icons-round text-6xl">receipt_long</span>
-                                <p className="text-sm font-bold mt-2">暂无订单</p>
+                        ) : paginatedOrders.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-24 text-slate-200">
+                                <span className="material-icons-round text-7xl opacity-20">receipt_long</span>
+                                <p className="text-sm font-black mt-4 uppercase tracking-widest text-slate-300">暂无匹配订单</p>
+                                <button
+                                    onClick={() => { setTab('all'); setSearchQuery(''); setDateFilter('all'); }}
+                                    className="mt-6 px-6 py-3 bg-white text-slate-400 font-bold text-xs rounded-2xl shadow-sm border border-slate-100 active:scale-95 transition-all"
+                                >
+                                    清除所有过滤器
+                                </button>
                             </div>
                         ) : (
-                            filteredOrders.map(order => (
+                            paginatedOrders.map(order => (
                                 <div
                                     key={order.id}
-                                    className="bg-white p-5 rounded-[32px] shadow-sm flex flex-col gap-4 animate-in fade-in duration-300 border border-slate-100/50"
+                                    className="bg-white p-6 rounded-[32px] shadow-sm flex flex-col gap-5 animate-in fade-in zoom-in duration-300 border border-slate-100 hover:shadow-md hover:border-slate-200/60 transition-all group"
                                 >
                                     <div className="flex justify-between items-start">
-                                        <div className="flex flex-col gap-0.5">
-                                            <div className="flex items-center gap-2">
-                                                <div className={`w-3 h-3 rounded-full shrink-0 ${['completed', 'ready'].includes(order.status) ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : ['preparing', 'delivering'].includes(order.status) ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)] animate-pulse' : 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]'}`} />
-                                                <h3 className="text-[17px] font-black text-slate-900">{order.customerName}</h3>
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2.5">
+                                                <div className={`w-3.5 h-3.5 rounded-full shrink-0 ${['completed', 'ready'].includes(order.status) ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : ['preparing', 'delivering'].includes(order.status) ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)] animate-pulse' : 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]'}`} />
+                                                <h3 className="text-lg font-black text-slate-900 tracking-tight">{order.customerName}</h3>
                                             </div>
-                                            <p className="text-[10px] font-bold text-slate-300 uppercase tracking-widest pl-5">{order.id}</p>
-                                            <div className="flex items-center gap-1 mt-1.5 pl-5">
-                                                <span className="material-icons-round text-[12px] text-slate-300">place</span>
-                                                <a
-                                                    href={getGoogleMapsUrl(order.address)}
-                                                    target="_blank"
-                                                    rel="noopener noreferrer"
-                                                    className="text-[11px] font-bold text-slate-500 hover:text-blue-600 hover:underline truncate max-w-[220px]"
-                                                    onClick={(e) => e.stopPropagation()}
-                                                >
-                                                    {order.address}
-                                                </a>
+                                            <div className="flex items-center gap-1.5 pl-6">
+                                                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{order.order_number || order.id}</span>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                                                <span className="text-[10px] font-bold text-slate-400">{order.dueTime ? new Date(order.dueTime).toLocaleString('zh-CN', { hour12: false }) : (order as any).created_at ? new Date((order as any).created_at).toLocaleString('zh-CN', { hour12: false }) : '-'}</span>
                                             </div>
                                         </div>
-                                        <span className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg ${statusColors[order.status] || 'bg-slate-100 text-slate-600 border border-slate-200'}`}>
-                                            {statusLabels[order.status]}
-                                        </span>
+                                        
+                                        {/* Inline Status Dropdown (Aligned with Backend) */}
+                                        <div className="relative">
+                                            <select
+                                                value={order.status}
+                                                onChange={(e) => handleUpdateStatus(order.id, e.target.value as OrderStatus)}
+                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none appearance-none cursor-pointer border hover:scale-105 transition-all shadow-sm ${(statusColors as any)[order.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}
+                                                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundPosition: 'right 4px center', backgroundRepeat: 'no-repeat' }}
+                                            >
+                                                {Object.values(OrderStatus).map(st => (
+                                                    <option key={st} value={st}>{statusLabels[st]}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
 
-                                    <div className="bg-[#f1f3f5]/60 p-5 rounded-[24px] space-y-3">
-                                        {order.items.map((item, idx) => (
+                                    {/* Items List Snapshot */}
+                                    <div className="bg-[#f8f9fa] p-5 rounded-[24px] space-y-2 border border-slate-50">
+                                        {order.items.slice(0, 3).map((item, idx) => (
                                             <div key={idx} className="flex justify-between items-center text-[13px] font-bold text-slate-700">
-                                                <span>{item.name}</span>
-                                                <span className="text-slate-400 font-black">x{item.quantity}</span>
+                                                <span className="truncate max-w-[200px]">{item.name}</span>
+                                                <span className="text-slate-400 font-black shrink-0 ml-2">x{item.quantity}</span>
                                             </div>
                                         ))}
+                                        {order.items.length > 3 && (
+                                            <p className="text-[10px] text-slate-400 font-black text-center mt-2 uppercase tracking-wide">... 及其他 {order.items.length - 3} 项项目</p>
+                                        )}
                                     </div>
 
-                                    <div className="flex items-center justify-between mt-1">
+                                    <div className="flex items-center justify-between mt-auto pt-2">
                                         <div className="flex flex-col">
+                                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1.5">结算总额</span>
                                             <span className="text-2xl font-black text-primary leading-none tracking-tight">RM {order.amount.toFixed(2)}</span>
-                                            {order.driverId && (
-                                                <div className="flex items-center gap-1.5 mt-2">
-                                                    <span className="material-icons-round text-[12px] text-slate-300">local_shipping</span>
-                                                    <span className="text-[10px] font-bold text-slate-400">{MOCK_DRIVERS.find(d => d.id === order.driverId)?.name}</span>
-                                                </div>
-                                            )}
                                         </div>
                                         <div className="flex gap-2.5">
-                                            {order.status === OrderStatus.PENDING && (
+                                            {/* Lightbox Trigger for Photos */}
+                                            {order.delivery_photos && order.delivery_photos.length > 0 && (
                                                 <button
-                                                    onClick={() => handleUpdateStatus(order.id, OrderStatus.PREPARING)}
-                                                    className="px-4 h-10 bg-primary text-white rounded-full flex items-center justify-center text-[11px] font-black active:scale-90 transition-transform shadow-md gap-1"
+                                                    onClick={() => setLightboxUrl(order.delivery_photos![0])}
+                                                    className="w-11 h-11 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-indigo-500 active:scale-90 transition-all shadow-sm group/btn"
                                                 >
-                                                    <span className="material-icons-round text-sm">check_circle</span>
-                                                    确认并制作
+                                                    <span className="material-icons-round text-xl group/btn:scale-110 transition-transform">photo_library</span>
                                                 </button>
                                             )}
+                                            
                                             <button
                                                 onClick={() => handleOpenEdit(order)}
-                                                className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-transform shadow-sm"
+                                                className="w-11 h-11 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[18px]">edit</span>
+                                                <span className="material-icons-round text-[20px]">edit</span>
                                             </button>
                                             <button
                                                 onClick={() => handleShareToWhatsApp(order)}
-                                                className="w-10 h-10 bg-green-50 border border-green-100 rounded-full flex items-center justify-center text-green-500 active:scale-90 transition-transform shadow-sm"
+                                                className="w-11 h-11 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-center text-green-500 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-[18px] h-[18px] opacity-80" alt="WA" />
+                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-5 h-5 opacity-80" alt="WA" />
                                             </button>
                                             <button
                                                 onClick={() => handleDownloadPDF(order)}
-                                                className="w-10 h-10 bg-red-50 border border-red-100 rounded-full flex items-center justify-center text-primary active:scale-90 transition-transform shadow-sm"
+                                                className="w-11 h-11 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-primary active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[18px]">picture_as_pdf</span>
+                                                <span className="material-icons-round text-[20px]">picture_as_pdf</span>
                                             </button>
                                             <button
                                                 onClick={() => setOrderToDelete(order.id)}
-                                                className="w-10 h-10 bg-white border border-slate-100 rounded-full flex items-center justify-center text-red-500 active:scale-90 transition-transform shadow-sm"
+                                                className="w-11 h-11 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-red-500 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[18px]">delete_outline</span>
+                                                <span className="material-icons-round text-[20px]">delete_outline</span>
                                             </button>
                                         </div>
                                     </div>
@@ -668,7 +745,54 @@ const OrderManagement: React.FC = () => {
                         )}
                     </div>
                 </PullToRefresh>
+                
+                {/* Pagination Controls */}
+                {totalPages > 1 && (
+                    <div className="absolute bottom-0 left-0 right-0 bg-white/90 backdrop-blur-md px-8 py-5 flex items-center justify-between border-t border-slate-50 shadow-[0_-10px_30px_rgba(0,0,0,0.03)] z-20">
+                        <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">
+                            第 {currentPage} 页 / 共 {totalPages} 页
+                        </span>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                disabled={currentPage === 1}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-100 text-slate-400 rounded-2xl disabled:opacity-30 active:scale-90 transition-all"
+                            >
+                                <span className="material-icons-round">chevron_left</span>
+                            </button>
+                            <button
+                                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                disabled={currentPage === totalPages}
+                                className="w-12 h-12 flex items-center justify-center bg-slate-100 text-slate-400 rounded-2xl disabled:opacity-30 active:scale-90 transition-all"
+                            >
+                                <span className="material-icons-round">chevron_right</span>
+                            </button>
+                        </div>
+                    </div>
+                )}
             </main>
+
+            {/* Lightbox Modal for Photos */}
+            {lightboxUrl && (
+                <div 
+                    className="fixed inset-0 z-[200] bg-black/95 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300"
+                    onClick={() => setLightboxUrl(null)}
+                >
+                    <div className="relative max-w-full max-h-full flex flex-col items-center">
+                        <img 
+                            src={lightboxUrl} 
+                            className="max-w-full max-h-[80vh] object-contain rounded-[32px] shadow-2xl animate-in zoom-in duration-300" 
+                            alt="Order Proof" 
+                        />
+                        <button 
+                            onClick={() => setLightboxUrl(null)}
+                            className="mt-10 px-8 py-4 bg-white/10 hover:bg-white/20 text-white rounded-2xl font-black text-sm transition-all active:scale-95"
+                        >
+                            关闭预览
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Confirm Deletion Popup */}
             {orderToDelete && (
@@ -726,10 +850,10 @@ const OrderManagement: React.FC = () => {
                                         <button
                                             key={pm.id}
                                             onClick={() => setEditingOrder({ ...editingOrder, paymentMethod: pm.id })}
-                                            className={`flex items - center gap - 2.5 p - 3.5 rounded - 2xl border transition - all ${editingOrder.paymentMethod === pm.id
+                                            className={`flex items-center gap-2.5 p-3.5 rounded-2xl border transition-all ${editingOrder.paymentMethod === pm.id
                                                 ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-105'
                                                 : 'bg-slate-50 border-slate-100 text-slate-500'
-                                                } `}
+                                                }`}
                                         >
                                             <span className="material-icons-round text-sm">{pm.icon}</span>
                                             <span className="text-[10px] font-black uppercase tracking-tight">{pm.label}</span>
@@ -803,10 +927,10 @@ const OrderManagement: React.FC = () => {
                                         <button
                                             key={driver.id}
                                             onClick={() => setEditingOrder({ ...editingOrder, driverId: driver.id })}
-                                            className={`min - w - [120px] p - 3 rounded - [24px] border transition - all flex flex - col items - center gap - 2 ${editingOrder.driverId === driver.id
+                                            className={`min-w-[120px] p-3 rounded-[24px] border transition-all flex flex-col items-center gap-2 ${editingOrder.driverId === driver.id
                                                 ? 'bg-primary/5 border-primary shadow-md'
                                                 : 'bg-slate-50 border-slate-100 shadow-sm'
-                                                } `}
+                                                }`}
                                         >
                                             <div className="relative">
                                                 <img src={driver.img} className="w-12 h-12 rounded-full border-2 border-white shadow-sm object-cover" alt={driver.name} />
@@ -824,10 +948,10 @@ const OrderManagement: React.FC = () => {
                                     ))}
                                     <button
                                         onClick={() => setEditingOrder({ ...editingOrder, driverId: undefined })}
-                                        className={`min - w - [120px] p - 3 rounded - [24px] border transition - all flex flex - col items - center justify - center gap - 2 ${!editingOrder.driverId
+                                        className={`min-w-[120px] p-3 rounded-[24px] border transition-all flex flex-col items-center justify-center gap-2 ${!editingOrder.driverId
                                             ? 'bg-slate-800 text-white border-slate-800 shadow-md'
                                             : 'bg-slate-50 border-slate-100 text-slate-400 shadow-sm'
-                                            } `}
+                                            }`}
                                     >
                                         <span className="material-icons-round">person_off</span>
                                         <span className="text-[10px] font-bold">暂不指派</span>
@@ -887,28 +1011,43 @@ const OrderManagement: React.FC = () => {
                                                 <h4 className="text-xs font-bold text-slate-800">{item.name}</h4>
                                                 <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tight">Code: {realProducts.find(p => p.id === item.id)?.code || item.id}</p>
                                             </div>
-                                            <div className="flex items-center gap-3">
-                                                <button
-                                                    onClick={() => updateEditItemQty(item.id, -1)}
-                                                    className="w-8 h-8 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 active:scale-90"
-                                                >
-                                                    <span className="material-icons-round text-sm">remove</span>
-                                                </button>
-                                                <span className="text-sm font-black w-6 text-center">{item.quantity}</span>
-                                                <button
-                                                    onClick={() => updateEditItemQty(item.id, 1)}
-                                                    className="w-8 h-8 rounded-full bg-primary text-white shadow-sm flex items-center justify-center active:scale-90"
-                                                >
-                                                    <span className="material-icons-round text-sm">add</span>
-                                                </button>
+                                                <div className="flex flex-col gap-1.5 min-w-[100px]">
+                                                    <label className="text-[9px] font-bold text-slate-400 ml-1 uppercase">单价 (PRICE)</label>
+                                                    <div className="relative">
+                                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">RM</span>
+                                                        <input 
+                                                            type="number" 
+                                                            className="w-full pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-black focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                                                            value={item.price || 0}
+                                                            onChange={(e) => updateEditItemPrice(item.id, parseFloat(e.target.value) || 0)}
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col gap-1.5">
+                                                    <label className="text-[9px] font-bold text-slate-400 ml-1 uppercase text-center">数量</label>
+                                                    <div className="flex items-center gap-2 bg-white border border-slate-200 p-1 rounded-xl">
+                                                        <button
+                                                            onClick={() => updateEditItemQty(item.id, -1)}
+                                                            className="w-7 h-7 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 active:scale-90"
+                                                        >
+                                                            <span className="material-icons-round text-xs">remove</span>
+                                                        </button>
+                                                        <span className="text-xs font-black min-w-[20px] text-center">{item.quantity}</span>
+                                                        <button
+                                                            onClick={() => updateEditItemQty(item.id, 1)}
+                                                            className="w-7 h-7 rounded-lg bg-primary text-white flex items-center justify-center active:scale-90"
+                                                        >
+                                                            <span className="material-icons-round text-xs">add</span>
+                                                        </button>
+                                                    </div>
+                                                </div>
                                                 <button
                                                     onClick={() => removeEditItem(item.id)}
-                                                    className="ml-2 text-slate-300 hover:text-red-500 active:scale-90 transition-colors"
+                                                    className="w-10 h-10 rounded-xl bg-red-50 text-red-500 flex items-center justify-center active:scale-90 transition-all self-end"
                                                 >
-                                                    <span className="material-icons-round text-[18px]">delete_outline</span>
+                                                    <span className="material-icons-round text-xl">delete_outline</span>
                                                 </button>
                                             </div>
-                                        </div>
                                     ))}
                                 </div>
                             </section>
@@ -920,10 +1059,10 @@ const OrderManagement: React.FC = () => {
                                         <button
                                             key={status}
                                             onClick={() => setEditingOrder({ ...editingOrder, status })}
-                                            className={`py - 3 px - 4 rounded - xl text - [10px] font - black uppercase tracking - wider border transition - all ${editingOrder.status === status
-                                                ? 'bg-primary text-white border-primary shadow-lg shadow-primary/20 scale-105 z-10'
-                                                : 'bg-white text-slate-400 border-slate-100'
-                                                } `}
+                                            className={`py-3.5 px-4 rounded-xl text-[10px] font-black uppercase tracking-wider border transition-all ${editingOrder.status === status
+                                                ? 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20 scale-105 z-10'
+                                                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
+                                                }`}
                                         >
                                             {statusLabels[status]}
                                         </button>

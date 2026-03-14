@@ -70,7 +70,7 @@ class OrderBase(BaseModel):
     amount: float
     driverId: Optional[str] = None
     paymentMethod: Optional[PaymentMethod] = None
-    paymentStatus: Optional[str] = 'pending'
+    paymentStatus: Optional[str] = 'unpaid'
     delivery_photos: Optional[List[str]] = []
     equipments: Optional[dict] = {}
     calendar_event_id: Optional[str] = None
@@ -87,8 +87,8 @@ class OrderBase(BaseModel):
         # Automation: Status based on Balance
         if self.balance <= 0:
             self.paymentStatus = 'paid'
-        elif self.paymentStatus == 'paid' and self.balance > 0:
-            # If manually set to paid but balance exists, keep as unpaid or whatever was there
+        else:
+            # If there's a balance, it's unpaid (unless specifically handled otherwise)
             self.paymentStatus = 'unpaid'
         
         return self
@@ -117,12 +117,12 @@ class OrderUpdate(BaseModel):
     @model_validator(mode='after')
     def validate_finance_update(self) -> 'OrderUpdate':
         # If both amount and payment are provided, we can re-calculate balance
-        # If only one is provided, we can't fully validate here without the original values
-        # However, we can set a flag or just let the router handle the partial logic
         if self.amount is not None and self.payment_received is not None:
             self.balance = round(self.amount - self.payment_received, 2)
             if self.balance <= 0:
                 self.paymentStatus = 'paid'
+            else:
+                self.paymentStatus = 'unpaid'
         return self
 
 
@@ -153,6 +153,27 @@ class User(BaseModel):
     vehicle_type: Optional[str] = None
     vehicle_status: Optional[str] = 'idle'
     employee_id: Optional[str] = None
+
+
+class CustomerBase(BaseModel):
+    name: str
+    phone: str
+    address: Optional[str] = None
+    remark: Optional[str] = None
+
+class CustomerCreate(CustomerBase):
+    pass
+
+class CustomerUpdate(BaseModel):
+    name: Optional[str] = None
+    phone: Optional[str] = None
+    address: Optional[str] = None
+    remark: Optional[str] = None
+
+class Customer(CustomerBase):
+    id: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
 
 # ── Super Admin 专用模型 ──

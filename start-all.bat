@@ -14,7 +14,7 @@ echo ==========================================
 
 :: 1. 启动后端 (Port 8000)
 echo [1/3] 正在启动后端服务 (FastAPI)...
-start "Backend (8000)" cmd /c "cd /d %BACKEND_DIR% && %PYTHON_EXE% -m uvicorn main:app --reload --port 8000"
+start "Backend (8000)" cmd /c "cd /d %BACKEND_DIR% && %PYTHON_EXE% -m uvicorn main:app --reload --port 8000 --host 0.0.0.0"
 
 :: 2. 启动主前端 (Port 3000)
 echo [2/3] 正在启动主前端服务 (Vite)...

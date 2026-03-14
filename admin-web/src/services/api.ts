@@ -1,6 +1,16 @@
 import axios from 'axios';
 import { supabase } from '../lib/supabase';
 import type { Order, OrderStatus, OrderCreate, User, StatsOverview, AuditLog, SystemConfig, Product, Vehicle, DriverAssignment } from '../types';
+
+export interface Customer {
+    id: string;
+    name: string;
+    phone: string;
+    address?: string;
+    remark?: string;
+    created_at?: string;
+    updated_at?: string;
+}
 // 使用完整的后端地址避免跨域问题，如果配置了 CORS 的话。
 // 使用相对路径以触发 Vite 代理，避免跨域和硬编码主机问题
 const API_URL = '/api';
@@ -214,5 +224,56 @@ export const VehicleService = {
     unassignDriver: async (driverId: string): Promise<{ message: string }> => {
         const response = await api.post(`/vehicles/unassign/${driverId}`);
         return response.data;
+    }
+};
+
+export const CustomerService = {
+    getAll: async (q?: string): Promise<Customer[]> => {
+        const response = await api.get('/customers', { params: { q } });
+        return response.data;
+    },
+    getById: async (id: string): Promise<Customer> => {
+        const response = await api.get(`/customers/${id}`);
+        return response.data;
+    },
+    create: async (customer: Omit<Customer, 'id'>): Promise<Customer> => {
+        const response = await api.post('/customers', customer);
+        return response.data;
+    },
+    update: async (id: string, customer: Partial<Customer>): Promise<Customer> => {
+        const response = await api.patch(`/customers/${id}`, customer);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/customers/${id}`);
+    },
+};
+
+export const FleetService = {
+    /**
+     * 获取车队实时状态 (Join 查询: 司机 + 活跃指派 + 车辆)
+     */
+    getFleetStatus: async () => {
+        const { data, error } = await supabase
+            .from('users')
+            .select(`
+                *,
+                assignments:driver_assignments(
+                    id,
+                    status,
+                    vehicle:vehicles(
+                        id,
+                        plate_no,
+                        model,
+                        type,
+                        status
+                    )
+                )
+            `)
+            .eq('role', 'driver')
+            .order('name');
+        
+        if (error) throw error;
+        return data;
     }
 };

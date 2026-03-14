@@ -11,8 +11,7 @@ import { WalkieTalkiePage } from './pages/WalkieTalkiePage';
 import { ConfigPage } from './pages/ConfigPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { CreateOrderPage } from './pages/CreateOrderPage';
-import { DriversPage } from './pages/DriversPage';
-import { VehiclesPage } from './pages/VehiclesPage';
+import { FleetCenterPage } from './pages/FleetCenterPage';
 import KitchenCalendarPage from './pages/KitchenCalendarPage';
 import KitchenPrepPage from './pages/KitchenPrepPage';
 import { FinancePage } from './pages/FinancePage';
@@ -72,8 +71,7 @@ const App: React.FC = () => {
           <Route index element={<DashboardPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="orders" element={<OrdersPage />} />
-          <Route path="vehicles" element={<VehiclesPage />} />
-          <Route path="drivers" element={<DriversPage />} />
+          <Route path="fleet" element={<FleetCenterPage />} />
           <Route path="create-order" element={<CreateOrderPage />} />
           <Route path="products" element={<ProductsPage />} />
           <Route path="walkie-talkie" element={<WalkieTalkiePage />} />

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { ProductService, AdminOrderService } from '../services/api';
+import { ProductService, AdminOrderService, CustomerService, type Customer } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { OrderStatus, PaymentMethod } from '../types';
 import type { Product, OrderCreate } from '../types';
@@ -65,10 +65,14 @@ export const CreateOrderPage: React.FC = () => {
     const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderSnapshot | null>(null);
     const orderRef = useRef(generateOrderRef());
 
-    // 新增状态
     const [equipments, setEquipments] = useState<Record<string, number>>(
         EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {})
     );
+
+    // 客户聯想狀態
+    const [customerSuggestions, setCustomerSuggestions] = useState<Customer[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
 
     // 加载产品
     useEffect(() => {
@@ -100,6 +104,36 @@ export const CreateOrderPage: React.FC = () => {
             .subscribe();
         return () => { supabase.removeChannel(channel); };
     }, []);
+
+    // 客户联想逻辑
+    useEffect(() => {
+        const timer = setTimeout(async () => {
+            if (customerName.trim().length >= 2 || customerPhone.trim().length >= 3) {
+                setIsSearchingCustomers(true);
+                try {
+                    const q = customerName.trim() || customerPhone.trim();
+                    const data = await CustomerService.getAll(q);
+                    setCustomerSuggestions(data);
+                    setShowSuggestions(data.length > 0);
+                } catch (err) {
+                    console.error('Failed to fetch customers', err);
+                } finally {
+                    setIsSearchingCustomers(false);
+                }
+            } else {
+                setCustomerSuggestions([]);
+                setShowSuggestions(false);
+            }
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [customerName, customerPhone]);
+
+    const selectCustomer = (c: Customer) => {
+        setCustomerName(c.name);
+        setCustomerPhone(c.phone);
+        if (c.address) setAddress(c.address);
+        setShowSuggestions(false);
+    };
 
     // 动态品类
     const categories = useMemo(() => {
@@ -773,7 +807,7 @@ export const CreateOrderPage: React.FC = () => {
                             </h3>
                         </div>
                         <div className="p-5 space-y-3">
-                            <div>
+                            <div className="relative">
                                 <label htmlFor="customer-name" className="block text-xs font-black text-slate-400 mb-1.5">客户姓名 *</label>
                                 <input
                                     id="customer-name"
@@ -781,10 +815,35 @@ export const CreateOrderPage: React.FC = () => {
                                     type="text"
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
                                     placeholder="e.g. 陈大明"
-                                    autoComplete="name"
+                                    autoComplete="off"
                                     value={customerName}
                                     onChange={e => setCustomerName(e.target.value)}
+                                    onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)}
                                 />
+                                
+                                {isSearchingCustomers && (
+                                    <div className="absolute right-3 top-9 translate-y-0.5">
+                                        <span className="material-icons-round text-indigo-500 animate-spin text-[16px]">autorenew</span>
+                                    </div>
+                                )}
+                                
+                                {showSuggestions && (
+                                    <div className="absolute z-50 left-0 right-0 mt-1 bg-white border border-slate-200 rounded-2xl shadow-xl max-h-48 overflow-y-auto no-scrollbar">
+                                        {customerSuggestions.map(c => (
+                                            <button
+                                                key={c.id}
+                                                onClick={() => selectCustomer(c)}
+                                                className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors border-b border-slate-50 last:border-0 flex items-center justify-between"
+                                            >
+                                                <div>
+                                                    <p className="text-xs font-black text-slate-800">{c.name}</p>
+                                                    <p className="text-[10px] text-slate-400 font-mono italic">{c.phone}</p>
+                                                </div>
+                                                <span className="material-icons-round text-indigo-500 text-sm">history</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
                             <div>
                                 <label htmlFor="customer-phone" className="block text-xs font-black text-slate-400 mb-1.5">联系电话 *</label>
@@ -794,9 +853,10 @@ export const CreateOrderPage: React.FC = () => {
                                     type="tel"
                                     className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-medium"
                                     placeholder="+60123456789"
-                                    autoComplete="tel"
+                                    autoComplete="off"
                                     value={customerPhone}
                                     onChange={e => setCustomerPhone(e.target.value)}
+                                    onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)}
                                 />
                             </div>
                             <div>

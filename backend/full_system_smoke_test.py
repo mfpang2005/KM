@@ -26,12 +26,12 @@ async def test_create_order(client: httpx.AsyncClient):
         "address": "123 Smoke Test St",
         "type": "delivery",
         "paymentMethod": "cash",
-        "eventDate": "2026-12-31",
-        "eventTime": "12:00",
-        "dueTime": "12:00",
-        "items": [],
-        "equipments": {"spoon": 5},
+        "dueTime": "2026-12-31T12:00:00Z",
+        "items": [
+            {"id": "test-prod-1", "name": "Test Item", "price": 100.0, "quantity": 1}
+        ],
         "amount": 100.0,
+        "payment_received": 20.0,
         "status": "pending"
     }
     

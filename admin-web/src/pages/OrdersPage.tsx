@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { api, SuperAdminService, ProductService } from '../services/api';
+import { api, SuperAdminService, ProductService, FleetService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { Order, Product } from '../types';
 import { OrderStatus } from '../types';
@@ -72,6 +72,10 @@ export const OrdersPage: React.FC = () => {
     const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
     const EQUIPMENTS_LIST = ['汤匙', '烤鸡网', '叉子', '垃圾袋', 'Food Tong', '盘子', '红烧桶', '高盖', '杯子', '篮子', '铁脚架', '装酱碗'];
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // Driver Assignment State
+    const [assigningDriverTo, setAssigningDriverTo] = useState<Order | null>(null);
+    const [fleetStatus, setFleetStatus] = useState<any[]>([]);
 
     const loadOrders = useCallback(async () => {
         try {
@@ -100,9 +104,19 @@ export const OrdersPage: React.FC = () => {
         }
     }, []);
 
+    const loadFleetStatus = useCallback(async () => {
+        try {
+            const data = await FleetService.getFleetStatus();
+            setFleetStatus(Array.isArray(data) ? data : []);
+        } catch (error) {
+            console.error('Failed to load fleet status', error);
+        }
+    }, []);
+
     useEffect(() => {
         loadOrders();
         fetchProducts();
+        loadFleetStatus();
 
         const channel = supabase
             .channel('orders-page-sync')
@@ -114,11 +128,18 @@ export const OrdersPage: React.FC = () => {
                 }
             )
             .subscribe();
+        
+        const fleetChannel = supabase
+            .channel('fleet-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'driver_assignments' }, () => loadFleetStatus())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users', filter: 'role=eq.driver' }, () => loadFleetStatus())
+            .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
+            supabase.removeChannel(fleetChannel);
         };
-    }, [loadOrders, fetchProducts]);
+    }, [loadOrders, fetchProducts, loadFleetStatus]);
 
     const handleEditClick = (order: Order) => {
         const prices: Record<string, number> = { ...customPrices };
@@ -209,6 +230,13 @@ export const OrdersPage: React.FC = () => {
                 equipments: newOrder.equipments,
                 driverId: newOrder.driverId || undefined
             };
+
+            // 状态强锁验证: Ready 或 Delivering 必须指派司机
+            if ((payload.status === OrderStatus.READY || payload.status === OrderStatus.DELIVERING) && !payload.driverId) {
+                alert('该状态下必须指派司机 / A driver must be assigned for READY or DELIVERING status.');
+                setIsSubmitting(false);
+                return;
+            }
 
             if (editingOrder) {
                 await api.put(`/super-admin/orders/${editingOrder.id}`, payload);
@@ -321,12 +349,33 @@ export const OrdersPage: React.FC = () => {
         }
     };
 
+    const handleAssignDriver = async (orderId: string, driverId: string) => {
+        try {
+            setIsSubmitting(true);
+            await api.put(`/super-admin/orders/${orderId}`, { driverId });
+            await loadOrders();
+            setAssigningDriverTo(null);
+        } catch (error) {
+            console.error('Failed to assign driver', error);
+            alert('指派失败 / Assignment failed.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
 
     /**
      * 直接在表格中更改订单状态（点击状态标签出现下拉菜单）
      */
     const handleInlineStatusChange = async (orderId: string, newStatus: string) => {
         try {
+            // 状态强锁验证: Ready 或 Delivering 必须有司机
+            const order = orders.find(o => o.id === orderId);
+            if ((newStatus === OrderStatus.READY || newStatus === OrderStatus.DELIVERING) && (!order?.driverId)) {
+                alert('请先指派司机再更改为该状态 / Please assign a driver before switching to this status.');
+                return;
+            }
+
             await api.post(`/orders/${encodeURIComponent(orderId)}/status?status=${newStatus}`);
             await loadOrders();
         } catch (error) {
@@ -518,6 +567,13 @@ export const OrdersPage: React.FC = () => {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 pr-8 text-right space-x-1.5 whitespace-nowrap">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); setAssigningDriverTo(order); }}
+                                                    title="Assign Driver"
+                                                    className="w-8 h-8 inline-flex items-center justify-center bg-amber-50 text-amber-600 rounded-lg hover:bg-amber-100 hover:scale-110 transition-all shadow-sm group"
+                                                >
+                                                    <span className="material-icons-round text-[16px]">delivery_dining</span>
+                                                </button>
                                                 {order.status === OrderStatus.PENDING && (
                                                     <button
                                                         onClick={(e) => { e.stopPropagation(); handleApprove(order.id); }}
@@ -1207,6 +1263,67 @@ export const OrdersPage: React.FC = () => {
                                     Print Customer Bill
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Driver Assignment Modal */}
+            {assigningDriverTo && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
+                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[80vh] border border-slate-100">
+                        <div className="p-8 border-b border-slate-100 flex items-center justify-between">
+                            <div>
+                                <h2 className="text-2xl font-black text-slate-800 tracking-tight text-center">指派司机 <span className="text-blue-600">Assign Driver</span></h2>
+                                <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-widest">Order: {assigningDriverTo.order_number || assigningDriverTo.id}</p>
+                            </div>
+                            <button onClick={() => setAssigningDriverTo(null)} className="w-10 h-10 rounded-2xl bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all">
+                                <span className="material-icons-round">close</span>
+                            </button>
+                        </div>
+                        
+                        <div className="flex-1 overflow-y-auto p-6 space-y-3 no-scrollbar">
+                            {fleetStatus
+                                .filter(d => d.assignments?.some((a: any) => a.status === 'active')) // 必须有活跃指派 (已绑定车辆)
+                                .map(driver => {
+                                    const activeAssignment = driver.assignments.find((a: any) => a.status === 'active');
+                                    const vehicle = activeAssignment?.vehicle;
+                                    
+                                    return (
+                                        <button
+                                            key={driver.id}
+                                            disabled={isSubmitting}
+                                            onClick={() => handleAssignDriver(assigningDriverTo.id, driver.id)}
+                                            className="w-full p-5 rounded-[2rem] border border-slate-100 bg-slate-50/50 hover:bg-white hover:border-blue-500/30 hover:shadow-xl hover:shadow-blue-500/5 transition-all flex items-center justify-between group"
+                                        >
+                                            <div className="flex items-center gap-4 text-left">
+                                                <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform">
+                                                    {driver.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover rounded-2xl" alt="" /> : <span className="material-icons-round text-2xl">person</span>}
+                                                </div>
+                                                <div>
+                                                    <p className="font-black text-slate-900">{driver.name}</p>
+                                                    <div className="flex items-center gap-2 mt-0.5">
+                                                        <span className="text-[10px] font-black font-mono text-blue-600 bg-blue-50 px-2 py-0.5 rounded-lg border border-blue-100">{vehicle?.plate_no}</span>
+                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{vehicle?.model}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center group-hover:bg-blue-600 group-hover:text-white transition-all">
+                                                <span className="material-icons-round text-[20px]">chevron_right</span>
+                                            </div>
+                                        </button>
+                                    );
+                                })}
+                            
+                            {fleetStatus.filter(d => d.assignments?.some((a: any) => a.status === 'active')).length === 0 && (
+                                <div className="py-12 text-center">
+                                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                                        <span className="material-icons-round text-3xl">no_accounts</span>
+                                    </div>
+                                    <p className="text-sm font-bold text-slate-500">None of the drivers are bound to a vehicle.</p>
+                                    <p className="text-xs text-slate-400 mt-1 uppercase tracking-widest">Please check Fleet Center first</p>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

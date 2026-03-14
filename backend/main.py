@@ -7,6 +7,7 @@ from routers import orders
 from routers import products
 from routers import users
 from routers import vehicles
+from routers import customers
 
 app = FastAPI(title="Kim Long Smart Catering System API")
 
@@ -43,6 +44,7 @@ app.include_router(users.router)
 app.include_router(admin_users.router)
 app.include_router(super_admin.router)
 app.include_router(vehicles.router)
+app.include_router(customers.router)
 
 
 @app.get("/")
