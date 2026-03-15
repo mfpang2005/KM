@@ -56,11 +56,20 @@ export const FinancePage: React.FC = () => {
     useEffect(() => {
         loadData();
 
-        const handleScroll = () => {
-            setIsCollapsed(window.scrollY > 100);
+        const findScrollContainer = () => {
+            let el = document.querySelector('main .overflow-y-auto');
+            if (!el) el = document.querySelector('.overflow-y-auto');
+            return el;
         };
 
-        window.addEventListener('scroll', handleScroll);
+        const scrollContainer = findScrollContainer();
+        if (!scrollContainer) return;
+
+        const handleScroll = () => {
+            setIsCollapsed(scrollContainer.scrollTop > 60);
+        };
+
+        scrollContainer.addEventListener('scroll', handleScroll);
 
         const channel = supabase
             .channel('finance-room')
@@ -70,7 +79,7 @@ export const FinancePage: React.FC = () => {
             .subscribe();
 
         return () => {
-            window.removeEventListener('scroll', handleScroll);
+            scrollContainer.removeEventListener('scroll', handleScroll);
             supabase.removeChannel(channel);
         };
     }, [range]);
@@ -127,34 +136,34 @@ export const FinancePage: React.FC = () => {
             </div>
 
             {/* 2. Metrics Bar (Sticky Mini-Dashboard Logic) */}
-            <div className={`sticky top-4 z-[70] transition-all duration-700 ease-[cubic-bezier(0.23,1,0.32,1)] ${isCollapsed ? 'translate-y-0' : 'translate-y-0'}`}>
+            <div className={`sticky top-16 z-20 transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${isCollapsed ? 'translate-y-[-56px]' : 'translate-y-0'}`}>
                 <div 
-                    className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-4 bg-slate-900/90 backdrop-blur-2xl p-3 rounded-[24px] shadow-2xl border border-white/10 scale-95' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-[2fr_2fr_2fr_1fr]'}`}
+                    className={`grid gap-6 transition-all duration-700 ${isCollapsed ? 'grid-cols-4 px-6 scale-[0.85] origin-top' : 'grid-cols-1 sm:grid-cols-2 md:grid-cols-[2fr_2fr_2fr_1fr]'}`}
                 >
                     
                     {/* 1. Revenue Card */}
-                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 h-auto' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-xs text-slate-700'}`}>
+                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
                                 {range} Revenue
                             </p>
-                            {!isCollapsed && <span className="material-icons-round text-emerald-500/20 text-2xl">analytics</span>}
+                            <span className="material-icons-round text-emerald-500/20 text-2xl">analytics</span>
                         </div>
                         <div className="flex items-baseline gap-1">
-                            <span className={`font-black text-emerald-500 font-mono-finance ${isCollapsed ? 'text-xs' : 'text-lg'}`}>RM</span>
-                            <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-3xl text-slate-800'}`}>
+                            <span className="font-black text-emerald-500 font-mono-finance text-lg">RM</span>
+                            <h2 className="font-black tracking-tighter font-mono-finance text-3xl text-slate-800">
                                 {(data?.periodRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h2>
                         </div>
                     </div>
 
                     {/* 2. Collection Data Card */}
-                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 overflow-hidden h-auto' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-xs text-slate-700'}`}>
+                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
                                 Collection Data
                             </p>
-                            {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-2xl">receipt_long</span>}
+                            <span className="material-icons-round text-indigo-500/20 text-2xl">receipt_long</span>
                         </div>
                         <div className="flex flex-col gap-1.5">
                             {data?.collections.slice(0, 3).map((item, idx) => (
@@ -170,30 +179,30 @@ export const FinancePage: React.FC = () => {
                     </div>
 
                     {/* 3. Unpaid Card (Neon Flow) */}
-                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 h-auto' : `px-5 h-36 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : `px-5 h-36 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-red-300' : 'text-xs text-slate-700'}`}>
+                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
                                 Unpaid Total
                             </p>
-                            {!isCollapsed && <span className={`material-icons-round text-2xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>}
+                            <span className={`material-icons-round text-2xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>
                         </div>
                         <div className="flex items-baseline gap-1">
-                            <span className={`font-black font-mono-finance ${isCollapsed ? 'text-xs text-red-400' : 'text-lg text-red-500'}`}>RM</span>
-                            <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-3xl text-slate-800'}`}>
+                            <span className="font-black font-mono-finance text-lg text-red-500">RM</span>
+                            <h2 className="font-black tracking-tighter font-mono-finance text-3xl text-slate-800">
                                 {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h2>
                         </div>
                     </div>
 
                     {/* 4. Orders Card */}
-                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-2 h-auto' : 'glass-card px-3 h-36 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl'}`}>
+                    <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : 'glass-card px-3 h-36 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl'}`}>
                         <div className="flex items-center justify-between mb-2">
-                            <p className={`font-black uppercase tracking-[0.2em] transition-all ${isCollapsed ? 'text-[8px] text-slate-400' : 'text-xs text-slate-700'}`}>
+                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
                                 {range} Orders
                             </p>
-                            {!isCollapsed && <span className="material-icons-round text-indigo-500/20 text-xl">shopping_bag</span>}
+                            <span className="material-icons-round text-indigo-500/20 text-xl">shopping_bag</span>
                         </div>
-                        <h2 className={`font-black tracking-tighter font-mono-finance ${isCollapsed ? 'text-lg text-white' : 'text-2xl text-slate-800'}`}>
+                        <h2 className="font-black tracking-tighter font-mono-finance text-2xl text-slate-800">
                             {data?.periodOrders || 0}
                         </h2>
                     </div>

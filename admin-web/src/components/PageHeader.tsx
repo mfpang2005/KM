@@ -19,29 +19,33 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
     const navigate = useNavigate();
 
     useEffect(() => {
-        const scrollContainer = document.querySelector('.overflow-y-auto');
+        // Find the main scrollable container (the one in AdminLayout)
+        const findScrollContainer = () => {
+            let el = document.querySelector('main .overflow-y-auto');
+            if (!el) el = document.querySelector('.overflow-y-auto'); // Fallback
+            return el;
+        };
+
+        const scrollContainer = findScrollContainer();
         if (!scrollContainer) return;
 
         const handleScroll = () => {
-            setIsCompact(scrollContainer.scrollTop > 80);
+            setIsCompact(scrollContainer.scrollTop > 60);
         };
 
         scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
         return () => scrollContainer.removeEventListener('scroll', handleScroll);
     }, []);
 
-    const handleStatClick = (type: 'revenue' | 'orders') => {
+    const handleStatClick = (type: 'revenue' | 'orders' | 'unpaid') => {
         switch (type) {
             case 'revenue':
-                // Navigate to Finance and scroll to reconciliation
                 navigate('/finance?filter=paid');
-                setTimeout(() => {
-                    const el = document.getElementById('payment-reconciliation');
-                    if (el) el.scrollIntoView({ behavior: 'smooth' });
-                }, 100);
+                break;
+            case 'unpaid':
+                navigate('/finance?filter=unpaid');
                 break;
             case 'orders':
-                // Navigate to Orders with today filter
                 navigate('/orders?date=today');
                 break;
         }
@@ -49,16 +53,16 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
 
     return (
         <header
-            className={`sticky top-0 z-30 transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] mb-8
+            className={`sticky top-[-1px] z-[80] transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] mb-8
                 ${isCompact
-                    ? 'py-3 px-6 bg-white/95 backdrop-blur-xl shadow-lg border-b border-slate-200/50 rounded-b-[24px] -mx-10'
+                    ? 'py-2 px-6 bg-slate-900/90 backdrop-blur-xl shadow-2xl border-b border-white/10 rounded-b-[24px] -mx-10 translate-y-2'
                     : 'py-2 px-0 bg-transparent'
                 }`}
         >
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-6">
                     <div className="transition-all duration-500">
-                        <h1 className={`font-black text-slate-800 tracking-tight transition-all duration-500 ${isCompact ? 'text-lg' : 'text-3xl'}`}>
+                        <h1 className={`font-black tracking-tight transition-all duration-500 ${isCompact ? 'text-sm text-white' : 'text-3xl text-slate-800'}`}>
                             {title}
                         </h1>
                         <div className={`overflow-hidden transition-all duration-500 ${isCompact ? 'max-h-0 opacity-0' : 'max-h-10 opacity-100 mt-1'}`}>
@@ -70,19 +74,23 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
                         </div>
                     </div>
 
-                    {/* Compact Stats Bar */}
+                    {/* Compact Stats Bar - Slimmer & Darker for Premium Feel */}
                     {showStats && (
                         <div className={`flex items-center gap-4 transition-all duration-500 ${isCompact ? 'opacity-100 translate-x-0' : 'opacity-0 -translate-x-4 pointer-events-none'}`}>
-                            <div className="h-6 w-px bg-slate-200" />
+                            <div className="h-4 w-px bg-white/20" />
 
                             <div className="flex items-center gap-6">
-                                <div className="flex flex-col cursor-pointer group" onClick={() => handleStatClick('revenue')}>
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Today Rev</span>
-                                    <span className="text-xs font-black text-emerald-600 font-mono">RM {stats.todayRevenue.toFixed(0)}</span>
+                                <div className="flex items-center gap-2 cursor-pointer group" onClick={() => handleStatClick('revenue')}>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-emerald-400 transition-colors">Today:</span>
+                                    <span className="text-xs font-black text-emerald-400 font-mono-finance">RM {stats.todayRevenue.toLocaleString()}</span>
                                 </div>
-                                <div className="flex flex-col cursor-pointer group" onClick={() => handleStatClick('orders')}>
-                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest group-hover:text-primary transition-colors">Orders</span>
-                                    <span className="text-xs font-black text-blue-600">{stats.todayOrdersCount}</span>
+                                <div className="flex items-center gap-2 cursor-pointer group" onClick={() => handleStatClick('unpaid')}>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-red-400 transition-colors">Unpaid:</span>
+                                    <span className="text-xs font-black text-red-500 font-mono-finance">RM {stats.totalUnpaidBalance.toLocaleString()}</span>
+                                </div>
+                                <div className="flex items-center gap-2 cursor-pointer group" onClick={() => handleStatClick('orders')}>
+                                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest group-hover:text-blue-400 transition-colors">Orders:</span>
+                                    <span className="text-xs font-black text-blue-400">{stats.todayOrdersCount}</span>
                                 </div>
                             </div>
                         </div>

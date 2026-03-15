@@ -5,6 +5,7 @@ import { SuperAdminService } from '../services/api';
 export interface GlobalStats {
     todayRevenue: number;
     todayOrdersCount: number;
+    totalUnpaidBalance: number;
 }
 
 /**
@@ -13,7 +14,8 @@ export interface GlobalStats {
 export const useGlobalStats = () => {
     const [stats, setStats] = useState<GlobalStats>({
         todayRevenue: 0,
-        todayOrdersCount: 0
+        todayOrdersCount: 0,
+        totalUnpaidBalance: 0
     });
     const [loading, setLoading] = useState(true);
 
@@ -24,7 +26,8 @@ export const useGlobalStats = () => {
 
             setStats({
                 todayRevenue: finance.todayRevenue || 0,
-                todayOrdersCount: finance.todayOrders || 0
+                todayOrdersCount: finance.todayOrders || 0,
+                totalUnpaidBalance: finance.totalUnpaidBalance || 0
             });
         } catch (error) {
             console.error('[useGlobalStats] Error fetching stats:', error);
