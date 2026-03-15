@@ -55,7 +55,7 @@ export interface OrderCreate {
     customerName: string;
     customerPhone: string;
     address: string;
-    items: { id: string; name: string; quantity: number; price?: number }[];
+    items: { id: string; name: string; quantity: number; price?: number; note?: string }[];
     status: OrderStatus;
     dueTime: string;
     amount: number;

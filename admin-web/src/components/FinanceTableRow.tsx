@@ -54,7 +54,7 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                 </div>
             </td>
             <td className="px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-bold text-slate-800">
-                {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                RM {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </td>
             <td className="px-4 py-3 align-middle">
                 <div className="flex items-center justify-center">
@@ -78,7 +78,7 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                 </div>
             </td>
             <td className={`px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-black ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                {balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                RM {balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </td>
             <td className="px-4 py-3 align-middle">
                 <select

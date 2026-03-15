@@ -16,6 +16,8 @@ interface LocalProduct {
 
 interface OrderItem extends LocalProduct {
     quantity: number;
+    note?: string;
+    originalPrice: number;
 }
 
 const EQUIPMENTS_LIST = ['汤匙', '烤鸡网', '叉子', '垃圾袋', 'Food Tong', '盘子', '红烧桶', '高盖', '杯子', '篮子', '铁脚架', '装酱碗'];
@@ -121,7 +123,7 @@ const OrderCreate: React.FC = () => {
             if (existing) {
                 return prev.map(item => item.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
             }
-            return [...prev, { ...product, quantity: 1 }];
+            return [...prev, { ...product, quantity: 1, originalPrice: product.price }];
         });
     };
 
@@ -145,10 +147,26 @@ const OrderCreate: React.FC = () => {
         }).filter(item => item.quantity > 0));
     };
 
+    const setManualQuantity = (id: string, value: string) => {
+        const val = parseInt(value) || 0;
+        setCart(prev => prev.map(item => {
+            if (item.id === id) {
+                return { ...item, quantity: val };
+            }
+            return item;
+        }).filter(item => item.quantity > 0));
+    };
+
     const updatePrice = (id: string, newPrice: string) => {
         const price = newPrice === '' ? 0 : parseFloat(newPrice);
         setCart(prev => prev.map(item => 
             item.id === id ? { ...item, price } : item
+        ));
+    };
+
+    const updateItemNote = (id: string, note: string) => {
+        setCart(prev => prev.map(item => 
+            item.id === id ? { ...item, note } : item
         ));
     };
 
@@ -181,7 +199,8 @@ const OrderCreate: React.FC = () => {
                     id: item.id,
                     name: item.name,
                     price: item.price,
-                    quantity: item.quantity
+                    quantity: item.quantity,
+                    note: item.note
                 })),
                 status: OrderStatus.PENDING,
                 dueTime: new Date(Date.now() + 60 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -536,26 +555,45 @@ const OrderCreate: React.FC = () => {
                                 {cart.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center py-20 text-slate-200"><span className="material-icons-round text-5xl mb-2">shopping_bag</span><p className="text-xs font-bold uppercase tracking-widest">购物车已空</p></div>
                                 ) : cart.map(item => (
-                                    <div key={item.id} className="group bg-slate-50/50 hover:bg-white hover:border-slate-100 border border-transparent p-4 rounded-3xl transition-all flex gap-4">
-                                        <img src={item.img} className="w-16 h-16 rounded-2xl object-cover shadow-sm" alt={item.name} />
-                                        <div className="flex-1 flex flex-col justify-between py-0.5">
-                                            <h4 className="text-xs font-bold text-slate-800 line-clamp-1">{item.name}</h4>
-                                            <div className="flex items-center justify-between gap-2 mt-1">
-                                                <div className="flex items-center bg-white border border-slate-100 rounded-lg px-2 py-1 shadow-sm focus-within:ring-1 focus-within:ring-primary/20 transition-all">
-                                                    <span className="text-[10px] font-black text-primary mr-1">RM</span>
+                                    <div key={item.id} className="group bg-slate-50/50 hover:bg-white hover:border-slate-100 border border-transparent p-2.5 rounded-2xl transition-all flex gap-3 relative">
+                                        <img src={item.img} className="w-12 h-12 rounded-xl object-cover shadow-sm shrink-0" alt={item.name} />
+                                        <div className="flex-1 flex flex-col justify-between min-w-0">
+                                            <div className="flex justify-between items-start gap-2">
+                                                <h4 className="text-[11px] font-bold text-slate-800 line-clamp-1 leading-tight">{item.name}</h4>
+                                                <div className="flex items-center gap-2 scale-[0.85] origin-right">
+                                                    <button onClick={() => updateQuantity(item.id, -1)} className="w-5 h-5 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 active:scale-90"><span className="material-icons-round text-[10px]">remove</span></button>
                                                     <input 
-                                                        type="number" 
-                                                        step="0.01"
-                                                        className="w-16 bg-transparent border-none text-[11px] font-black text-primary outline-none p-0"
-                                                        value={item.price || ''}
-                                                        onChange={(e) => updatePrice(item.id, e.target.value)}
+                                                        type="number"
+                                                        className="w-8 bg-transparent border-none text-xs font-black text-center outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                        value={item.quantity}
+                                                        onChange={(e) => setManualQuantity(item.id, e.target.value)}
                                                     />
+                                                    <button onClick={() => updateQuantity(item.id, 1)} className="w-5 h-5 rounded-full bg-slate-900 text-white flex items-center justify-center active:scale-90"><span className="material-icons-round text-[10px]">add</span></button>
                                                 </div>
-                                                <div className="flex items-center gap-3">
-                                                    <button onClick={() => updateQuantity(item.id, -1)} className="w-6 h-6 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 active:scale-90"><span className="material-icons-round text-xs">remove</span></button>
-                                                    <span className="text-[13px] font-black w-4 text-center">{item.quantity}</span>
-                                                    <button onClick={() => updateQuantity(item.id, 1)} className="w-6 h-6 rounded-full bg-slate-900 text-white flex items-center justify-center active:scale-90"><span className="material-icons-round text-xs">add</span></button>
+                                            </div>
+                                            
+                                            <div className="flex items-center justify-between gap-2 mt-1.5">
+                                                <div className="flex flex-col gap-0.5">
+                                                    <div className="flex items-center bg-white border border-slate-100 rounded-lg px-1.5 py-0.5 shadow-sm focus-within:ring-1 focus-within:ring-primary/20 transition-all w-fit">
+                                                        <span className="text-[9px] font-black text-primary mr-0.5">RM</span>
+                                                        <input 
+                                                            type="number" 
+                                                            step="0.01"
+                                                            className="w-14 bg-transparent border-none text-[10px] font-black text-primary outline-none p-0"
+                                                            value={item.price || ''}
+                                                            onChange={(e) => updatePrice(item.id, e.target.value)}
+                                                        />
+                                                    </div>
+                                                    <span className="text-[8px] font-bold text-slate-300 ml-1">Original: RM {item.originalPrice.toFixed(2)}</span>
                                                 </div>
+                                                
+                                                <input 
+                                                    type="text"
+                                                    placeholder="备注 (单项)"
+                                                    className="flex-1 h-6 bg-white/50 border border-slate-100 rounded-md px-2 text-[9px] font-medium outline-none focus:border-primary/20 transition-all"
+                                                    value={item.note || ''}
+                                                    onChange={(e) => updateItemNote(item.id, e.target.value)}
+                                                />
                                             </div>
                                         </div>
                                     </div>
@@ -588,26 +626,43 @@ const OrderCreate: React.FC = () => {
                         </div>
                         <div className="flex-1 overflow-y-auto no-scrollbar px-6 space-y-4">
                             {cart.map(item => (
-                                <div key={item.id} className="flex items-center gap-4 bg-slate-50 p-4 rounded-3xl">
-                                    <img src={item.img} className="w-14 h-14 rounded-2xl object-cover" />
-                                    <div className="flex-1">
-                                        <h4 className="text-xs font-bold text-slate-800">{item.name}</h4>
-                                        <div className="flex items-center bg-white border border-slate-100 rounded-lg px-2 py-1 shadow-sm mt-1 w-fit">
-                                            <span className="text-[10px] font-black text-primary mr-1">RM</span>
+                                <div key={item.id} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-2xl mx-6">
+                                    <div className="flex items-center gap-3">
+                                        <img src={item.img} className="w-10 h-10 rounded-xl object-cover shrink-0" />
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-[11px] font-bold text-slate-800 truncate">{item.name}</h4>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <div className="flex items-center bg-white border border-slate-100 rounded-lg px-1.5 py-0.5 shadow-sm w-fit">
+                                                    <span className="text-[9px] font-black text-primary mr-0.5">RM</span>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01"
+                                                        className="w-12 bg-transparent border-none text-[10px] font-black text-primary outline-none p-0"
+                                                        value={item.price || ''}
+                                                        onChange={(e) => updatePrice(item.id, e.target.value)}
+                                                    />
+                                                </div>
+                                                <span className="text-[8px] font-bold text-slate-300">Orig: RM {item.originalPrice.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-2.5 scale-90">
+                                            <button onClick={() => updateQuantity(item.id, -1)} className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm"><span className="material-icons-round text-xs">remove</span></button>
                                             <input 
-                                                type="number" 
-                                                step="0.01"
-                                                className="w-16 bg-transparent border-none text-[11px] font-black text-primary outline-none p-0"
-                                                value={item.price || ''}
-                                                onChange={(e) => updatePrice(item.id, e.target.value)}
+                                                type="number"
+                                                className="w-8 bg-transparent border-none text-xs font-black text-center outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                value={item.quantity}
+                                                onChange={(e) => setManualQuantity(item.id, e.target.value)}
                                             />
+                                            <button onClick={() => updateQuantity(item.id, 1)} className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center shadow-sm"><span className="material-icons-round text-xs">add</span></button>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-4">
-                                        <button onClick={() => updateQuantity(item.id, -1)} className="w-8 h-8 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm"><span className="material-icons-round text-sm">remove</span></button>
-                                        <span className="text-sm font-black w-4 text-center">{item.quantity}</span>
-                                        <button onClick={() => updateQuantity(item.id, 1)} className="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center shadow-sm"><span className="material-icons-round text-sm">add</span></button>
-                                    </div>
+                                    <input 
+                                        type="text"
+                                        placeholder="项备注..."
+                                        className="w-full h-6 bg-white/50 border border-slate-100 rounded-md px-2 text-[9px] font-medium outline-none"
+                                        value={item.note || ''}
+                                        onChange={(e) => updateItemNote(item.id, e.target.value)}
+                                    />
                                 </div>
                             ))}
                         </div>
