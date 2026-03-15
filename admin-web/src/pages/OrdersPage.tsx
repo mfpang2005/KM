@@ -239,7 +239,7 @@ export const OrdersPage: React.FC = () => {
             }
 
             if (editingOrder) {
-                await api.put(`/super-admin/orders/${editingOrder.id}`, payload);
+                await api.put(`/orders/${editingOrder.id}`, payload);
             } else {
                 await SuperAdminService.create(payload as any);
             }
@@ -316,7 +316,7 @@ export const OrdersPage: React.FC = () => {
 
     const handleApprove = async (orderId: string) => {
         try {
-            await api.patch(`/super-admin/orders/${orderId}/approve`);
+            await api.patch(`/orders/${orderId}/approve`);
             await loadOrders();
         } catch (error) {
             console.error('Failed to approve order', error);
@@ -352,7 +352,7 @@ export const OrdersPage: React.FC = () => {
     const handleAssignDriver = async (orderId: string, driverId: string) => {
         try {
             setIsSubmitting(true);
-            await api.put(`/super-admin/orders/${orderId}`, { driverId });
+            await api.put(`/orders/${orderId}`, { driverId });
             await loadOrders();
             setAssigningDriverTo(null);
         } catch (error) {

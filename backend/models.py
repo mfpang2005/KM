@@ -78,6 +78,9 @@ class OrderBase(BaseModel):
     balance: Optional[float] = 0.0
     remark: Optional[str] = None
     order_number: Optional[str] = None
+    eventDate: Optional[str] = None
+    eventTime: Optional[str] = None
+    mapsLink: Optional[str] = None
 
     @model_validator(mode='after')
     def validate_finance_logic(self) -> 'OrderBase':
@@ -113,6 +116,9 @@ class OrderUpdate(BaseModel):
     balance: Optional[float] = None
     remark: Optional[str] = None
     order_number: Optional[str] = None
+    eventDate: Optional[str] = None
+    eventTime: Optional[str] = None
+    mapsLink: Optional[str] = None
 
     @model_validator(mode='after')
     def validate_finance_update(self) -> 'OrderUpdate':

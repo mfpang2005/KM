@@ -49,6 +49,9 @@ const OrderCreate: React.FC = () => {
     const [customerPhone, setCustomerPhone] = useState('');
     const [address, setAddress] = useState('');
     const [mapsLink, setMapsLink] = useState('');
+    const [remarks, setRemarks] = useState('');
+    const [eventDate, setEventDate] = useState('');
+    const [eventTime, setEventTime] = useState('');
 
     // Customer suggestions
     const [customerSuggestions, setCustomerSuggestions] = useState<Customer[]>([]);
@@ -186,7 +189,11 @@ const OrderCreate: React.FC = () => {
                 type: address ? 'delivery' : 'takeaway',
                 paymentMethod: PaymentMethod.CASH,
                 driverId: selectedDriver || undefined,
-                equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined
+                equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
+                eventDate,
+                eventTime,
+                mapsLink,
+                remarks
             };
 
             await OrderService.create(orderData);
@@ -226,16 +233,37 @@ const OrderCreate: React.FC = () => {
                             </div>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-6 border-t border-slate-50">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 pt-6 border-t border-slate-50">
                             <div>
-                                <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">客户信息</h4>
+                                <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">客户姓名</h4>
                                 <p className="text-sm font-black text-slate-900">{customerName}</p>
-                                <p className="text-xs font-bold text-slate-500">{customerPhone}</p>
+                            </div>
+                            <div>
+                                <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">联络电话</h4>
+                                <p className="text-sm font-black text-slate-900 font-mono tracking-tight">{customerPhone}</p>
+                            </div>
+                            <div>
+                                <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">活动时间</h4>
+                                <p className="text-sm font-black text-slate-900">
+                                    {eventDate} {eventTime}
+                                </p>
                             </div>
                             <div>
                                 <h4 className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">配送地址</h4>
-                                <p className="text-xs font-medium text-slate-700 leading-relaxed">{address || '到店自取'}</p>
+                                <p className="text-xs font-bold text-slate-700 leading-relaxed">{address || '到店自取'}</p>
+                                {mapsLink && (
+                                    <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-[10px] font-black text-red-500 hover:text-red-600 transition-colors mt-1.5 uppercase tracking-widest bg-red-50 px-2 py-0.5 rounded">
+                                        <span className="material-icons-round text-xs">place</span>
+                                        Google Maps
+                                    </a>
+                                )}
                             </div>
+                            {remarks && (
+                                <div className="md:col-span-2 bg-amber-50/50 p-4 rounded-2xl border border-amber-100/50">
+                                    <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">整单备注</h4>
+                                    <p className="text-xs font-bold text-amber-900 leading-relaxed">{remarks}</p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="pt-6 border-t border-slate-50">
@@ -307,55 +335,85 @@ const OrderCreate: React.FC = () => {
                                 </span>
                                 <h2 className="text-sm font-black uppercase tracking-widest text-slate-800">客户资料</h2>
                             </div>
-                            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2 relative">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2">姓名</label>
-                                    <div className="relative">
-                                        <input
-                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
-                                            placeholder="请输入客户姓名"
-                                            autoComplete="off"
-                                            value={customerName}
-                                            onChange={e => setCustomerName(e.target.value)}
-                                            onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)}
-                                        />
-                                        {isSearchingCustomers && (
-                                            <div className="absolute right-4 top-1/2 -translate-y-1/2">
-                                                <span className="material-icons-round text-primary animate-spin text-sm">autorenew</span>
+                            <div className="bg-white rounded-3xl p-8 shadow-[0_8px_30px_rgb(0,0,0,0.02)] border border-slate-100 flex flex-col gap-8">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2 relative">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">姓名</label>
+                                        <div className="relative">
+                                            <input
+                                                className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
+                                                placeholder="请输入客户姓名"
+                                                autoComplete="off"
+                                                value={customerName}
+                                                onChange={e => setCustomerName(e.target.value)}
+                                                onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)}
+                                            />
+                                            {isSearchingCustomers && (
+                                                <div className="absolute right-4 top-1/2 -translate-y-1/2">
+                                                    <span className="material-icons-round text-primary animate-spin text-sm">autorenew</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        
+                                        {showSuggestions && (
+                                            <div className="absolute z-[100] left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-60 overflow-y-auto no-scrollbar py-2">
+                                                {customerSuggestions.map(c => (
+                                                    <button
+                                                        key={c.id}
+                                                        onClick={() => selectCustomer(c)}
+                                                        className="w-full text-left px-6 py-4 hover:bg-slate-50 transition-colors flex items-center justify-between group"
+                                                    >
+                                                        <div>
+                                                            <p className="text-sm font-black text-slate-800">{c.name}</p>
+                                                            <p className="text-[10px] text-slate-400 font-bold mt-0.5">{c.phone}</p>
+                                                        </div>
+                                                        <span className="material-icons-round text-primary/20 group-hover:text-primary transition-colors text-lg">history</span>
+                                                    </button>
+                                                ))}
                                             </div>
                                         )}
                                     </div>
-                                    
-                                    {showSuggestions && (
-                                        <div className="absolute z-[100] left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-60 overflow-y-auto no-scrollbar py-2">
-                                            {customerSuggestions.map(c => (
-                                                <button
-                                                    key={c.id}
-                                                    onClick={() => selectCustomer(c)}
-                                                    className="w-full text-left px-6 py-4 hover:bg-slate-50 transition-colors flex items-center justify-between group"
-                                                >
-                                                    <div>
-                                                        <p className="text-sm font-black text-slate-800">{c.name}</p>
-                                                        <p className="text-[10px] text-slate-400 font-bold mt-0.5">{c.phone}</p>
-                                                    </div>
-                                                    <span className="material-icons-round text-primary/20 group-hover:text-primary transition-colors text-lg">history</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2">联络电话</label>
+                                        <input
+                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
+                                            placeholder="+60 12-345 6789"
+                                            autoComplete="off"
+                                            value={customerPhone}
+                                            onChange={e => setCustomerPhone(e.target.value)}
+                                            onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)}
+                                        />
+                                    </div>
                                 </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1">
+                                            <span className="material-icons-round text-[14px] text-violet-500">event</span>
+                                            活动日期
+                                        </label>
+                                        <input
+                                            type="date"
+                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
+                                            value={eventDate}
+                                            onChange={e => setEventDate(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1">
+                                            <span className="material-icons-round text-[14px] text-violet-500">schedule</span>
+                                            活动时间
+                                        </label>
+                                        <input
+                                            type="time"
+                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
+                                            value={eventTime}
+                                            onChange={e => setEventTime(e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-2">联络电话</label>
-                                    <input
-                                        className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
-                                        placeholder="+60 12-345 6789"
-                                        autoComplete="off"
-                                        value={customerPhone}
-                                        onChange={e => setCustomerPhone(e.target.value)}
-                                        onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)}
-                                    />
-                                </div>
-                                <div className="md:col-span-2 space-y-2">
                                     <label className="text-[10px] font-black text-slate-400 uppercase ml-2">详细地址</label>
                                     <textarea
                                         className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none min-h-[100px] resize-none"
@@ -363,6 +421,33 @@ const OrderCreate: React.FC = () => {
                                         value={address}
                                         onChange={e => setAddress(e.target.value)}
                                     />
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1">
+                                            <span className="material-icons-round text-[14px] text-red-500">place</span>
+                                            Google Maps 链接
+                                        </label>
+                                        <input
+                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
+                                            placeholder="https://maps.app.goo.gl/..."
+                                            value={mapsLink}
+                                            onChange={e => setMapsLink(e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-2 flex items-center gap-1">
+                                            <span className="material-icons-round text-[14px] text-amber-500">notes</span>
+                                            整单备注
+                                        </label>
+                                        <input
+                                            className="w-full px-6 py-4 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-2xl text-sm font-bold transition-all outline-none"
+                                            placeholder="少辣、不要葱等具体要求..."
+                                            value={remarks}
+                                            onChange={e => setRemarks(e.target.value)}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </section>

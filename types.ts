@@ -46,6 +46,9 @@ export interface Order {
     paymentStatus?: 'paid' | 'pending' | 'unpaid';
     delivery_photos?: string[];
     remark?: string;
+    eventDate?: string;
+    eventTime?: string;
+    mapsLink?: string;
 }
 
 export interface OrderCreate {
@@ -60,6 +63,10 @@ export interface OrderCreate {
     paymentMethod?: PaymentMethod;
     driverId?: string;
     equipments?: Record<string, number>;
+    eventDate?: string;
+    eventTime?: string;
+    mapsLink?: string;
+    remarks?: string;
 }
 
 export interface Transaction {

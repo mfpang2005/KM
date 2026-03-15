@@ -145,30 +145,34 @@ async def create_order(order: OrderCreate):
     # Ensure status is set to pending if missing
     if 'status' not in order_data or not order_data['status']:
         order_data['status'] = 'pending'
-    # Generate custom order ID: KM-YY/MM/DD/000
+    # Generate custom order ID: KM-YY/MM/DD/xxx
     if 'id' not in order_data or not order_data['id']:
         from datetime import datetime
         today_str = datetime.now().strftime("%y/%m/%d")
         prefix = f"KM-{today_str}/"
+        
+        # Query existing orders with the same day prefix to determine the next sequence number
         res = supabase.table("orders").select("id").ilike("id", f"{prefix}%").execute()
+        
         max_num = 0
         if res.data:
             for row in res.data:
                 try:
-                    num = int(row['id'].split('/')[-1])
-                    if num > max_num:
-                        max_num = num
-                except:
+                    # Extract the last part of the ID (the sequence number)
+                    parts = row['id'].split('/')
+                    if parts:
+                        num = int(parts[-1])
+                        if num > max_num:
+                            max_num = num
+                except (ValueError, IndexError):
                     pass
+        
         new_num = max_num + 1
-        new_id = f"{prefix}{new_num:03d}"
-        order_data['id'] = new_id
-        if 'order_number' not in order_data or not order_data['order_number']:
-            order_data['order_number'] = f"{today_str[6:]}/{new_num:03d}" if "/" in today_str else f"{new_num:03d}"
-            # Let's simplify and just use the suffix if logic gets complex, 
-            # but user likes 11/003 (DD/NNN).
-            from datetime import datetime
-            order_data['order_number'] = f"{datetime.now().strftime('%d')}/{new_num:03d}"
+        generated_id = f"{prefix}{new_num:03d}"
+        
+        # Set both id and order_number to the standard format
+        order_data['id'] = generated_id
+        order_data['order_number'] = generated_id
 
     # Sync to calendar BEFORE inserting into DB to get the event ID (if calendar is configured)
     calendar_event_id = sync_order_to_calendar(order_data)

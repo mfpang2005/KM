@@ -2,6 +2,8 @@ from fastapi import APIRouter, HTTPException
 from typing import List
 from database import supabase
 from models import Vehicle, VehicleCreate, VehicleUpdate, DriverAssignment, DriverAssignmentBase, VehicleStatus
+from middleware.auth import require_admin
+from fastapi import Depends
 import datetime
 
 router = APIRouter(
@@ -157,3 +159,40 @@ async def unassign_vehicle(driver_id: str):
     }).eq("id", driver_id).execute()
     
     return {"message": "Vehicle unassigned successfully"}
+
+@router.get("/status")
+async def get_fleet_status(
+    current_user: dict = Depends(require_admin),
+):
+    """
+    获取车队完整状态 (绕过 RLS)
+    聚合司机、活跃指派与车辆信息
+    """
+    from fastapi.concurrency import run_in_threadpool
+    
+    # 1. 获取所有司机 (role='driver')
+    drivers_resp = await run_in_threadpool(
+        supabase.table("users")
+        .select("*")
+        .eq("role", "driver")
+        .order("name")
+        .execute
+    )
+    drivers = drivers_resp.data or []
+    
+    # 2. 获取所有活跃的司机指派信息，并关联车辆
+    assignments_resp = await run_in_threadpool(
+        supabase.table("driver_assignments")
+        .select("*, vehicle:vehicles(*)")
+        .eq("status", "active")
+        .execute
+    )
+    assignments = assignments_resp.data or []
+    
+    # 3. 将指派数据聚合到司机对象中
+    for driver in drivers:
+        driver_id = driver.get("id")
+        # 匹配该司机的活跃指派
+        driver["assignments"] = [a for a in assignments if a.get("driver_id") == driver_id]
+        
+    return drivers

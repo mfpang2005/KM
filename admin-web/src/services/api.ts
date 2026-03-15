@@ -254,26 +254,7 @@ export const FleetService = {
      * 获取车队实时状态 (Join 查询: 司机 + 活跃指派 + 车辆)
      */
     getFleetStatus: async () => {
-        const { data, error } = await supabase
-            .from('users')
-            .select(`
-                *,
-                assignments:driver_assignments(
-                    id,
-                    status,
-                    vehicle:vehicles(
-                        id,
-                        plate_no,
-                        model,
-                        type,
-                        status
-                    )
-                )
-            `)
-            .eq('role', 'driver')
-            .order('name');
-        
-        if (error) throw error;
-        return data;
+        const response = await api.get('/vehicles/status');
+        return response.data;
     }
 };

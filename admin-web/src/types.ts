@@ -52,6 +52,9 @@ export interface Order {
     equipments?: Record<string, number>;
     remark?: string;
     order_number?: string;
+    eventDate?: string;
+    eventTime?: string;
+    mapsLink?: string;
     payment_received?: number;
     balance?: number;
 }
@@ -78,6 +81,10 @@ export interface OrderCreate {
     payment_received?: number;
     balance?: number;
     order_number?: string;
+    eventDate?: string;
+    eventTime?: string;
+    mapsLink?: string;
+    remarks?: string;
 }
 
 export interface User {

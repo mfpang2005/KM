@@ -33,12 +33,14 @@ interface ConfirmedOrderSnapshot {
     status: OrderStatus;
 }
 
-/** 格式化订单号：ORD-YYYYMMDD-三位序号 */
+/** 格式化订单号预览：KM-YY/MM/DD/XXX */
 const generateOrderRef = (): string => {
     const now = new Date();
-    const date = now.toISOString().slice(0, 10).replace(/-/g, '');
-    const seq = String(Math.floor(100 + Math.random() * 900)); // 100-999
-    return `ORD-${date}-${seq}`;
+    const yy = String(now.getFullYear()).slice(-2);
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(now.getDate()).padStart(2, '0');
+    // 注意：前端仅为展示参考，后端会根据当日序号精准分配 XXX
+    return `KM-${yy}/${mm}/${dd}/XXX`;
 };
 
 const EQUIPMENT_LIST = [
@@ -244,6 +246,10 @@ export const CreateOrderPage: React.FC = () => {
                 order_number: undefined, // Let backend generate initial DD/NNN
                 driverId: undefined, // 強制不指派司机
                 equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
+                eventDate: eventDate.trim(),
+                eventTime: eventTime.trim(),
+                mapsLink: mapsLink.trim(),
+                remarks: remarks.trim(),
             };
 
             const order = await AdminOrderService.create(payload);
