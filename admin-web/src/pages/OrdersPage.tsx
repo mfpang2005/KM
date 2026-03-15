@@ -306,6 +306,19 @@ export const OrdersPage: React.FC = () => {
         });
     };
 
+    const setItemQuantity = (productId: string, value: string) => {
+        const val = parseInt(value) || 0;
+        setNewOrder({
+            ...newOrder,
+            items: newOrder.items.map(item => {
+                if (item.product.id === productId) {
+                    return { ...item, quantity: val };
+                }
+                return item;
+            })
+        });
+    };
+
     const handleEquipQuantityChange = (name: string, val: string) => {
         const num = parseInt(val) || 0;
         setNewOrder(prev => ({
@@ -869,7 +882,12 @@ export const OrdersPage: React.FC = () => {
                                                             <button onClick={() => updateItemQuantity(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors">
                                                                 <span className="material-icons-round text-[16px]">remove</span>
                                                             </button>
-                                                            <span className="font-bold w-4 text-center">{item.quantity}</span>
+                                                            <input 
+                                                                type="number"
+                                                                className="w-8 bg-transparent border-none text-xs font-bold text-center outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                                                value={item.quantity}
+                                                                onChange={(e) => setItemQuantity(item.product.id, e.target.value)}
+                                                            />
                                                             <button onClick={() => updateItemQuantity(item.product.id, 1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-500 transition-colors">
                                                                 <span className="material-icons-round text-[16px]">add</span>
                                                             </button>
