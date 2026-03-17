@@ -714,8 +714,8 @@ export const OrdersPage: React.FC = () => {
 
             {/* Create Order Modal */}
             {showCreateModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden relative border border-slate-100 mt-4 sm:mt-0">
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in transition-all duration-300">
+                    <div className="bg-white rounded-[2rem] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.5)] w-[96%] max-w-5xl h-[88vh] flex flex-col overflow-hidden relative border border-white/20 shadow-indigo-500/10 my-4">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white z-10">
                             <div>
                                 <h2 className="text-xl font-black text-slate-800 tracking-tight">{editingOrder ? 'Edit Order' : 'Create New Order'}</h2>
@@ -790,8 +790,11 @@ export const OrdersPage: React.FC = () => {
 
                             {/* Right: Order Details Form */}
                             <div className="w-full md:w-96 flex flex-col bg-white shrink-0">
-                                <div className="p-6 flex-1 overflow-y-auto space-y-5">
-                                    <h3 className="font-bold text-slate-700">Order Details</h3>
+                                <div className="p-6 flex-1 overflow-y-auto min-h-0 space-y-5 pb-32 custom-scrollbar scroll-smooth">
+                                    <h3 className="font-black text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider">
+                                        <span className="material-icons-round text-indigo-500 text-lg">assignment</span>
+                                        Order Details
+                                    </h3>
 
                                     <div className="space-y-3">
                                         <div className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl text-xs text-slate-400 font-bold">
@@ -933,12 +936,12 @@ export const OrdersPage: React.FC = () => {
                                     </div>
 
                                 </div>
-
-                                {/* Footer summary & submit */}
-                                <div className="p-6 bg-slate-50 border-t border-slate-100 shrink-0 relative z-10">
+                                
+                                {/* 悬浮底部统计与提交 - 增加玻璃拟态效果以强调层级 */}
+                                <div className="p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 shrink-0 relative z-20 shadow-[0_-8px_32px_rgba(0,0,0,0.05)]">
                                     <div className="flex items-center justify-between mb-4">
-                                        <span className="font-bold text-slate-500">Total Amount</span>
-                                        <span className="text-2xl font-black text-red-600">
+                                        <span className="font-bold text-slate-400 text-xs uppercase tracking-widest">Total Amount</span>
+                                        <span className="text-3xl font-black text-red-600 transition-all font-mono">
                                             <span className="text-sm mr-1">RM</span>
                                             {newOrder.items.reduce((s, i) => s + ((i.priceOverride ?? i.product.price) || 0) * i.quantity, 0).toFixed(2)}
                                         </span>
@@ -946,12 +949,12 @@ export const OrdersPage: React.FC = () => {
                                     <button
                                         onClick={handleCreateOrder}
                                         disabled={isSubmitting || newOrder.items.length === 0}
-                                        className="w-full py-3.5 bg-red-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-red-500/20 hover:bg-red-700 transition-colors disabled:opacity-50 disabled:shadow-none flex items-center justify-center gap-2"
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-sm shadow-xl shadow-red-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale disabled:shadow-none flex items-center justify-center gap-2 group"
                                     >
                                         {isSubmitting ? (
                                             <span className="material-icons-round animate-spin">autorenew</span>
                                         ) : (
-                                            <span className="material-icons-round">check_circle</span>
+                                            <span className="material-icons-round group-hover:rotate-12 transition-transform">check_circle</span>
                                         )}
                                         {isSubmitting ? 'Processing...' : (editingOrder ? 'Update Order' : 'Place Order')}
                                     </button>

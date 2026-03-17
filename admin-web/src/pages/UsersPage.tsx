@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { SuperAdminService } from '../services/api';
 import { UserRole } from '../types';
 import type { User } from '../types';
+import { supabase } from '../lib/supabase';
 
 export const UsersPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -32,6 +33,7 @@ export const UsersPage: React.FC = () => {
     const [confirmDeleteInfo, setConfirmDeleteInfo] = useState<{ id: string; email: string } | null>(null);
     const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [rtStatus, setRtStatus] = useState<string>('CONNECTING');
 
     const loadUsers = useCallback(async () => {
         setLoading(true);
@@ -50,6 +52,11 @@ export const UsersPage: React.FC = () => {
 
     useEffect(() => {
         loadUsers();
+        const channel = supabase
+            .channel('users-realtime')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadUsers())
+            .subscribe((status) => setRtStatus(status));
+        return () => { supabase.removeChannel(channel); };
     }, [loadUsers]);
 
     const handleSaveRole = async (userId: string) => {
@@ -138,47 +145,69 @@ export const UsersPage: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h1 className="text-xl font-bold text-slate-800">User Management</h1>
-                    <p className="text-slate-500 text-sm mt-1">Manage all internal roles and remote drivers</p>
-                </div>
+        <div className="min-h-screen bg-[#FDFDFF] pb-20">
+            {/* Modern Header Section */}
+            <div className="relative mb-12">
+                <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-rose-50/50 to-transparent -z-10"></div>
+                
+                <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 px-2">
+                    <div className="space-y-4">
+                        <div className="flex items-center gap-3">
+                            <span className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-600 shadow-inner">
+                                <span className="material-icons-round text-[28px]">manage_accounts</span>
+                            </span>
+                            <div className="flex flex-col">
+                                <span className="px-3 py-1 bg-white border border-slate-100 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] shadow-sm w-fit">
+                                    Identity Management
+                                </span>
+                                <div className={`mt-1.5 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider backdrop-blur-sm border ${
+                                    rtStatus === 'SUBSCRIBED' ? 'bg-emerald-50/80 text-emerald-600 border-emerald-100' : 'bg-red-50/80 text-red-600 border-red-100'
+                                } w-fit`}>
+                                    <span className={`w-1 h-1 rounded-full ${
+                                        rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                                    }`}></span>
+                                    {rtStatus === 'SUBSCRIBED' ? 'Live' : rtStatus}
+                                </div>
+                            </div>
+                        </div>
+                        <h1 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight leading-none">
+                            用户管理 <span className="text-red-600 font-serif italic text-3xl">.</span>
+                        </h1>
+                        <p className="text-slate-400 font-bold text-sm max-w-md">
+                            轻松管理系统职员与车队司机，实时把控平台访问权限。
+                        </p>
+                    </div>
 
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => {
-                            setSearchQuery('');
-                            // Clear URL params
-                            window.history.replaceState({}, '', window.location.pathname);
-                        }}
-                        className="px-4 py-2 bg-slate-100 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all flex items-center gap-2"
-                        title="Reset search"
-                    >
-                        <span className="material-icons-round text-[18px]">restart_alt</span>
-                        <span className="hidden md:inline">重置</span>
-                    </button>
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="px-4 py-2 bg-gradient-to-r from-red-600 to-rose-600 text-white rounded-xl font-bold text-sm hover:shadow-[0_8px_20px_rgba(220,38,38,0.3)] hover:-translate-y-0.5 transition-all flex items-center gap-2"
-                    >
-                        <span className="material-icons-round text-[18px]">person_add</span>
-                        Create Staff Account
-                    </button>
-                    <div className="relative w-64">
-                        <span className="material-icons-round absolute left-3 top-2.5 text-slate-400">search</span>
-                        <label htmlFor="user-search" className="sr-only">Search users</label>
-                        <input
-                            id="user-search"
-                            name="user-search"
-                            type="text"
-                            placeholder="Search email, name or ID..."
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 transition-all"
-                        />
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setShowAddModal(true)}
+                            className="group flex items-center gap-3 px-8 py-4 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-2xl shadow-slate-900/20 active:scale-95"
+                        >
+                            <span className="material-icons-round text-[18px] group-hover:rotate-12 transition-transform">person_add</span>
+                            Create Staff
+                        </button>
                     </div>
                 </div>
+            </div>
+
+            {/* Optimized Glass Search Bar */}
+            <div className="sticky top-6 z-30 bg-white/70 backdrop-blur-2xl p-4 rounded-3xl border border-white/50 shadow-2xl shadow-slate-200/30 mb-8 flex flex-col md:flex-row gap-4 items-center">
+                <div className="relative flex-1 w-full group">
+                    <span className="absolute left-5 top-1/2 -translate-y-1/2 material-icons-round text-slate-300 text-[20px] group-focus-within:text-red-500 transition-colors">search</span>
+                    <input
+                        type="text"
+                        placeholder="搜索姓名、邮箱或工号..."
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="w-full pl-14 pr-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-[20px] text-sm focus:bg-white focus:border-red-500/10 focus:ring-4 focus:ring-red-500/5 transition-all font-bold"
+                    />
+                </div>
+                <button
+                    onClick={() => { setSearchQuery(''); window.history.replaceState({}, '', window.location.pathname); }}
+                    className="h-14 px-6 bg-white border-2 border-slate-50 flex items-center justify-center rounded-[20px] text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-red-500 hover:border-red-500/20 transition-all shadow-lg"
+                >
+                    Reset
+                </button>
             </div>
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm">

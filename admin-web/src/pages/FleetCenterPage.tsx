@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
-import { FleetService, VehicleService, SuperAdminService, api } from '../services/api';
+import { FleetService, VehicleService, api } from '../services/api';
 import type { User, Vehicle, DriverAssignment, Order } from '../types';
-import { OrderStatus, UserRole } from '../types';
+import { OrderStatus } from '../types';
 
 interface FleetDriver extends User {
     activeAssignment?: DriverAssignment & { vehicle: Vehicle };
@@ -19,15 +19,14 @@ export const FleetCenterPage: React.FC = () => {
     const [assigningVehicleTo, setAssigningVehicleTo] = useState<FleetDriver | null>(null);
     const [isAssigning, setIsAssigning] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [rtStatus, setRtStatus] = useState<string>('CONNECTING');
 
     // Add Driver/Vehicle states
-    const [showAddDriver, setShowAddDriver] = useState(false);
     const [showAddVehicle, setShowAddVehicle] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [selectedOrderForAssignment, setSelectedOrderForAssignment] = useState<Order | null>(null);
     const [isAssigningOrder, setIsAssigningOrder] = useState(false);
     const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
-    const [newDriver, setNewDriver] = useState({ email: '', name: '', phone: '', password: '', employee_id: '' });
     const [newVehicle, setNewVehicle] = useState<Partial<Vehicle>>({ 
         plate_no: '', 
         model: '', 
@@ -82,7 +81,7 @@ export const FleetCenterPage: React.FC = () => {
     useEffect(() => {
         loadData();
         const channels = [
-            supabase.channel('fleet-assignments').on('postgres_changes', { event: '*', schema: 'public', table: 'driver_assignments' }, () => loadData()).subscribe(),
+            supabase.channel('fleet-assignments').on('postgres_changes', { event: '*', schema: 'public', table: 'driver_assignments' }, () => loadData()).subscribe((status) => setRtStatus(status)),
             supabase.channel('fleet-orders').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadData()).subscribe(),
             supabase.channel('fleet-vehicles').on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => loadData()).subscribe()
         ];
@@ -105,24 +104,6 @@ export const FleetCenterPage: React.FC = () => {
             alert(`指派失败: ${e.response?.data?.detail || e.message}`);
         } finally {
             setIsAssigning(false);
-        }
-    };
-
-    const handleAddDriver = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setIsSubmitting(true);
-        try {
-            await SuperAdminService.createInternalUser({
-                ...newDriver,
-                role: UserRole.DRIVER
-            });
-            setShowAddDriver(false);
-            setNewDriver({ email: '', name: '', phone: '', password: '', employee_id: '' });
-            loadData();
-        } catch (e: any) {
-            alert(`添加司机失败: ${e.response?.data?.detail || e.message}`);
-        } finally {
-            setIsSubmitting(false);
         }
     };
 
@@ -257,16 +238,19 @@ export const FleetCenterPage: React.FC = () => {
                 <div className="space-y-6">
                     <h1 className="text-5xl font-black text-slate-900 tracking-tighter">车队中心 <span className="text-blue-600">Fleet Center</span></h1>
                     <div className="flex items-center gap-3">
-                        <button 
-                            onClick={() => setShowAddDriver(true)}
-                            className="px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 shadow-2xl shadow-slate-900/20 active:scale-95"
-                        >
-                            <span className="material-icons-round text-sm">person_add</span>
-                            Add Driver
-                        </button>
+                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-sm border ${
+                            rtStatus === 'SUBSCRIBED' ? 'bg-emerald-50/50 text-emerald-600 border-emerald-100' : 'bg-red-50/50 text-red-600 border-red-100'
+                        }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                                rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
+                            }`}></span>
+                            {rtStatus === 'SUBSCRIBED' ? 'Real-time Linked' : `Link Status: ${rtStatus}`}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3">
                         <button 
                             onClick={() => setShowAddVehicle(true)}
-                            className="px-6 py-3 bg-white text-slate-900 border border-slate-200 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all flex items-center gap-2 shadow-xl shadow-slate-900/5 active:scale-95"
+                            className="px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 shadow-2xl shadow-slate-900/20 active:scale-95"
                         >
                             <span className="material-icons-round text-sm">local_shipping</span>
                             Add Vehicle
@@ -615,66 +599,6 @@ export const FleetCenterPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Add Driver & Vehicle Modals (aligned with same theme) */}
-            {showAddDriver && (
-                <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-xl animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[4rem] w-full max-w-md shadow-2xl overflow-hidden border border-white/20 p-10 animate-in zoom-in-95 duration-300">
-                        <div className="flex justify-between items-center mb-10">
-                            <h2 className="text-3xl font-black text-slate-900 tracking-tighter">新增司机 <span className="text-blue-600">Register</span></h2>
-                            <button onClick={() => setShowAddDriver(false)} className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-red-50 hover:text-red-500 transition-all">
-                                <span className="material-icons-round">close</span>
-                            </button>
-                        </div>
-                        <form onSubmit={handleAddDriver} className="space-y-5">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Full Name</label>
-                                <input 
-                                    required
-                                    className="w-full px-6 py-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-[13px] font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all"
-                                    value={newDriver.name}
-                                    onChange={e => setNewDriver({...newDriver, name: e.target.value})}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Email Address</label>
-                                <input 
-                                    required
-                                    type="email"
-                                    className="w-full px-6 py-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-[13px] font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all"
-                                    value={newDriver.email}
-                                    onChange={e => setNewDriver({...newDriver, email: e.target.value})}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Phone Number</label>
-                                <input 
-                                    required
-                                    className="w-full px-6 py-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-[13px] font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all"
-                                    value={newDriver.phone}
-                                    onChange={e => setNewDriver({...newDriver, phone: e.target.value})}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Login Password</label>
-                                <input 
-                                    required
-                                    type="password"
-                                    className="w-full px-6 py-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-[13px] font-bold focus:ring-4 focus:ring-blue-100 outline-none transition-all"
-                                    value={newDriver.password}
-                                    onChange={e => setNewDriver({...newDriver, password: e.target.value})}
-                                />
-                            </div>
-                            <button 
-                                disabled={isSubmitting}
-                                type="submit"
-                                className="w-full py-5 bg-slate-900 text-white rounded-[2rem] font-black uppercase tracking-widest text-[11px] hover:bg-blue-600 transition-all shadow-2xl shadow-slate-900/20 active:scale-95 mt-6 disabled:opacity-50"
-                            >
-                                {isSubmitting ? 'Registering...' : 'Confirm Registration'}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
 
             {showAddVehicle && (
                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-6 bg-slate-900/90 backdrop-blur-xl animate-in fade-in duration-300">
