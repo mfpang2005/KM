@@ -244,7 +244,7 @@ const OrderCreate: React.FC = () => {
                         <div className="flex justify-between items-start">
                             <div className="flex flex-col gap-2">
                                 <h2 className="text-2xl font-black text-slate-900">金龙餐饮订单</h2>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">官方确认单据 (Official Receipt)</p>
+                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">官方确认单 (Customer Bill)</p>
                             </div>
                             <div className="text-right">
                                 <p className="text-xs font-black text-slate-900 mb-2">{new Date().toLocaleDateString()}</p>

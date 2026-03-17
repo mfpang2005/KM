@@ -380,7 +380,7 @@ const OrderManagement: React.FC = () => {
                                         <p>TAMAN SENAI UTAMA 5/17</p>
                                         <p>81400, SENAI, JOHOR.</p>
                                     </div>
-                                    <p className="text-xs print:text-[10px] text-blue-600 font-black tracking-widest mt-4 uppercase bg-blue-50 px-3 py-1 rounded-md">CUSTOMER BILL / INVOICE</p>
+                                    <p className="text-xs print:text-[10px] text-blue-600 font-black tracking-widest mt-4 uppercase bg-blue-50 px-3 py-1 rounded-md">CUSTOMER BILL</p>
                                 </div>
 
                                 {/* 订单基础信息 & 客户信息 */}
@@ -837,31 +837,6 @@ const OrderManagement: React.FC = () => {
                         </header>
 
                         <main className="flex-1 overflow-y-auto px-8 py-6 space-y-8 no-scrollbar">
-                            {/* Section: Payment Method Selection (NEW - as requested) */}
-                            <section className="space-y-4">
-                                <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">付款方式选项 (PAYMENT)</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {[
-                                        { id: PaymentMethod.CASH, label: 'CASH', icon: 'payments' },
-                                        { id: PaymentMethod.BANK_TRANSFER, label: 'BANK TRANSFER', icon: 'account_balance' },
-                                        { id: PaymentMethod.EWALLET, label: 'EWALLET', icon: 'account_balance_wallet' },
-                                        { id: PaymentMethod.CHEQUE, label: 'CHEQUE', icon: 'description' }
-                                    ].map((pm) => (
-                                        <button
-                                            key={pm.id}
-                                            onClick={() => setEditingOrder({ ...editingOrder, paymentMethod: pm.id })}
-                                            className={`flex items-center gap-2.5 p-3.5 rounded-2xl border transition-all ${editingOrder.paymentMethod === pm.id
-                                                ? 'bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-105'
-                                                : 'bg-slate-50 border-slate-100 text-slate-500'
-                                                }`}
-                                        >
-                                            <span className="material-icons-round text-sm">{pm.icon}</span>
-                                            <span className="text-[10px] font-black uppercase tracking-tight">{pm.label}</span>
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
-
                             <section className="space-y-4">
                                 <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">顾客基本资料</h3>
                                 <div className="space-y-3">

@@ -3,6 +3,8 @@ from typing import List, Optional
 from database import supabase
 from models import Order, OrderCreate, OrderUpdate, OrderStatus
 from fastapi.concurrency import run_in_threadpool
+from middleware.auth import get_current_user, require_admin
+from services.audit import record_audit, AuditActions
 
 router = APIRouter(
     prefix="/orders",
@@ -40,7 +42,7 @@ async def get_orders(
 
 # NOTE: 司机完成送餐后将照片 URL 列表写入对应订单，供 Admin 审阅
 @router.patch("/{order_id:path}/photos")
-async def update_delivery_photos(order_id: str, photos: dict):
+async def update_delivery_photos(order_id: str, photos: dict, current_user: dict = Depends(get_current_user)):
     """
     接收 { "delivery_photos": [url1, url2, ...] } 并更新至对应订单
     """
@@ -55,6 +57,16 @@ async def update_delivery_photos(order_id: str, photos: dict):
     )
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
+    
+    # Record Audit
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.ORDER_UPDATE_PHOTOS,
+        target=order_id,
+        detail={"photo_count": len(photo_urls)}
+    )
+    
     return response.data[0]
 
 
@@ -98,7 +110,7 @@ async def get_order_items(order_id: str):
 
 
 @router.patch("/items/{item_id}/prepared")
-async def mark_item_prepared(item_id: str, payload: dict):
+async def mark_item_prepared(item_id: str, payload: dict, current_user: dict = Depends(get_current_user)):
     """
     厨房逐项勾选确认。接收 { "is_prepared": true/false }
     """
@@ -114,6 +126,16 @@ async def mark_item_prepared(item_id: str, payload: dict):
         )
         if not response.data:
             raise HTTPException(status_code=404, detail="Order item not found")
+        
+        # Record Audit
+        await record_audit(
+            actor_id=current_user.get("id"),
+            actor_role=current_user.get("role"),
+            action=AuditActions.ORDER_ITEM_PREPARED,
+            target=item_id,
+            detail={"is_prepared": is_prepared}
+        )
+        
         return response.data[0]
     except postgrest.exceptions.APIError as e:
         if "PGRST205" in str(e):
@@ -130,7 +152,10 @@ async def get_order(order_id: str):
     return response.data[0]
 
 @router.post("", response_model=Order)
-async def create_order(order: OrderCreate):
+async def create_order(
+    order: OrderCreate,
+    current_user: dict = Depends(get_current_user)
+):
     """
     创建新订单并写入数据库。
     - 自动生成 UUID 作为订单 ID（防止 DB 未设置 default gen_random_uuid()）
@@ -209,6 +234,15 @@ async def create_order(order: OrderCreate):
                     # as orders table insertion was already successful.
                     print(f"WARNING: Failed to sync items to order_items (Table may be missing): {e}")
             
+            # Record Audit
+            await record_audit(
+                actor_id=current_user.get("id"),
+                actor_role=current_user.get("role"),
+                action=AuditActions.ORDER_CREATE,
+                target=response.data[0]["id"],
+                detail=order_data
+            )
+            
             return response.data[0]
         except HTTPException:
             raise
@@ -227,11 +261,15 @@ async def create_order(order: OrderCreate):
     raise HTTPException(status_code=500, detail="Order creation failed after max retries")
 
 @router.put("/{order_id:path}", response_model=Order)
-async def update_order(order_id: str, order: OrderUpdate):
+async def update_order(
+    order_id: str, 
+    order: OrderUpdate,
+    current_user: dict = Depends(require_admin)
+):
     from services.google_calendar import sync_order_to_calendar
     
     # model_dump handles Enum to string and applies validation/automation from model_validator
-    order_data = order.model_dump(exclude_none=True)
+    order_data = order.model_dump(exclude_unset=True)
     
     # Retrieve old order to gracefully get calendar_event_id (using * to avoid PGRST204 if missing)
     try:
@@ -262,6 +300,15 @@ async def update_order(order_id: str, order: OrderUpdate):
             from services.goeasy import notify_order_update
             await notify_order_update(response.data[0], action="update")
             
+            # Record Audit
+            await record_audit(
+                actor_id=current_user.get("id"),
+                actor_role=current_user.get("role"),
+                action=AuditActions.ORDER_UPDATE,
+                target=order_id,
+                detail=order_data
+            )
+            
             return response.data[0]
         except HTTPException:
             raise
@@ -278,7 +325,11 @@ async def update_order(order_id: str, order: OrderUpdate):
     raise HTTPException(status_code=500, detail="Order update failed after max retries")
 
 @router.post("/{order_id:path}/status", response_model=Order)
-async def update_order_status(order_id: str, status: OrderStatus):
+async def update_order_status(
+    order_id: str, 
+    status: OrderStatus,
+    current_user: dict = Depends(require_admin)
+):
     response = supabase.table("orders").update({"status": status}).eq("id", order_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
@@ -287,10 +338,23 @@ async def update_order_status(order_id: str, status: OrderStatus):
     from services.goeasy import notify_order_update
     await notify_order_update(response.data[0], action="status_update")
     
+    # Record Audit
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.ORDER_STATUS_CHANGE,
+        target=order_id,
+        detail={"status": status}
+    )
+    
     return response.data[0]
 
 @router.patch("/{order_id:path}", response_model=Order)
-async def partial_update_order(order_id: str, update: OrderUpdate):
+async def partial_update_order(
+    order_id: str, 
+    update: OrderUpdate,
+    current_user: dict = Depends(require_admin)
+):
     from services.google_calendar import sync_order_to_calendar
     
     # First fetch the existing full order to have all data for calendar sync and balance calc
@@ -301,7 +365,7 @@ async def partial_update_order(order_id: str, update: OrderUpdate):
     old_order = old_res.data[0]
     
     # ENFORCE FINANCE LOGIC ON PARTIAL UPDATE
-    update_data = update.model_dump(exclude_none=True)
+    update_data = update.model_dump(exclude_unset=True)
     
     # If amount or payment_received changed, recalculate balance & status
     new_amount = update_data.get("amount", old_order.get("amount", 0.0))
@@ -331,10 +395,30 @@ async def partial_update_order(order_id: str, update: OrderUpdate):
     from services.goeasy import notify_order_update
     await notify_order_update(response.data[0], action="partial_update")
     
+    # Determine Audit Action
+    audit_action = AuditActions.ORDER_UPDATE
+    if "driverId" in update_data:
+        if update_data["driverId"] is None:
+            audit_action = AuditActions.ORDER_UNASSIGN_DRIVER
+        else:
+            audit_action = AuditActions.ORDER_ASSIGN_DRIVER
+
+    # Record Audit
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=audit_action,
+        target=order_id,
+        detail=update_data
+    )
+    
     return response.data[0]
 
 @router.delete("/{order_id:path}")
-async def delete_order(order_id: str):
+async def delete_order(
+    order_id: str,
+    current_user: dict = Depends(require_admin)
+):
     from services.google_calendar import delete_calendar_event
     
     # Retrieve to get calendar_event_id before deletion
@@ -352,12 +436,24 @@ async def delete_order(order_id: str):
         "action": "delete",
         "orderId": order_id
     })
+    
+    # Record Audit
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.ORDER_DELETE,
+        target=order_id
+    )
         
     return {"message": "Order deleted"}
 
 
 @router.post("/{order_id:path}/assign", response_model=Order)
-async def assign_driver(order_id: str, payload: dict):
+async def assign_driver(
+    order_id: str, 
+    payload: dict,
+    current_user: dict = Depends(require_admin)
+):
     """
     指派司机。接收 { "driver_id": "uuid" }。
     """
@@ -373,6 +469,15 @@ async def assign_driver(order_id: str, payload: dict):
     from services.goeasy import notify_order_update
     await notify_order_update(response.data[0], action="assign")
     
+    # Record Audit
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.ORDER_ASSIGN_DRIVER,
+        target=order_id,
+        detail={"driverId": driver_id}
+    )
+    
     return response.data[0]
 
 
@@ -385,7 +490,10 @@ async def assign_driver(order_id: str, payload: dict):
 
 
 @router.post("/{order_id:path}/kitchen-complete")
-async def kitchen_complete(order_id: str):
+async def kitchen_complete(
+    order_id: str,
+    current_user: dict = Depends(get_current_user)
+):
     """
     厨房确认整张订单完成，将 orders.status 更新为 ready，
     并通过 GoEasy 实时通知司机和管理员准备出发。
@@ -418,5 +526,13 @@ async def kitchen_complete(order_id: str):
 
     # GoEasy 通知司机和管理员
     await notify_kitchen_complete(order_data)
+
+    # Record Audit
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.KITCHEN_COMPLETE,
+        target=order_id
+    )
 
     return {"message": "Order marked as ready", "orderId": order_id, "status": "ready"}

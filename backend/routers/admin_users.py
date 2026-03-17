@@ -3,6 +3,7 @@ from typing import List
 from database import supabase
 from models import User, UserRole, UserStatus, UserUpdate, UserCreateInternal
 from middleware.auth import require_admin
+from services.audit import record_audit, AuditActions
 import logging
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,15 @@ async def create_internal_user(
             basic_data = {k: v for k, v in db_data.items() if v is not None}
             response = supabase.table("users").insert(basic_data).execute()
         
+        # Record Audit
+        await record_audit(
+            actor_id=current_user.get("id"),
+            actor_role=current_user.get("role"),
+            action=AuditActions.USER_CREATE_INTERNAL,
+            target=user_id,
+            detail={"email": user_data.email, "role": user_data.role.value}
+        )
+
         if not response.data:
              logger.warning("DB Insert succeeded but returned no data.")
              return {**db_data, "id": user_id}
@@ -119,11 +129,12 @@ async def update_user_status(
         raise HTTPException(status_code=404, detail="User not found")
         
     # 记录审计日志
-    supabase.table("audit_logs").insert({
-        "actor_id": current_user.get("id"),
-        "actor_role": current_user.get("role"),
-        "action": f"change_user_status_to_{status.value}",
-        "target": user_id
-    }).execute()
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.USER_STATUS_CHANGE,
+        target=user_id,
+        detail={"status": status.value}
+    )
     
     return response.data[0]

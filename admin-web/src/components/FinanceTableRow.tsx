@@ -18,18 +18,9 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
     return (
         <tr className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${!isPaid && balance > 0 ? 'bg-red-50/5' : ''}`}>
             <td className="px-4 py-3 align-middle font-mono-finance text-[11px] text-indigo-600 font-bold tracking-tight relative">
-                <input
-                    key={`${order.id}-${order.order_number || order.id}`}
-                    type="text"
-                    defaultValue={order.order_number || order.id}
-                    onBlur={(e) => {
-                        if (e.target.value !== (order.order_number || order.id)) {
-                            onUpdateField(order.id, 'order_number', e.target.value);
-                        }
-                    }}
-                    className="bg-transparent border-none p-0 w-full focus:ring-0 text-indigo-600 font-bold font-mono-finance cursor-edit"
-                    title="Click to edit Order ID"
-                />
+                <span className="text-indigo-600 font-bold font-mono-finance">
+                    {order.order_number || order.id}
+                </span>
             </td>
             <td className="px-4 py-3 align-middle font-mono-finance text-[10px] text-slate-500">
                 {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '-'}

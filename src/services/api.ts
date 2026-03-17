@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Order, OrderCreate, OrderStatus, Product, User, UserRole } from '../../types';
+import { Order, OrderCreate, OrderStatus, Product, User, UserRole, Vehicle } from '../../types';
 import { supabase } from '../lib/supabase';
 
 export interface Customer {
@@ -202,18 +202,37 @@ export const SuperAdminService = {
 };
 
 export const VehicleService = {
-    getAll: async () => {
+    getAll: async (): Promise<Vehicle[]> => {
         const response = await api.get('/vehicles');
         return response.data;
     },
-    declareVehicle: async (vehicleId: string, driverId: string) => {
-        // According to vehicle backend router, this might be a PUT or POST to assign/declare
-        // Let's rely on standard backend, using supabase directly if no endpoint exists, or standard API
-        const response = await api.post(`/vehicles/${vehicleId}/assign`, { user_id: driverId });
+    create: async (vehicle: Partial<Vehicle>): Promise<Vehicle> => {
+        const response = await api.post('/vehicles', vehicle);
         return response.data;
     },
-    unassignVehicle: async (vehicleId: string, driverId: string) => {
-        const response = await api.post(`/vehicles/${vehicleId}/unassign`, { user_id: driverId });
+    update: async (id: string, vehicle: Partial<Vehicle>): Promise<Vehicle> => {
+        const response = await api.put(`/vehicles/${id}`, vehicle);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/vehicles/${id}`);
+    },
+    assignToDriver: async (driverId: string, vehicleId: string): Promise<any> => {
+        const response = await api.post('/vehicles/assign', { driver_id: driverId, vehicle_id: vehicleId });
+        return response.data;
+    },
+    unassignDriver: async (driverId: string): Promise<any> => {
+        const response = await api.post(`/vehicles/unassign/${driverId}`);
+        return response.data;
+    }
+};
+
+export const FleetService = {
+    /**
+     * 获取车队实时状态 (Join 查询: 司机 + 活跃指派 + 车辆)
+     */
+    getFleetStatus: async () => {
+        const response = await api.get('/vehicles/status');
         return response.data;
     }
 };

@@ -88,8 +88,15 @@ export const SuperAdminService = {
     },
 
     // ---- 审计日志 ----
-    getAuditLogs: async (page: number = 1, pageSize: number = 20): Promise<{ data: AuditLog[], total: number, page: number, page_size: number }> => {
-        const response = await api.get(`/super-admin/audit-logs?page=${page}&page_size=${pageSize}`);
+    getAuditLogs: async (page: number = 1, pageSize: number = 20, action?: string, search?: string): Promise<{ data: AuditLog[], total: number, page: number, page_size: number }> => {
+        const response = await api.get(`/super-admin/audit-logs`, {
+            params: {
+                page,
+                page_size: pageSize,
+                action: action || undefined,
+                search: search || undefined
+            }
+        });
         return response.data;
     },
     /** 指派司机 */
@@ -135,9 +142,6 @@ export const AdminOrderService = {
     },
     delete: async (id: string): Promise<void> => {
         await api.delete(`/orders/${encodeURIComponent(id)}`);
-    },
-    updateOrderItemStatus: async (itemId: string, status: string): Promise<void> => {
-        await api.patch(`/orders/items/${itemId}/status?status=${status}`);
     },
     /**
      * 获取指定订单的所有 order_items

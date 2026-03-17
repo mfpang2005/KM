@@ -3,6 +3,9 @@ from typing import List
 from database import supabase
 from models import Recipe
 import uuid
+from middleware.auth import require_admin, get_current_user
+from services.audit import record_audit, AuditActions
+from fastapi import Depends
 
 router = APIRouter(
     prefix="/recipes",
@@ -16,7 +19,10 @@ async def get_recipes():
     return response.data or []
 
 @router.post("", response_model=Recipe)
-async def create_recipe(recipe: Recipe):
+async def create_recipe(
+    recipe: Recipe,
+    current_user: dict = Depends(require_admin)
+):
     """创建新菜谱"""
     data = recipe.model_dump(exclude_none=True)
     if "id" in data:
@@ -28,10 +34,22 @@ async def create_recipe(recipe: Recipe):
     response = supabase.table("recipes").insert(data).execute()
     if not response.data:
         raise HTTPException(status_code=400, detail="Could not create recipe")
+        
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.RECIPE_CREATE,
+        target=response.data[0]["id"],
+        detail=data
+    )
     return response.data[0]
 
 @router.put("/{recipe_id}", response_model=Recipe)
-async def update_recipe(recipe_id: str, recipe: Recipe):
+async def update_recipe(
+    recipe_id: str, 
+    recipe: Recipe,
+    current_user: dict = Depends(require_admin)
+):
     """更新现有菜谱"""
     data = recipe.model_dump(exclude_none=True)
     if "id" in data:
@@ -43,10 +61,28 @@ async def update_recipe(recipe_id: str, recipe: Recipe):
     response = supabase.table("recipes").update(data).eq("id", recipe_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Recipe not found")
+        
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.RECIPE_UPDATE,
+        target=recipe_id,
+        detail=data
+    )
     return response.data[0]
 
 @router.delete("/{recipe_id}")
-async def delete_recipe(recipe_id: str):
+async def delete_recipe(
+    recipe_id: str,
+    current_user: dict = Depends(require_admin)
+):
     """删除菜谱"""
     response = supabase.table("recipes").delete().eq("id", recipe_id).execute()
+    
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.RECIPE_DELETE,
+        target=recipe_id
+    )
     return {"message": "Recipe deleted successfully"}

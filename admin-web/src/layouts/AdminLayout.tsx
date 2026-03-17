@@ -108,9 +108,9 @@ const AdminLayout: React.FC = () => {
         { path: '/products', label: 'Products', icon: 'inventory_2' },
         { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice' },
         { path: '/finance', label: 'Financials', icon: 'account_balance_wallet' },
-        { path: '/config', label: 'Settings', icon: 'settings' },
+        { path: '/config', label: 'Settings', icon: 'settings', hidden: true },
         { path: '/audit', label: 'Audit Logs', icon: 'history' },
-    ];
+    ].filter(item => !item.hidden);
 
     return (
         <div className="flex h-screen text-slate-800 font-sans bg-[#f8f9fc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/40 via-white to-purple-100/40 selection:bg-blue-200">

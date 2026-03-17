@@ -43,6 +43,8 @@ async def get_current_user_profile(user_id: str):
     return response.data[0]
 
 
+from services.audit import record_audit, AuditActions
+
 @router.patch("/me/profile", response_model=User)
 async def update_current_user_profile(user_id: str, profile_data: dict):
     """
@@ -57,5 +59,14 @@ async def update_current_user_profile(user_id: str, profile_data: dict):
     response = supabase.table("users").update(update_data).eq("id", user_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
+        
+    # Record Audit (Self update)
+    await record_audit(
+        actor_id=user_id,
+        actor_role="self",  # 或者从上下文获取更精确的角色
+        action=AuditActions.USER_PROFILE_UPDATE,
+        target=user_id,
+        detail=update_data
+    )
         
     return response.data[0]

@@ -470,10 +470,30 @@ const AccountManagement: React.FC = () => {
                                                     </span>
                                                 </div>
                                                 <p className="text-sm font-black text-white truncate">{order.customerName}</p>
-                                                <p className="text-[9px] text-slate-500 mt-0.5">
-                                                    {PM_LABELS[order.paymentMethod] || order.paymentMethod || '-'} &nbsp;·&nbsp;
-                                                    {order.created_at ? new Date(order.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '-'}
-                                                </p>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <select
+                                                        value={order.paymentMethod || 'cash'}
+                                                        onChange={async (e) => {
+                                                            const newMethod = e.target.value;
+                                                            try {
+                                                                await supabase.from('orders').update({ paymentMethod: newMethod }).eq('id', order.id);
+                                                                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, paymentMethod: newMethod } : o));
+                                                            } catch (err) {
+                                                                console.error('Update payment method failed', err);
+                                                            }
+                                                        }}
+                                                        className="bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 text-[9px] font-black text-indigo-300 outline-none cursor-pointer appearance-none hover:bg-white/10 transition-colors"
+                                                    >
+                                                        <option value="cash" className="bg-slate-900">CASH</option>
+                                                        <option value="bank_transfer" className="bg-slate-900">BANK TRF</option>
+                                                        <option value="ewallet" className="bg-slate-900">E-WALLET</option>
+                                                        <option value="cheque" className="bg-slate-900">CHEQUE</option>
+                                                    </select>
+                                                    <span className="text-slate-600 font-bold">•</span>
+                                                    <p className="text-[9px] text-slate-500">
+                                                        {order.created_at ? new Date(order.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '-'}
+                                                    </p>
+                                                </div>
                                             </div>
 
                                             <div className="flex flex-col items-end gap-2 shrink-0">

@@ -11,35 +11,13 @@ from models import (
     UserRole, UserUpdate, SystemConfig, SystemConfigUpdate,
     AuditLog, StatsOverview, Order, User,
 )
+from services.audit import record_audit, AuditActions
 from middleware.auth import require_super_admin
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/super-admin",
-    tags=["super-admin"],
-    dependencies=[Depends(require_super_admin)],
+    tags=["super-admin"]
 )
-
-
-# ── 辅助函数：记录审计日志 ──
-
-async def _log_audit(actor: dict, action: str, target: str, detail: Optional[dict] = None) -> None:
-    """
-    将 Super Admin 的操作写入审计日志表
-    """
-    from fastapi.concurrency import run_in_threadpool
-    try:
-        await run_in_threadpool(supabase.table("audit_logs").insert({
-            "actor_id": actor.get("id"),
-            "actor_role": actor.get("role"),
-            "action": action,
-            "target": target,
-            "detail": detail or {},
-        }).execute)
-    except Exception as e:
-        # NOTE: 审计日志写入失败不应阻断主流程
-        logger.error("Failed to write audit log: %s", str(e))
 
 
 # ═══════════════════════════════════════════
@@ -139,9 +117,10 @@ async def update_user(
     })
 
     # 记录审计日志
-    await _log_audit(
-        actor=current_user,
-        action="update_user",
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.USER_UPDATE,
         target=user_id,
         detail=update_data,
     )
@@ -164,9 +143,10 @@ async def delete_user(
     from fastapi.concurrency import run_in_threadpool
     response = await run_in_threadpool(supabase.table("users").delete().eq("id", user_id).execute)
 
-    await _log_audit(
-        actor=current_user,
-        action="delete_user",
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.USER_DELETE,
         target=user_id,
     )
 
@@ -206,9 +186,10 @@ async def upsert_config(
     from fastapi.concurrency import run_in_threadpool
     response = await run_in_threadpool(supabase.table("system_config").upsert(data).execute)
 
-    await _log_audit(
-        actor=current_user,
-        action="update_config",
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.CONFIG_UPDATE,
         target=key,
         detail=config.value,
     )
@@ -226,25 +207,33 @@ async def upsert_config(
 async def get_audit_logs(
     page: int = Query(1, ge=1, description="页码"),
     page_size: int = Query(20, ge=1, le=100, description="每页条数"),
+    action: Optional[str] = Query(None, description="操作类型筛选"),
+    search: Optional[str] = Query(None, description="搜索关键词 (Target 或 Actor ID)"),
     current_user: dict = Depends(require_super_admin),
 ):
     """
-    分页查询审计日志，按时间倒序
+    分页查询审计日志，支持操作类型筛选和关键字搜索，按时间倒序
     """
     offset = (page - 1) * page_size
 
+    query = supabase.table("audit_logs").select("*", count="exact")
+    
+    if action:
+        query = query.eq("action", action)
+    
+    if search:
+        # Supabase Python client doesn't support complex OR filters easily in a single builder call
+        # but we can use 'or' method with a string filter
+        query = query.or_(f"target.ilike.%{search}%,actor_id.ilike.%{search}%")
+
     from fastapi.concurrency import run_in_threadpool
     response = await run_in_threadpool(
-        supabase.table("audit_logs")
-        .select("*")
-        .order("created_at", desc=True)
+        query.order("created_at", desc=True)
         .range(offset, offset + page_size - 1)
         .execute
     )
 
-    # 获取总数用于分页
-    count_resp = await run_in_threadpool(supabase.table("audit_logs").select("id", count="exact").execute)
-    total = count_resp.count if hasattr(count_resp, "count") and count_resp.count else 0
+    total = response.count if hasattr(response, "count") and response.count is not None else 0
 
     return {
         "data": response.data or [],

@@ -47,8 +47,11 @@ export const FleetCenterPage: React.FC = () => {
             const allOrders: Order[] = ('status' in ordersRes && ordersRes.status === 200) ? (ordersRes.data as Order[]) : (ordersRes.data as Order[] || []);
             const today = new Date().toISOString().split('T')[0];
 
-            // Filter pending orders (READY but no driver assigned)
-            const pending = allOrders.filter(o => o.status === OrderStatus.READY && !o.driverId);
+            // Filter pending orders (READY/PREPARING/PENDING but no driver assigned)
+            const pending = allOrders.filter(o => 
+                (o.status === OrderStatus.READY || o.status === OrderStatus.PREPARING || o.status === OrderStatus.PENDING) && 
+                !o.driverId
+            );
             setPendingOrders(pending);
 
             const mappedDrivers: FleetDriver[] = (fleetData || []).map((d: any) => {
@@ -176,9 +179,13 @@ export const FleetCenterPage: React.FC = () => {
         if (!selectedOrderForAssignment) return;
         setIsAssigningOrder(true);
         try {
+            // If it was PENDING or PREPARING, it's now READY for delivery once assigned? 
+            // Or keep it as is. User wanted "assgin 好订单 要制作一个可以发给客人订单和司机已经出发whatsapp的模板和按钮"
+            // I'll keep the status as is if it's already PREPARING/READY, but if it was PENDING maybe move to READY?
+            // Actually, keep it simple: just assign driver.
             await api.patch(`/orders/${selectedOrderForAssignment.id}`, { 
                 driverId, 
-                status: OrderStatus.DELIVERING 
+                // status: OrderStatus.DELIVERING  // Removed auto-change to DELIVERING so driver can manully start
             });
             setSelectedOrderForAssignment(null);
             loadData();
@@ -187,6 +194,45 @@ export const FleetCenterPage: React.FC = () => {
         } finally {
             setIsAssigningOrder(false);
         }
+    };
+
+    const handleUnassignOrder = async (orderId: string) => {
+        if (!window.confirm('确定要退回此订单吗？退回后将进入待指派池。')) return;
+        try {
+            await api.patch(`/orders/${orderId}`, { 
+                driverId: null
+            });
+            loadData();
+        } catch (e: any) {
+            alert(`退回失败: ${e.response?.data?.detail || e.message}`);
+        }
+    };
+
+    const handleWhatsAppOrderDetails = (order: Order) => {
+        const cleanPhone = order.customerPhone.replace(/\D/g, '');
+        const itemsList = order.items.map(m => `- ${m.product_name || m.name} (x${m.quantity})`).join('%0A');
+        const message = `[金龙餐饮] 订单详情确认%0A----------------------%0A订单编号: ${order.order_number || order.id.slice(0, 8)}%0A客户姓名: ${order.customerName}%0A配送地址: ${order.address}%0A%0A订购项目:%0A${itemsList}%0A%0A合计金额: RM ${(order.amount || 0).toFixed(2)}%0A----------------------%0A感谢您的订购！如有疑问请联系我们。`;
+        
+        const url = `https://wa.me/60${cleanPhone.replace(/^60/, '').replace(/^0/, '')}?text=${message}`;
+        window.open(url, '_blank');
+    };
+
+    const handleWhatsAppDeparture = async (order: Order) => {
+        const cleanPhone = order.customerPhone.replace(/\D/g, '');
+        const message = `[金龙餐饮] 出发通知%0A----------------------%0A尊敬的 ${order.customerName}，您的订单 ${order.order_number || order.id.slice(0, 8)} 司机已整装出发！%0A%0A预计近期送达，请保持电话畅通。%0A配送地址: ${order.address}%0A%0A祝您用餐愉快！`;
+        
+        // 自动更新状态为已出发 (Auto-update status to DELIVERING)
+        try {
+            await api.patch(`/orders/${order.id}`, { 
+                status: OrderStatus.DELIVERING 
+            });
+            loadData();
+        } catch (e: any) {
+            console.error('自动更新出发状态失败:', e);
+        }
+
+        const url = `https://wa.me/60${cleanPhone.replace(/^60/, '').replace(/^0/, '')}?text=${message}`;
+        window.open(url, '_blank');
     };
 
     if (loading) return <div className="h-full flex items-center justify-center"><div className="animate-spin h-8 w-8 border-b-2 border-slate-900 rounded-full"></div></div>;
@@ -367,12 +413,46 @@ export const FleetCenterPage: React.FC = () => {
                                         <div className="flex flex-wrap items-center justify-between gap-6">
                                             <div className="flex flex-col gap-2">
                                                 {driver.activeOrders.length > 0 ? (
-                                                    driver.activeOrders.map(o => (
-                                                        <div key={o.id} className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-emerald-500/10 text-emerald-400 text-[11px] font-black uppercase tracking-widest border border-emerald-500/20">
-                                                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                                            {o.customerName.slice(0, 15)}...
-                                                        </div>
-                                                    ))
+                                                    <div className="flex flex-col gap-3 w-full">
+                                                        {driver.activeOrders.map(o => (
+                                                            <div key={o.id} className="flex flex-col gap-3 p-4 rounded-3xl bg-white/5 border border-white/5 animate-in slide-in-from-right duration-300">
+                                                                <div className="flex items-center justify-between">
+                                                                    <div className="flex items-center gap-3">
+                                                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                                                                        <span className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">{o.order_number || o.id.slice(0,8)}</span>
+                                                                    </div>
+                                                                    <span className="text-[10px] font-black text-slate-500 uppercase">{o.status}</span>
+                                                                </div>
+                                                                <p className="text-xs font-bold text-white line-clamp-1">{o.customerName}</p>
+                                                                
+                                                                <div className="flex items-center gap-2">
+                                                                    <button 
+                                                                        onClick={() => handleWhatsAppOrderDetails(o)}
+                                                                        title="发送订单详情"
+                                                                        className="flex-1 py-2 bg-emerald-500/20 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1"
+                                                                    >
+                                                                        <span className="material-icons-round text-sm">receipt_long</span>
+                                                                        详情
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleWhatsAppDeparture(o)}
+                                                                        title="发送出发通知"
+                                                                        className="flex-1 py-2 bg-blue-500/20 text-blue-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-blue-500 hover:text-white transition-all flex items-center justify-center gap-1"
+                                                                    >
+                                                                        <span className="material-icons-round text-sm">rocket_launch</span>
+                                                                        出发
+                                                                    </button>
+                                                                    <button 
+                                                                        onClick={() => handleUnassignOrder(o.id)}
+                                                                        title="退回待指派池"
+                                                                        className="w-9 h-9 bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"
+                                                                    >
+                                                                        <span className="material-icons-round text-base">undo</span>
+                                                                    </button>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
                                                 ) : (
                                                     <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-white/5 text-slate-500 text-[11px] font-black uppercase tracking-widest border border-white/5">
                                                         <span className="w-2 h-2 rounded-full bg-slate-700"></span>

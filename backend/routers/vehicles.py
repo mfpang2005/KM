@@ -2,9 +2,11 @@ from fastapi import APIRouter, HTTPException
 from typing import List
 from database import supabase
 from models import Vehicle, VehicleCreate, VehicleUpdate, DriverAssignment, DriverAssignmentBase, VehicleStatus
-from middleware.auth import require_admin
+from middleware.auth import require_admin, get_current_user
+from services.audit import record_audit, AuditActions
 from fastapi import Depends
 import datetime
+import postgrest
 
 router = APIRouter(
     prefix="/vehicles",
@@ -23,13 +25,24 @@ def clean_vehicle_data(data: dict) -> dict:
     return {k: (None if v == "" else v) for k, v in data.items()}
 
 @router.post("/", response_model=Vehicle)
-async def create_vehicle(vehicle: VehicleCreate):
+async def create_vehicle(
+    vehicle: VehicleCreate,
+    current_user: dict = Depends(require_admin)
+):
     """添加新车辆"""
     data = clean_vehicle_data(vehicle.model_dump())
     try:
         response = supabase.table("vehicles").insert(data).execute()
         if not response.data:
             raise HTTPException(status_code=400, detail="Failed to create vehicle")
+        
+        await record_audit(
+            actor_id=current_user.get("id"),
+            actor_role=current_user.get("role"),
+            action=AuditActions.VEHICLE_CREATE,
+            target=response.data[0]["id"],
+            detail=data
+        )
         return response.data[0]
     except Exception as e:
         error_msg = str(e)
@@ -42,7 +55,11 @@ async def create_vehicle(vehicle: VehicleCreate):
         raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
 
 @router.put("/{vehicle_id}", response_model=Vehicle)
-async def update_vehicle(vehicle_id: str, vehicle_update: VehicleUpdate):
+async def update_vehicle(
+    vehicle_id: str, 
+    vehicle_update: VehicleUpdate,
+    current_user: dict = Depends(require_admin)
+):
     """更新车辆状态或信息"""
     data = clean_vehicle_data(vehicle_update.model_dump(exclude_unset=True))
     data["updated_at"] = datetime.datetime.utcnow().isoformat()
@@ -50,6 +67,14 @@ async def update_vehicle(vehicle_id: str, vehicle_update: VehicleUpdate):
         response = supabase.table("vehicles").update(data).eq("id", vehicle_id).execute()
         if not response.data:
             raise HTTPException(status_code=404, detail="Vehicle not found")
+            
+        await record_audit(
+            actor_id=current_user.get("id"),
+            actor_role=current_user.get("role"),
+            action=AuditActions.VEHICLE_UPDATE,
+            target=vehicle_id,
+            detail=data
+        )
         return response.data[0]
     except HTTPException:
         raise
@@ -64,11 +89,21 @@ async def update_vehicle(vehicle_id: str, vehicle_update: VehicleUpdate):
         raise HTTPException(status_code=500, detail=f"Database error: {error_msg}")
 
 @router.delete("/{vehicle_id}")
-async def delete_vehicle(vehicle_id: str):
+async def delete_vehicle(
+    vehicle_id: str,
+    current_user: dict = Depends(require_admin)
+):
     """删除车辆"""
     response = supabase.table("vehicles").delete().eq("id", vehicle_id).execute()
     if not response.data:
         raise HTTPException(status_code=404, detail="Vehicle not found or already deleted")
+        
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.VEHICLE_DELETE,
+        target=vehicle_id
+    )
     return {"message": "Vehicle deleted successfully"}
 
 @router.post("/assign")
@@ -112,28 +147,48 @@ async def assign_vehicle(assignment: DriverAssignmentBase):
     }).eq("id", assignment.vehicle_id).execute()
 
     # 5. 更新 driver 用户档案的冗余字段（车牌、型号、类型）以保持前台列表显示一致
-    supabase.table("users").update({
-        "vehicle_plate": vehicle["plate_no"],
-        "vehicle_model": vehicle.get("model"),
-        "vehicle_type": vehicle.get("type"),
-        "vehicle_status": "occupied"
-    }).eq("id", assignment.driver_id).execute()
+    try:
+        supabase.table("users").update({
+            "vehicle_plate": vehicle["plate_no"],
+            "vehicle_model": vehicle.get("model"),
+            "vehicle_type": vehicle.get("type"),
+            "vehicle_status": "occupied"
+        }).eq("id", assignment.driver_id).execute()
+    except Exception as e:
+        # Ignore errors related to missing columns (PGRST204)
+        if "PGRST204" not in str(e):
+            print(f"Warning: Failed to update user redundant fields: {e}")
+
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.VEHICLE_ASSIGN,
+        target=assignment.vehicle_id,
+        detail={"driver_id": assignment.driver_id}
+    )
 
     return {"message": "Vehicle assigned successfully", "assignment": assign_resp.data[0]}
 
 @router.post("/unassign/{driver_id}")
-async def unassign_vehicle(driver_id: str):
+async def unassign_vehicle(
+    driver_id: str,
+    current_user: dict = Depends(require_admin)
+):
     """解除司机的车辆绑定"""
     # 找到该司机的活跃分配
     assign_resp = supabase.table("driver_assignments").select("*").eq("driver_id", driver_id).eq("status", "active").execute()
     if not assign_resp.data:
         # 同时清理用户信息中的车辆冗余，防止数据不一致
-        supabase.table("users").update({
-            "vehicle_plate": None,
-            "vehicle_model": None,
-            "vehicle_type": None,
-            "vehicle_status": "idle"
-        }).eq("id", driver_id).execute()
+        try:
+            supabase.table("users").update({
+                "vehicle_plate": None,
+                "vehicle_model": None,
+                "vehicle_type": None,
+                "vehicle_status": "idle"
+            }).eq("id", driver_id).execute()
+        except Exception as e:
+            if "PGRST204" not in str(e):
+                print(f"Warning: Failed to clear user redundant fields: {e}")
         return {"message": "No active assignments found for this driver"}
         
     assignment = assign_resp.data[0]
@@ -151,12 +206,23 @@ async def unassign_vehicle(driver_id: str):
     }).eq("id", assignment["vehicle_id"]).execute()
 
     # 清理用户信息中的车辆冗余
-    supabase.table("users").update({
-        "vehicle_plate": None,
-        "vehicle_model": None,
-        "vehicle_type": None,
-        "vehicle_status": "idle"
-    }).eq("id", driver_id).execute()
+    try:
+        supabase.table("users").update({
+            "vehicle_plate": None,
+            "vehicle_model": None,
+            "vehicle_type": None,
+            "vehicle_status": "idle"
+        }).eq("id", driver_id).execute()
+    except Exception as e:
+        if "PGRST204" not in str(e):
+            print(f"Warning: Failed to clear user redundant fields: {e}")
+    
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.VEHICLE_UNASSIGN,
+        target=driver_id
+    )
     
     return {"message": "Vehicle unassigned successfully"}
 

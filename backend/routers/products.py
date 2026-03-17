@@ -4,6 +4,9 @@ from database import supabase
 from models import Product
 from pydantic import BaseModel
 import uuid
+from middleware.auth import require_admin, get_current_user
+from services.audit import record_audit, AuditActions
+from fastapi import Depends
 
 router = APIRouter(
     prefix="/products",
@@ -41,7 +44,10 @@ def bump_menu_version():
 
 
 @router.post("", response_model=Product)
-async def create_product(product: ProductCreate):
+async def create_product(
+    product: ProductCreate,
+    current_user: dict = Depends(require_admin)
+):
     """
     创建新菜谱产品。
     NOTE: 已移除 require_admin 鉴权依赖，由前端 ProtectedRoute 保护。
@@ -56,17 +62,33 @@ async def create_product(product: ProductCreate):
     response = supabase.table("products").insert(data).execute()
     bump_menu_version()
     
-    # The API might be returning the record directly
-    if hasattr(response, 'data') and len(response.data) > 0:
-        return response.data[0]
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.PRODUCT_CREATE,
+        target=data.get("id"),
+        detail=data
+    )
     return data
 
 
 @router.put("/{product_id}", response_model=Product)
-async def update_product(product_id: str, product_update: dict):
+async def update_product(
+    product_id: str, 
+    product_update: dict,
+    current_user: dict = Depends(require_admin)
+):
     """更新产品信息，已移除强制鉴权"""
     response = supabase.table("products").update(product_update).eq("id", product_id).execute()
     bump_menu_version()
+    
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.PRODUCT_UPDATE,
+        target=product_id,
+        detail=product_update
+    )
     return response.data[0]
 
 
@@ -92,8 +114,17 @@ async def upload_product_image(file: UploadFile = File(...)):
 
 
 @router.delete("/{product_id}")
-async def delete_product(product_id: str):
+async def delete_product(
+    product_id: str,
+    current_user: dict = Depends(require_admin)
+):
     """下架产品，已移除强制鉴权"""
     supabase.table("products").delete().eq("id", product_id).execute()
     bump_menu_version()
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.PRODUCT_DELETE,
+        target=product_id
+    )
     return {"message": "Product deleted"}
