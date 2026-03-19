@@ -132,58 +132,60 @@ export const UsersPage: React.FC = () => {
     });
 
     const roleColors: Record<string, string> = {
-        [UserRole.SUPER_ADMIN]: 'bg-purple-100 text-purple-800 border-purple-200',
-        [UserRole.ADMIN]: 'bg-indigo-100 text-indigo-800 border-indigo-200',
-        [UserRole.KITCHEN]: 'bg-orange-100 text-orange-800 border-orange-200',
-        [UserRole.DRIVER]: 'bg-blue-100 text-blue-800 border-blue-200',
+        [UserRole.SUPER_ADMIN]: 'bg-gradient-to-r from-purple-500/10 to-indigo-500/10 text-purple-700 border-purple-200/50 shadow-sm shadow-purple-500/5',
+        [UserRole.ADMIN]: 'bg-gradient-to-r from-blue-500/10 to-cyan-500/10 text-blue-700 border-blue-200/50 shadow-sm shadow-blue-500/5',
+        [UserRole.KITCHEN]: 'bg-gradient-to-r from-orange-500/10 to-amber-500/10 text-orange-700 border-orange-200/50 shadow-sm shadow-orange-500/5',
+        [UserRole.DRIVER]: 'bg-gradient-to-r from-emerald-500/10 to-teal-500/10 text-emerald-700 border-emerald-200/50 shadow-sm shadow-emerald-500/5',
     };
 
     const statusColors: Record<string, string> = {
-        'active': 'bg-green-100 text-green-700',
-        'pending': 'bg-amber-100 text-amber-700',
-        'deleted': 'bg-slate-100 text-slate-500',
+        'active': 'bg-emerald-50 text-emerald-600 border-emerald-100',
+        'pending': 'bg-amber-50 text-amber-600 border-amber-100',
+        'deleted': 'bg-slate-50 text-slate-400 border-slate-100',
     };
 
     return (
-        <div className="min-h-screen bg-[#FDFDFF] pb-20">
+        <div className="min-h-screen bg-[#FDFDFF] pb-20 px-6">
             {/* Modern Header Section */}
-            <div className="relative mb-12">
-                <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-rose-50/50 to-transparent -z-10"></div>
+            <div className="relative py-12">
+                <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-blue-50/50 via-indigo-50/20 to-transparent -z-10"></div>
                 
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 px-2">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
                     <div className="space-y-4">
-                        <div className="flex items-center gap-3">
-                            <span className="w-12 h-12 rounded-2xl bg-red-500/10 flex items-center justify-center text-red-600 shadow-inner">
-                                <span className="material-icons-round text-[28px]">manage_accounts</span>
-                            </span>
-                            <div className="flex flex-col">
-                                <span className="px-3 py-1 bg-white border border-slate-100 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] shadow-sm w-fit">
-                                    Identity Management
+                        <div className="flex items-center gap-4">
+                            <div className="relative">
+                                <span className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-500/30">
+                                    <span className="material-icons-round text-[32px]">manage_accounts</span>
                                 </span>
-                                <div className={`mt-1.5 flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[8px] font-black uppercase tracking-wider backdrop-blur-sm border ${
-                                    rtStatus === 'SUBSCRIBED' ? 'bg-emerald-50/80 text-emerald-600 border-emerald-100' : 'bg-red-50/80 text-red-600 border-red-100'
-                                } w-fit`}>
-                                    <span className={`w-1 h-1 rounded-full ${
-                                        rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
-                                    }`}></span>
-                                    {rtStatus === 'SUBSCRIBED' ? 'Live' : rtStatus}
+                                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md">
+                                    <span className={`w-2.5 h-2.5 rounded-full ${rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
                                 </div>
                             </div>
+                            <div className="flex flex-col">
+                                <div className="flex items-center gap-2">
+                                    <span className="px-3 py-1 bg-white/80 backdrop-blur-md border border-slate-100 rounded-full text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] shadow-sm w-fit">
+                                        Identity Management
+                                    </span>
+                                    {rtStatus === 'SUBSCRIBED' && (
+                                        <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[9px] font-black uppercase tracking-wider border border-emerald-100/50">
+                                            Live
+                                        </span>
+                                    )}
+                                </div>
+                                <h1 className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tight mt-1">
+                                    用户管理 <span className="text-blue-600 font-serif italic text-3xl">.</span>
+                                </h1>
+                            </div>
                         </div>
-                        <h1 className="text-4xl md:text-5xl font-black text-slate-800 tracking-tight leading-none">
-                            用户管理 <span className="text-red-600 font-serif italic text-3xl">.</span>
-                        </h1>
-                        <p className="text-slate-400 font-bold text-sm max-w-md">
-                            轻松管理系统职员与车队司机，实时把控平台访问权限。
-                        </p>
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-4">
                         <button
                             onClick={() => setShowAddModal(true)}
-                            className="group flex items-center gap-3 px-8 py-4 bg-slate-900 text-white rounded-[2rem] font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-2xl shadow-slate-900/20 active:scale-95"
+                            className="group relative flex items-center gap-3 px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all duration-300 shadow-2xl shadow-slate-900/40 hover:shadow-blue-500/40 active:scale-95 overflow-hidden"
                         >
-                            <span className="material-icons-round text-[18px] group-hover:rotate-12 transition-transform">person_add</span>
+                            <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                            <span className="material-icons-round text-[20px] group-hover:scale-110 transition-transform">person_add</span>
                             Create Staff
                         </button>
                     </div>
@@ -191,81 +193,89 @@ export const UsersPage: React.FC = () => {
             </div>
 
             {/* Optimized Glass Search Bar */}
-            <div className="sticky top-6 z-30 bg-white/70 backdrop-blur-2xl p-4 rounded-3xl border border-white/50 shadow-2xl shadow-slate-200/30 mb-8 flex flex-col md:flex-row gap-4 items-center">
+            <div className="sticky top-6 z-30 bg-white/40 backdrop-blur-3xl p-3 rounded-[32px] border border-white/60 shadow-2xl shadow-slate-200/50 mb-12 flex flex-col md:flex-row gap-3 items-center mx-auto max-w-7xl">
                 <div className="relative flex-1 w-full group">
-                    <span className="absolute left-5 top-1/2 -translate-y-1/2 material-icons-round text-slate-300 text-[20px] group-focus-within:text-red-500 transition-colors">search</span>
+                    <span className="absolute left-6 top-1/2 -translate-y-1/2 material-icons-round text-slate-400 text-[22px] group-focus-within:text-blue-500 transition-colors">search</span>
                     <input
                         type="text"
                         placeholder="搜索姓名、邮箱或工号..."
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
-                        className="w-full pl-14 pr-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-[20px] text-sm focus:bg-white focus:border-red-500/10 focus:ring-4 focus:ring-red-500/5 transition-all font-bold"
+                        className="w-full pl-16 pr-8 py-5 bg-white/50 border-2 border-transparent rounded-[26px] text-base focus:bg-white focus:border-blue-500/10 focus:ring-8 focus:ring-blue-500/5 transition-all font-bold placeholder:text-slate-300"
                     />
                 </div>
                 <button
                     onClick={() => { setSearchQuery(''); window.history.replaceState({}, '', window.location.pathname); }}
-                    className="h-14 px-6 bg-white border-2 border-slate-50 flex items-center justify-center rounded-[20px] text-slate-400 font-black text-[10px] uppercase tracking-widest hover:text-red-500 hover:border-red-500/20 transition-all shadow-lg"
+                    className="h-[68px] px-8 bg-white border-2 border-slate-50 flex items-center justify-center rounded-[26px] text-slate-400 font-black text-[11px] uppercase tracking-widest hover:text-red-500 hover:border-red-500/20 transition-all shadow-lg active:scale-95"
                 >
                     Reset
                 </button>
             </div>
 
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold">
-                            <th className="px-6 py-4 w-1/3">User Info</th>
-                            <th className="px-6 py-4 w-1/4">Role</th>
-                            <th className="px-6 py-4 w-1/4">Status</th>
-                            <th className="px-6 py-4 w-1/6 text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {loading ? (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-12 text-center text-slate-400">
-                                    <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-                                </td>
-                            </tr>
-                        ) : filteredUsers.length === 0 ? (
-                            <tr>
-                                <td colSpan={4} className="px-6 py-12 text-center text-slate-400">No users found.</td>
-                            </tr>
-                        ) : (
-                            filteredUsers.map(user => (
-                                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
-                                    <td className="px-6 py-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-400 font-bold text-xs">
-                                                {user.name ? user.name.charAt(0).toUpperCase() : '?'}
-                                            </div>
-                                            <div>
-                                                <p className="font-bold text-slate-800 flex items-center gap-2">
-                                                    {user.name || 'No Name'}
-                                                    {user.employee_id && (
-                                                        <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-mono tracking-tighter">
-                                                            {user.employee_id}
-                                                        </span>
-                                                    )}
-                                                </p>
-                                                <p className="text-xs text-slate-500 flex items-center gap-2">
-                                                    {user.email}
-                                                    {user.phone && (
-                                                        <>
-                                                            <span className="text-slate-300">•</span>
-                                                            <span className="text-slate-400">{user.phone}</span>
-                                                        </>
-                                                    )}
-                                                </p>
-                                            </div>
+            {/* User Cards Grid */}
+            <div className="max-w-7xl mx-auto space-y-4">
+                {loading ? (
+                    <div className="flex flex-col items-center justify-center py-20 bg-white/50 backdrop-blur-md rounded-[32px] border border-white/60 shadow-xl">
+                        <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                        <p className="mt-4 text-slate-400 font-bold animate-pulse">Loading system identities...</p>
+                    </div>
+                ) : filteredUsers.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 bg-white/50 backdrop-blur-md rounded-[32px] border border-white/60 shadow-xl">
+                        <span className="material-icons-round text-slate-200 text-[64px] mb-4">person_search</span>
+                        <p className="text-slate-400 font-bold text-lg">No users found matching your search.</p>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-1 gap-4">
+                        {filteredUsers.map(user => (
+                            <div key={user.id} className="group relative bg-white/60 backdrop-blur-xl border border-white/80 rounded-[22px] p-4 flex flex-col md:flex-row items-center justify-between gap-4 transition-all duration-500 hover:shadow-xl hover:shadow-blue-500/5 hover:bg-white hover:-translate-y-0.5 overflow-hidden">
+                                <div className="absolute top-0 left-0 w-1 h-full bg-slate-100 group-hover:bg-blue-500 transition-colors duration-500"></div>
+                                
+                                <div className="flex items-center gap-4 flex-1 w-full">
+                                    <div className="relative shrink-0">
+                                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-slate-50 to-slate-100 border border-slate-100 flex items-center justify-center text-slate-400 font-black text-lg shadow-inner group-hover:from-blue-50 group-hover:to-indigo-50 group-hover:border-blue-100/50 group-hover:text-blue-500 transition-all duration-500 group-hover:scale-105">
+                                            {user.name ? user.name.charAt(0).toUpperCase() : '?'}
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-4">
+                                        {user.status === 'active' && !user.is_disabled && (
+                                            <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-md">
+                                                <div className="w-3 h-3 bg-emerald-500 rounded-full"></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex items-center gap-2.5 mb-0.5">
+                                            <h3 className="text-lg font-black text-slate-800 truncate group-hover:text-blue-600 transition-colors">
+                                                {user.name || 'Anonymous User'}
+                                            </h3>
+                                            {user.employee_id && (
+                                                <span className="shrink-0 px-2.5 py-1 bg-slate-900/5 text-[10px] text-slate-500 rounded-lg font-black uppercase tracking-wider">
+                                                    ID: {user.employee_id}
+                                                </span>
+                                            )}
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs font-bold text-slate-400">
+                                            <div className="flex items-center gap-1.5 hover:text-slate-600 transition-colors">
+                                                <span className="material-icons-round text-[16px]">mail</span>
+                                                {user.email}
+                                            </div>
+                                            {user.phone && (
+                                                <div className="flex items-center gap-1.5 hover:text-slate-600 transition-colors border-l border-slate-100 pl-3 ml-0 md:ml-0">
+                                                    <span className="material-icons-round text-[16px]">phone</span>
+                                                    {user.phone}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-wrap items-center justify-center md:justify-end gap-x-6 gap-y-3 w-full md:w-auto">
+                                    <div className="flex flex-col items-center md:items-start gap-1 min-w-[110px]">
+                                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">System Role</span>
                                         {editingUser === user.id ? (
                                             <select
                                                 value={editRole}
                                                 onChange={e => setEditRole(e.target.value)}
-                                                className="px-2 py-1 border border-slate-300 rounded text-xs bg-white outline-none"
+                                                className="w-full px-3 py-1.5 bg-white border-2 border-blue-100 rounded-lg text-[11px] font-bold text-blue-600 outline-none ring-4 ring-blue-500/5 transition-all"
                                             >
                                                 <option value={UserRole.ADMIN}>Admin</option>
                                                 <option value={UserRole.KITCHEN}>Kitchen</option>
@@ -273,216 +283,226 @@ export const UsersPage: React.FC = () => {
                                                 <option value={UserRole.SUPER_ADMIN}>Super Admin</option>
                                             </select>
                                         ) : (
-                                            <span className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${roleColors[user.role] || 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                                            <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${roleColors[user.role] || 'bg-slate-50 text-slate-500 border-slate-100'}`}>
                                                 {user.role}
                                             </span>
                                         )}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="flex flex-col gap-1 items-start">
-                                            {user.status && (
-                                                <span className={`px-2.5 py-1 rounded-lg text-[11px] font-bold uppercase ${statusColors[user.status] || 'bg-slate-100 text-slate-500'}`}>
-                                                    {user.status}
+                                    </div>
+
+                                    <div className="flex flex-col items-center md:items-start gap-1 min-w-[90px]">
+                                        <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Account Status</span>
+                                        <div className="flex items-center gap-2">
+                                            {user.is_disabled ? (
+                                                <span className="px-3 py-1 bg-red-50 text-red-600 border border-red-100 rounded-lg text-[10px] font-black uppercase tracking-wider">
+                                                    Disabled
+                                                </span>
+                                            ) : (
+                                                <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider border ${statusColors[user.status || 'active']}`}>
+                                                    {user.status || 'Active'}
                                                 </span>
                                             )}
-                                            {user.is_disabled && (
-                                                <span className="text-red-600 font-bold text-[11px] bg-red-50 px-2 py-1 rounded uppercase">Disabled</span>
-                                            )}
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-4 text-right space-x-2 whitespace-nowrap">
+                                    </div>
+
+                                    <div className="flex items-center gap-2 ml-2">
                                         {user.status === 'pending' && (
                                             <button
                                                 onClick={() => handleApproveUser(user.id)}
-                                                className="px-3 py-1.5 bg-green-500 text-white hover:bg-green-600 font-bold text-xs rounded-lg transition-colors shadow-md shadow-green-500/20"
+                                                className="h-10 px-4 bg-emerald-500 text-white hover:bg-emerald-600 font-black text-[10px] uppercase tracking-widest rounded-xl transition-all shadow-lg shadow-emerald-500/20 active:scale-95"
                                             >
                                                 Approve
                                             </button>
                                         )}
                                         {editingUser === user.id ? (
-                                            <>
-                                                <button onClick={() => handleSaveRole(user.id)} className="text-primary hover:text-blue-700 font-bold text-xs">Save</button>
-                                                <button onClick={() => setEditingUser(null)} className="text-slate-500 hover:text-slate-700 font-bold text-xs">Cancel</button>
-                                            </>
+                                            <div className="flex items-center gap-1.5">
+                                                <button 
+                                                    onClick={() => handleSaveRole(user.id)}
+                                                    className="w-10 h-10 flex items-center justify-center bg-blue-600 text-white rounded-xl shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-90"
+                                                >
+                                                    <span className="material-icons-round text-[18px]">save</span>
+                                                </button>
+                                                <button 
+                                                    onClick={() => setEditingUser(null)}
+                                                    className="w-10 h-10 flex items-center justify-center bg-slate-100 text-slate-400 rounded-xl hover:bg-slate-200 transition-all active:scale-90"
+                                                >
+                                                    <span className="material-icons-round text-[18px]">close</span>
+                                                </button>
+                                            </div>
                                         ) : (
-                                            <>
+                                            <div className="flex items-center gap-1.5">
                                                 <button
                                                     onClick={() => { setEditingUser(user.id); setEditRole(user.role); }}
-                                                    className="text-primary hover:text-blue-700 font-bold text-xs transition-colors"
+                                                    className="w-10 h-10 flex items-center justify-center bg-white border border-slate-100 text-slate-400 hover:text-blue-600 hover:border-blue-100 hover:bg-blue-50 transition-all rounded-xl shadow-sm active:scale-90"
+                                                    title="Edit Role"
                                                 >
-                                                    Edit Role
+                                                    <span className="material-icons-round text-[18px]">edit</span>
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteUser(user.id, user.email)}
-                                                    className="text-red-500 hover:text-red-700 font-bold text-xs transition-colors"
+                                                    className="w-10 h-10 flex items-center justify-center bg-white border border-slate-100 text-slate-400 hover:text-red-600 hover:border-red-100 hover:bg-red-50 transition-all rounded-xl shadow-sm active:scale-90"
+                                                    title="Delete User"
                                                 >
-                                                    Delete
+                                                    <span className="material-icons-round text-[18px]">delete</span>
                                                 </button>
-                                                {user.role === UserRole.DRIVER && (
-                                                    <a
-                                                        href="/drivers"
-                                                        className="px-2 py-1 bg-blue-50 text-blue-600 rounded-md text-[10px] font-bold hover:bg-blue-100 transition-colors inline-flex items-center gap-1"
-                                                    >
-                                                        <span className="material-icons-round text-[14px]">local_shipping</span>
-                                                        调度
-                                                    </a>
-                                                )}
-                                            </>
+                                            </div>
                                         )}
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Add User Modal */}
             {showAddModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white rounded-3xl shadow-xl w-full max-w-md overflow-hidden relative border border-slate-100">
-                        <div className="p-6 border-b border-slate-100 relative bg-slate-50/50">
-                            <h2 className="text-xl font-bold text-slate-800">Create Staff Account</h2>
-                            <p className="text-sm text-slate-500 mt-1">This will create a new Supabase Auth account and profile</p>
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-md animate-in fade-in duration-300">
+                    <div className="bg-white/95 backdrop-blur-2xl rounded-[40px] shadow-2xl w-full max-xl overflow-hidden relative border border-white/60">
+                        <div className="p-10 border-b border-slate-100 relative bg-gradient-to-br from-slate-50/50 to-white">
+                            <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-blue-500/20 mb-6 group hover:rotate-6 transition-transform">
+                                <span className="material-icons-round text-[32px]">person_add</span>
+                            </div>
+                            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Create Identity <span className="text-blue-600 italic">.</span></h2>
+                            <p className="text-slate-500 font-bold mt-2">Provision a new secure account within the system architecture.</p>
                             <button
                                 onClick={() => setShowAddModal(false)}
-                                className="absolute top-6 right-6 text-slate-400 hover:text-slate-600 transition-colors"
+                                className="absolute top-10 right-10 w-12 h-12 bg-white border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 hover:text-red-500 hover:border-red-100 transition-all active:scale-90"
                             >
                                 <span className="material-icons-round">close</span>
                             </button>
                         </div>
 
-                        <form onSubmit={handleCreateInternalUser} className="p-6 space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                        <form onSubmit={handleCreateInternalUser} className="p-10 space-y-6">
+                            <div className="grid grid-cols-2 gap-6">
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Full Name</label>
+                                    <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">Full Name</label>
                                     <input
                                         type="text"
-                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                        placeholder="John Doe"
+                                        className="w-full px-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500/10 focus:ring-8 focus:ring-blue-500/5 transition-all text-base font-bold placeholder:text-slate-300"
+                                        placeholder="Enter legal name"
                                         value={newUserForm.name}
                                         onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })}
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Staff ID (Optional)</label>
+                                    <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">Staff ID (Optional)</label>
                                     <input
                                         type="text"
-                                        className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                        placeholder="KL-001"
+                                        className="w-full px-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500/10 focus:ring-8 focus:ring-blue-500/5 transition-all text-base font-bold placeholder:text-slate-300"
+                                        placeholder="KL-XXXX"
                                         value={newUserForm.employee_id}
                                         onChange={e => setNewUserForm({ ...newUserForm, employee_id: e.target.value })}
                                     />
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Phone Number</label>
-                                <input
-                                    type="text"
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                    placeholder="012XXXXXXXX"
-                                    value={newUserForm.phone}
-                                    onChange={e => setNewUserForm({ ...newUserForm, phone: e.target.value })}
-                                />
+                                <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">Communication Channel</label>
+                                <div className="grid grid-cols-2 gap-6">
+                                    <input
+                                        type="email"
+                                        required
+                                        className="w-full px-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500/10 focus:ring-8 focus:ring-blue-500/5 transition-all text-base font-bold placeholder:text-slate-300"
+                                        placeholder="Corporate email"
+                                        value={newUserForm.email}
+                                        onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                                    />
+                                    <input
+                                        type="text"
+                                        className="w-full px-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500/10 focus:ring-8 focus:ring-blue-500/5 transition-all text-base font-bold placeholder:text-slate-300"
+                                        placeholder="Phone contact"
+                                        value={newUserForm.phone}
+                                        onChange={e => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                                    />
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Email Address *</label>
-                                <input
-                                    type="email"
-                                    required
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                    placeholder="kitchen1@kimlong.com"
-                                    value={newUserForm.email}
-                                    onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Initial Password * (Min 6 chars)</label>
-                                <input
-                                    type="password"
-                                    required
-                                    minLength={6}
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-medium"
-                                    placeholder="••••••••"
-                                    value={newUserForm.password}
-                                    onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-500 mb-1.5 uppercase">Assign Role *</label>
-                                <select
-                                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-red-500/20 text-sm font-bold text-slate-700"
-                                    value={newUserForm.role}
-                                    onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value as UserRole })}
-                                >
-                                    <option value={UserRole.DRIVER}>Driver</option>
-                                    <option value={UserRole.KITCHEN}>Kitchen Staff</option>
-                                    <option value={UserRole.ADMIN}>Administrator</option>
-                                </select>
+                            <div className="grid grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">Access Credentials</label>
+                                    <input
+                                        type="password"
+                                        required
+                                        minLength={6}
+                                        className="w-full px-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500/10 focus:ring-8 focus:ring-blue-500/5 transition-all text-base font-bold placeholder:text-slate-300"
+                                        placeholder="Secret password"
+                                        value={newUserForm.password}
+                                        onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-[10px] font-black text-slate-400 mb-2 uppercase tracking-widest">System Privilege</label>
+                                    <select
+                                        className="w-full px-6 py-4 bg-slate-50/50 border-2 border-transparent rounded-2xl focus:bg-white focus:border-blue-500/10 focus:ring-8 focus:ring-blue-500/5 transition-all text-base font-bold text-slate-700 outline-none"
+                                        value={newUserForm.role}
+                                        onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value as UserRole })}
+                                    >
+                                        <option value={UserRole.DRIVER}>Fleet Driver</option>
+                                        <option value={UserRole.KITCHEN}>Kitchen Staff</option>
+                                        <option value={UserRole.ADMIN}>Administrator</option>
+                                    </select>
+                                </div>
                             </div>
 
-                            <div className="pt-4 flex items-center justify-end gap-3">
+                            <div className="pt-8 flex items-center justify-end gap-6 border-t border-slate-50">
                                 <button
                                     type="button"
                                     onClick={() => setShowAddModal(false)}
-                                    className="px-5 py-2.5 text-slate-500 hover:bg-slate-50 rounded-xl text-sm font-bold transition-colors"
+                                    className="px-8 py-4 text-slate-400 hover:text-slate-600 font-black text-xs uppercase tracking-widest transition-colors"
                                 >
                                     Cancel
                                 </button>
                                 <button
                                     type="submit"
                                     disabled={loading}
-                                    className="px-5 py-2.5 bg-red-600 text-white rounded-xl text-sm font-bold hover:bg-red-700 transition-colors shadow-lg shadow-red-500/20 disabled:opacity-50 flex items-center gap-2"
+                                    className="px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all shadow-2xl shadow-slate-900/20 disabled:opacity-50 flex items-center gap-3 active:scale-95"
                                 >
-                                    {loading ? <span className="material-icons-round animate-spin text-[18px]">autorenew</span> : null}
-                                    Create Account
+                                    {loading ? <span className="material-icons-round animate-spin text-[20px]">autorenew</span> : <span className="material-icons-round text-[20px]">verified_user</span>}
+                                    Deploy Identity
                                 </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
-            {/* Add User Modal ... */}
 
             {/* 双重删除确认弹窗 */}
             {isDeleteModalOpen && confirmDeleteInfo && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
-                    <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden relative border border-slate-100">
-                        <div className="p-8 text-center">
-                            <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <span className={`material-icons-round text-red-500 text-4xl ${deleteStep === 2 ? 'animate-pulse' : ''}`}>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-xl animate-in fade-in duration-300">
+                    <div className="bg-white rounded-[48px] shadow-2xl w-full max-w-sm overflow-hidden relative border border-white/60">
+                        <div className="p-10 text-center">
+                            <div className={`w-24 h-24 bg-red-50 rounded-[32px] flex items-center justify-center mx-auto mb-8 transition-all duration-500 ${deleteStep === 2 ? 'bg-red-600 text-white scale-110 shadow-2xl shadow-red-500/40' : 'text-red-500 shadow-xl shadow-red-500/5'}`}>
+                                <span className={`material-icons-round text-5xl ${deleteStep === 2 ? 'animate-pulse' : ''}`}>
                                     {deleteStep === 1 ? 'person_remove' : 'gpp_maybe'}
                                 </span>
                             </div>
 
-                            <h3 className="text-2xl font-black text-slate-800 mb-2">
-                                {deleteStep === 1 ? 'Delete User?' : 'Absolute Warning!'}
+                            <h3 className="text-3xl font-black text-slate-900 mb-3 tracking-tight">
+                                {deleteStep === 1 ? 'Purge Identity?' : 'Critical Action!'}
                             </h3>
 
-                            <p className="text-slate-500 font-bold leading-relaxed mb-8 px-4 text-sm">
+                            <p className="text-slate-400 font-bold leading-relaxed mb-10 px-4 text-sm">
                                 {deleteStep === 1 ? (
-                                    <>Are you sure you want to permanently delete account <span className="text-slate-900 font-black">"{confirmDeleteInfo.email}"</span>?</>
+                                    <>Are you sure you want to permanently delete <span className="text-slate-900 font-black">"{confirmDeleteInfo.email}"</span>?</>
                                 ) : (
-                                    <span className="text-red-500 font-black">This will disable their login and remove all associated records. This process is IRREVERSIBLE.</span>
+                                    <span className="text-red-500 font-black uppercase tracking-tighter">This action is irreversible. All access and records will be terminated immediately.</span>
                                 )}
                             </p>
 
-                            <div className="flex flex-col gap-3">
+                            <div className="flex flex-col gap-4">
                                 {deleteStep === 1 ? (
                                     <button
                                         onClick={() => setDeleteStep(2)}
-                                        className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-slate-900/20"
+                                        className="w-full py-5 bg-slate-900 hover:bg-red-600 text-white rounded-[24px] font-black text-xs uppercase tracking-widest transition-all active:scale-[0.95] shadow-2xl shadow-slate-900/20"
                                     >
-                                        Yes, I'm Sure
+                                        Execute Deletion
                                     </button>
                                 ) : (
                                     <button
                                         onClick={executeDelete}
                                         disabled={isDeleting}
-                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-lg transition-all active:scale-[0.98] shadow-xl shadow-red-600/20 disabled:opacity-50 flex items-center justify-center gap-2"
+                                        className="w-full py-5 bg-red-600 hover:bg-red-700 text-white rounded-[24px] font-black text-xs uppercase tracking-widest transition-all active:scale-[0.95] shadow-2xl shadow-red-600/40 disabled:opacity-50 flex items-center justify-center gap-3"
                                     >
                                         {isDeleting && <span className="material-icons-round animate-spin">autorenew</span>}
-                                        Confirm Final Deletion
+                                        Confirm Final Purge
                                     </button>
                                 )}
 
@@ -492,7 +512,7 @@ export const UsersPage: React.FC = () => {
                                         setConfirmDeleteInfo(null);
                                     }}
                                     disabled={isDeleting}
-                                    className="w-full py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-lg transition-colors"
+                                    className="w-full py-5 text-slate-400 hover:text-slate-800 font-black text-xs uppercase tracking-widest transition-colors"
                                 >
                                     Cancel
                                 </button>

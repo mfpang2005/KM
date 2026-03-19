@@ -420,16 +420,34 @@ async def delete_order(
     current_user: dict = Depends(require_admin)
 ):
     from services.google_calendar import delete_calendar_event
+    from fastapi.concurrency import run_in_threadpool
+    import postgrest
     
-    # Retrieve to get calendar_event_id before deletion
+    # 1. Retrieve to get calendar_event_id before deletion
     res = supabase.table("orders").select("calendar_event_id").eq("id", order_id).execute()
     
+    # 2. Delete related order_items first (Avoid Foreign Key constraint violation)
+    try:
+        await run_in_threadpool(
+            supabase.table("order_items")
+            .delete()
+            .eq("order_id", order_id)
+            .execute
+        )
+    except postgrest.exceptions.APIError as e:
+        # Ignore Table missing (PGRST205) but fail on other DB errors
+        if "PGRST205" not in str(e):
+            print(f"Error deleting items for order {order_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to clear dependent order items: {str(e)}")
+
+    # 3. Delete the order itself
     response = supabase.table("orders").delete().eq("id", order_id).execute()
     
+    # 4. Cleanup external resources (Calendar)
     if res.data and res.data[0].get("calendar_event_id"):
         delete_calendar_event(res.data[0]["calendar_event_id"])
         
-    # GoEasy Notification
+    # 5. GoEasy Notification
     from services.goeasy import publish_message
     await publish_message({
         "type": "order_update",
@@ -437,7 +455,7 @@ async def delete_order(
         "orderId": order_id
     })
     
-    # Record Audit
+    # 6. Record Audit
     await record_audit(
         actor_id=current_user.get("id"),
         actor_role=current_user.get("role"),
@@ -481,6 +499,56 @@ async def assign_driver(
     return response.data[0]
 
 
+
+
+@router.patch("/{order_id:path}/approve")
+async def approve_order(
+    order_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """
+    管理员手动审批订单，直接标记为 ready (跳过厨房准备 / 快捷准备)。
+    """
+    from services.goeasy import notify_kitchen_complete
+
+    # 1. 更新订单状态为 ready
+    response = await run_in_threadpool(
+        supabase.table("orders")
+        .update({"status": "ready"})
+        .eq("id", order_id)
+        .execute
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order_data = response.data[0]
+
+    # 2. 将关联的所有项也标记为 ready (防止厨房页面残留)
+    import postgrest
+    try:
+        await run_in_threadpool(
+            supabase.table("order_items")
+            .update({"is_prepared": True, "status": "ready"})
+            .eq("order_id", order_id)
+            .execute
+        )
+    except postgrest.exceptions.APIError as e:
+        if "PGRST205" not in str(e):
+            print(f"Error updating order items during approval: {e}")
+
+    # 3. 发送 GoEasy 通知通知司机和管理员
+    await notify_kitchen_complete(order_data)
+
+    # 4. 记录审计日志
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.ORDER_STATUS_CHANGE,
+        target=order_id,
+        detail={"status": "ready", "method": "manual_approve"}
+    )
+
+    return order_data
 
 
 # ─── Kitchen Prep Endpoints ──────────────────────────────────────────────────

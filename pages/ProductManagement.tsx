@@ -165,57 +165,62 @@ const ProductManagement: React.FC = () => {
 
     return (
         <div className="flex flex-col h-full bg-background-light relative">
-            <header className="pt-12 pb-4 px-6 bg-white flex flex-col sticky top-0 z-30 shadow-sm border-b border-slate-50">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => navigate('/admin')} className="text-slate-400 p-1 active:scale-90 transition-transform">
-                            <span className="material-icons-round">arrow_back</span>
-                        </button>
-                        <h1 className="text-xl font-black text-slate-800 tracking-tight">商品管理</h1>
+            <header className="pt-12 pb-4 px-6 bg-white sticky top-0 z-30 shadow-sm border-b border-slate-50">
+                <div className="max-w-[1600px] mx-auto flex flex-col gap-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                            <button onClick={() => navigate('/admin')} className="text-slate-400 p-1 active:scale-90 transition-transform">
+                                <span className="material-icons-round">arrow_back</span>
+                            </button>
+                            <h1 className="text-xl font-black text-slate-800 tracking-tight">商品管理</h1>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-1 rounded-full uppercase tracking-widest">{products.length} 项</span>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-black text-slate-400 bg-slate-50 px-3 py-1 rounded-full uppercase tracking-widest">{products.length} 项</span>
-                    </div>
-                </div>
 
-                <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-300">
-                        <span className="material-icons-round text-sm">search</span>
+                    <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-300">
+                            <span className="material-icons-round text-sm">search</span>
+                        </div>
+                        <input
+                            type="text"
+                            className="block w-full pl-9 pr-4 py-2 bg-[#f1f3f5] border-none rounded-lg text-xs font-bold focus:ring-1 focus:ring-primary/20 placeholder:text-slate-300"
+                            placeholder="搜寻商品名称或编号 (Code)"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
                     </div>
-                    <input
-                        type="text"
-                        className="block w-full pl-9 pr-4 py-2 bg-[#f1f3f5] border-none rounded-lg text-xs font-bold focus:ring-1 focus:ring-primary/20 placeholder:text-slate-300"
-                        placeholder="搜寻商品名称或编号 (Code)"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
                 </div>
             </header>
 
-            <div className="bg-white px-4 py-3 flex items-center gap-2 sticky top-[132px] z-20 shadow-sm overflow-x-auto no-scrollbar border-b border-slate-50">
-                <div className="flex gap-2">
-                    {categories.map(cat => (
-                        <button
-                            key={cat}
-                            onClick={() => setActiveCategory(cat)}
-                            className={`px-5 py-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${activeCategory === cat
-                                ? 'bg-primary text-white shadow-md'
-                                : 'bg-white text-slate-400 border border-slate-100'
-                                }`}
-                        >
-                            {cat}
-                        </button>
-                    ))}
+            <div className="bg-white sticky top-[132px] z-20 shadow-sm border-b border-slate-50">
+                <div className="max-w-[1600px] mx-auto px-4 py-3 flex items-center gap-2 overflow-x-auto no-scrollbar">
+                    <div className="flex gap-2">
+                        {categories.map(cat => (
+                            <button
+                                key={cat}
+                                onClick={() => setActiveCategory(cat)}
+                                className={`px-5 py-2 rounded-lg text-[11px] font-bold transition-all whitespace-nowrap ${activeCategory === cat
+                                    ? 'bg-primary text-white shadow-md'
+                                    : 'bg-white text-slate-400 border border-slate-100'
+                                    }`}
+                            >
+                                {cat}
+                            </button>
+                        ))}
+                    </div>
                 </div>
             </div>
 
-            <main className="flex-1 overflow-y-auto p-4 no-scrollbar pb-32">
+            <main className="flex-1 overflow-y-auto no-scrollbar pb-32">
                 <PullToRefresh onRefresh={loadData}>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="max-w-[1600px] mx-auto p-4 lg:p-8">
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4 lg:gap-6">
                         {isLoading ? (
                             Array.from({ length: 6 }).map((_, i) => (
                                 <div key={i} className="bg-white rounded-[24px] h-64 shadow-sm border border-slate-100 flex flex-col animate-pulse">
-                                    <div className="aspect-square bg-slate-100 rounded-t-[24px]" />
+                                    <div className="aspect-[4/3] bg-slate-100 rounded-t-[24px]" />
                                     <div className="p-4 space-y-2">
                                         <div className="h-2 w-1/2 bg-slate-100 rounded" />
                                         <div className="h-3 w-3/4 bg-slate-100 rounded" />
@@ -232,7 +237,7 @@ const ProductManagement: React.FC = () => {
                                 onClick={() => handleOpenModal(p)}
                                 className="bg-white rounded-[24px] overflow-hidden shadow-sm border border-slate-100/50 flex flex-col animate-in fade-in duration-300 active:scale-95 transition-transform"
                             >
-                                <div className="relative aspect-square">
+                                <div className="relative aspect-[4/3]">
                                     <div className="absolute top-2 left-2 bg-black/70 backdrop-blur-sm px-2 py-0.5 rounded-md text-[8px] font-black text-white z-10 uppercase tracking-widest">
                                         {p.code}
                                     </div>
@@ -266,6 +271,7 @@ const ProductManagement: React.FC = () => {
                                 </div>
                             </div>
                         ))}
+                        </div>
                     </div>
                 </PullToRefresh>
             </main>

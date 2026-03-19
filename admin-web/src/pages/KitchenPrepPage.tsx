@@ -83,172 +83,160 @@ const ProgressBar: React.FC<{ done: number; total: number }> = ({ done, total })
 /** 单个订单卡片 */
 const OrderCard: React.FC<{
     order: KitchenOrder;
-    onToggle: (id: string) => void;
     onCheck: (orderId: string, itemId: string, checked: boolean) => void;
     onConfirm: (orderId: string) => void;
+    onLoad: (orderId: string) => void;
     loading: Set<string>;
     confirming: Set<string>;
-}> = ({ order, onToggle, onCheck, onConfirm, loading, confirming }) => {
-    const totalItems = order.items.reduce((s, i) => s + i.quantity, 0);
-    const doneItems = order.items.filter(i => i.is_prepared).reduce((s, i) => s + i.quantity, 0);
-    const allPrepared = order.items.length > 0 && order.items.every(i => i.is_prepared);
+}> = ({ order, onCheck, onConfirm, onLoad, loading, confirming }) => {
+    // Auto-load items on mount
+    useEffect(() => {
+        if (!order.itemsLoaded) {
+            onLoad(order.id);
+        }
+    }, [order.id, order.itemsLoaded, onLoad]);
+
+    const totalItems = order.items.length;
+    const doneItems = order.items.filter(i => i.is_prepared).length;
+    const allPrepared = totalItems > 0 && order.items.every(i => i.is_prepared);
     const isConfirming = confirming.has(order.id);
+    const isUrgent = order.dueTime ? (new Date(order.dueTime).getTime() - new Date().getTime() < 60 * 60 * 1000) : false;
 
     return (
         <div
-            className={`bg-white rounded-[28px] border transition-all duration-500 overflow-hidden
-                ${order.removing ? 'opacity-0 scale-95 max-h-0 my-0 py-0' : 'opacity-100 scale-100'}
-                ${allPrepared ? 'border-green-400 ring-4 ring-green-400/10 shadow-xl shadow-green-500/10' : 'border-slate-100 hover:border-slate-200 hover:shadow-lg'}`}
+            className={`bg-white rounded-[32px] border transition-all duration-500 flex flex-col h-[580px] relative
+                ${order.removing ? 'opacity-0 scale-95' : 'opacity-100 scale-100'}
+                ${allPrepared ? 'border-green-400 ring-4 ring-green-400/10 shadow-xl shadow-green-500/10' : 'border-slate-100 shadow-sm hover:shadow-xl hover:shadow-blue-500/5 hover:-translate-y-1 hover:border-blue-100'}`}
         >
-            {/* ── Card Header ── */}
-            <button
-                onClick={() => onToggle(order.id)}
-                className="w-full flex items-center gap-4 p-5 text-left hover:bg-slate-50/50 transition-colors"
-            >
-                {/* Status dot */}
-                <div className={`w-3 h-3 rounded-full shrink-0 ${allPrepared ? 'bg-green-500' : order.expanded ? 'bg-blue-500 animate-pulse' : 'bg-amber-400'}`} />
-
-                {/* Order info */}
-                <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between mb-1">
-                        <div className="flex items-center gap-2">
-                            <span className="text-xs font-black text-slate-800 tracking-tight truncate">{order.id}</span>
-                            <span className="text-[9px] font-bold text-slate-400">•</span>
-                            <span className="text-[10px] font-black text-blue-600">{formatTime(order.dueTime)}</span>
+            {/* ── Header ── */}
+            <div className={`p-5 flex flex-col gap-4 border-b rounded-t-[32px] ${allPrepared ? 'bg-green-50/50 border-green-100' : isUrgent ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50/30 border-slate-50'}`}>
+                <div className="flex items-start justify-between">
+                    <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Order Ticket</span>
+                            <span className="text-[10px] font-bold text-slate-300 leading-none">#</span>
+                            <span className="text-xs font-black text-slate-900 tracking-tight leading-none">{order.id}</span>
                         </div>
-                        <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-500 border border-slate-200">
-                            {order.status}
+                        <h3 className="text-base font-black text-slate-800 tracking-tight truncate pr-2">{order.customerName}</h3>
+                    </div>
+                    <div className={`px-3 py-1.5 rounded-xl flex flex-col items-center justify-center min-w-[70px] border shadow-sm shrink-0
+                        ${isUrgent ? 'bg-amber-500 border-amber-400 text-white animate-pulse' : 'bg-white border-slate-100 text-blue-600'}`}>
+                        <span className="text-[8px] font-black uppercase tracking-widest opacity-80 leading-none mb-0.5">Time</span>
+                        <span className="text-xs font-black tabular-nums leading-none">{formatTime(order.dueTime)}</span>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-slate-400">
+                        <span>Preparation Status</span>
+                        <span className={allPrepared ? 'text-green-600' : 'text-slate-500'}>
+                            {totalItems > 0 ? Math.round((doneItems / totalItems) * 100) : 0}%
                         </span>
                     </div>
-                    <p className="text-[10px] font-bold text-slate-500 truncate">{order.customerName}</p>
-                    {/* Progress */}
-                    <div className="mt-2">
-                        <ProgressBar done={doneItems} total={totalItems} />
-                    </div>
+                    <ProgressBar done={doneItems} total={totalItems} />
+                </div>
+            </div>
+
+            {/* ── Content ── */}
+            <div className="flex-1 p-5 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex items-center justify-between mb-3 shrink-0">
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+                        Dish List ({order.items.length})
+                    </span>
+                    <button 
+                        onClick={() => onLoad(order.id)}
+                        className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 text-slate-400 hover:bg-blue-600 hover:text-white transition-all shadow-sm active:scale-90"
+                    >
+                        <span className="material-icons-round text-sm">refresh</span>
+                    </button>
                 </div>
 
-                {/* Chevron */}
-                <span className={`material-icons-round text-slate-300 text-lg transition-transform duration-300 shrink-0 ${order.expanded ? 'rotate-180' : ''}`}>
-                    expand_more
-                </span>
-            </button>
+                {!order.itemsLoaded && order.items.length === 0 ? (
+                    <div className="flex-1 flex flex-col items-center justify-center bg-slate-50/50 border-2 border-dashed border-slate-100 rounded-[28px] p-6">
+                        <div className="w-8 h-8 border-[3px] border-slate-200 border-t-blue-600 rounded-full animate-spin mb-3" />
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
+                            Synchronizing Dishes...
+                        </span>
+                    </div>
+                ) : (
+                    <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-3">
+                        {order.items.length === 0 ? (
+                             <div className="flex-1 py-10 flex flex-col items-center justify-center text-slate-300 bg-slate-50/30 rounded-[24px]">
+                                <span className="material-icons-round text-4xl mb-2">inventory_2</span>
+                                <span className="text-[10px] font-black uppercase tracking-widest mb-4">No dishes found</span>
+                                <button 
+                                    onClick={() => onLoad(order.id)}
+                                    className="px-4 py-2 bg-white border border-slate-200 rounded-full text-[10px] font-black text-blue-600 shadow-sm hover:border-blue-200 active:scale-95"
+                                >
+                                    Try Refreshing
+                                </button>
+                            </div>
+                        ) : (
+                            order.items.map((item, idx) => (
+                                <div
+                                    key={item.id || idx}
+                                    onClick={() => !loading.has(item.id) && onCheck(order.id, item.id, !item.is_prepared)}
+                                    className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all active:scale-[0.98]
+                                        ${item.is_prepared
+                                            ? 'bg-green-50 border-green-200 shadow-inner'
+                                            : 'bg-white border-slate-100 hover:border-blue-200 hover:shadow-sm'
+                                        }`}
+                                >
+                                    <div className="relative shrink-0">
+                                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200
+                                            ${loading.has(item.id) ? 'opacity-50' : ''}
+                                            ${item.is_prepared
+                                                ? 'bg-green-500 border-green-500 shadow-sm shadow-green-500/20'
+                                                : 'bg-white border-slate-200'
+                                            }`}>
+                                            {item.is_prepared && <span className="material-icons-round text-white text-sm">check</span>}
+                                            {loading.has(item.id) && <div className="w-3 h-3 border-[2.5px] border-white border-t-transparent rounded-full animate-spin" />}
+                                        </div>
+                                    </div>
 
-            {/* ── Expanded – Item List ── */}
-            {order.expanded && (
-                <div className="px-5 pb-5 border-t border-slate-50 animate-in fade-in duration-200">
-                    {!order.itemsLoaded ? (
-                        <div className="py-8 flex items-center justify-center gap-2 text-slate-300">
-                            <div className="w-4 h-4 border-2 border-slate-300 border-t-blue-500 rounded-full animate-spin" />
-                            <span className="text-[10px] font-black uppercase tracking-widest">Loading items...</span>
-                        </div>
-                    ) : order.items.length === 0 ? (
-                        <div className="py-8 text-center text-slate-300">
-                            <span className="material-icons-round text-3xl block mb-1">info_outline</span>
-                            <span className="text-[10px] font-black uppercase">No items found</span>
-                        </div>
-                    ) : (
-                        <>
-                            {/* Equipment display */}
-                            {order.equipments && Object.keys(order.equipments).length > 0 && Object.values(order.equipments).some((q: any) => q > 0) && (
-                                <div className="mt-4 mb-2 p-3 bg-amber-50/50 border border-amber-100 rounded-xl">
-                                    <h4 className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-2 flex items-center gap-1.5 shadow-sm">
-                                        <span className="material-icons-round text-[12px]">hardware</span> Assigned Equipments
-                                    </h4>
-                                    <div className="flex flex-wrap gap-2">
-                                        {Object.entries(order.equipments).filter(([_, qty]) => (qty as number) > 0).map(([name, qty]) => (
-                                            <span key={name} className="px-2 py-1 bg-white border border-amber-200 text-amber-800 text-[10px] font-bold rounded-lg shadow-sm">
-                                                {name} <span className="font-black">×{qty as number}</span>
-                                            </span>
-                                        ))}
+                                    <div className="flex-1 min-w-0">
+                                        <p className={`text-sm font-black tracking-tight leading-tight transition-all ${item.is_prepared ? 'text-green-700/40 line-through' : 'text-slate-800'}`}>
+                                            {item.name || item.product_name || 'Unnamed Dish'}
+                                        </p>
+                                        {item.note && (
+                                            <p className="text-[9px] font-bold text-amber-600 mt-1 italic leading-none">⚠ {item.note}</p>
+                                        )}
+                                    </div>
+
+                                    <div className={`px-2.5 py-1 rounded-lg text-xs font-black shrink-0 transition-all
+                                        ${item.is_prepared ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
+                                        ×{item.quantity}
                                     </div>
                                 </div>
-                            )}
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
 
-                            {/* Item checkboxes */}
-                            <div className="mt-4 space-y-2">
-                                {order.items.map(item => {
-                                    const isLoading = loading.has(item.id);
-                                    return (
-                                        <label
-                                            key={item.id}
-                                            className={`flex items-center gap-4 p-4 rounded-2xl border cursor-pointer transition-all select-none
-                                                ${item.is_prepared
-                                                    ? 'bg-green-50 border-green-200'
-                                                    : 'bg-slate-50 border-slate-100 hover:border-slate-200'
-                                                }`}
-                                        >
-                                            {/* Custom checkbox */}
-                                            <div className="relative shrink-0">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={item.is_prepared}
-                                                    disabled={isLoading}
-                                                    onChange={e => onCheck(order.id, item.id, e.target.checked)}
-                                                    className="sr-only"
-                                                />
-                                                <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200
-                                                    ${isLoading ? 'opacity-50' : ''}
-                                                    ${item.is_prepared
-                                                        ? 'bg-green-500 border-green-500'
-                                                        : 'bg-white border-slate-300'
-                                                    }`}>
-                                                    {item.is_prepared && (
-                                                        <span className="material-icons-round text-white text-sm">check</span>
-                                                    )}
-                                                    {isLoading && (
-                                                        <div className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Item info */}
-                                            <div className="flex-1 min-w-0">
-                                                <p className={`text-sm font-black truncate ${item.is_prepared ? 'text-green-700 line-through decoration-green-400' : 'text-slate-800'}`}>
-                                                    {item.name || item.product_name || 'Unnamed Dish'}
-                                                </p>
-                                                {item.note && (
-                                                    <p className="text-[9px] font-bold text-amber-600 mt-0.5 truncate italic">⚠ {item.note}</p>
-                                                )}
-                                            </div>
-
-                                            {/* Quantity badge */}
-                                            <div className={`px-3 py-1.5 rounded-xl text-xs font-black shrink-0
-                                                ${item.is_prepared ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-600'}`}>
-                                                ×{item.quantity}
-                                            </div>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-
-                            {/* Confirm Button */}
-                            <button
-                                disabled={!allPrepared || isConfirming}
-                                onClick={() => allPrepared && onConfirm(order.id)}
-                                className={`mt-5 w-full py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all duration-300
-                                    ${allPrepared && !isConfirming
-                                        ? 'bg-gradient-to-r from-green-500 to-emerald-600 text-white shadow-xl shadow-green-500/30 active:scale-95 cursor-pointer'
-                                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                                    }`}
-                            >
-                                {isConfirming ? (
-                                    <>
-                                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                        正在确认...
-                                    </>
-                                ) : (
-                                    <>
-                                        <span className="material-icons-round text-sm">
-                                            {allPrepared ? 'local_shipping' : 'lock'}
-                                        </span>
-                                        {allPrepared ? '确认完成 — 通知司机出发' : `还剩 ${order.items.filter(i => !i.is_prepared).length} 项未完成`}
-                                    </>
-                                )}
-                            </button>
+            {/* ── Footer ── */}
+            <div className="p-5 mt-auto border-t border-slate-50 bg-slate-50/50 rounded-b-[32px]">
+                <button
+                    disabled={!allPrepared || isConfirming}
+                    onClick={() => allPrepared && onConfirm(order.id)}
+                    className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all duration-300
+                        ${allPrepared && !isConfirming
+                            ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10 active:scale-95 hover:bg-slate-800'
+                            : 'bg-slate-100 text-slate-300 border border-slate-100 cursor-not-allowed'
+                        }`}
+                >
+                    {isConfirming ? (
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                        <>
+                            <span className="material-icons-round text-sm">
+                                {allPrepared ? 'check_circle' : 'hourglass_empty'}
+                            </span>
+                            {allPrepared ? 'Complete Production' : `${totalItems - doneItems} Items Remain`}
                         </>
                     )}
-                </div>
-            )}
+                </button>
+            </div>
         </div>
     );
 };
@@ -295,9 +283,15 @@ const KitchenPrepPage: React.FC = () => {
                         customerName: order.customerName,
                         dueTime: order.dueTime || '',
                         status: order.status,
-                        items: [],
+                        // Map global OrderItem to local OrderItem format
+                        items: (order.items || []).map((it: any) => ({
+                            ...it,
+                            order_id: order.id,
+                            is_prepared: it.is_prepared ?? false,
+                            status: it.status ?? 'pending'
+                        })) as OrderItem[],
                         equipments: order.equipments || {},
-                        itemsLoaded: false,
+                        itemsLoaded: false, // Keep false until we do the supplemental fetch for is_prepared
                         expanded: false,
                         removing: false,
                     };
@@ -325,13 +319,17 @@ const KitchenPrepPage: React.FC = () => {
         if (fetchingItemsRef.current.has(orderId)) return;
         fetchingItemsRef.current.add(orderId);
         try {
-            const items = await AdminOrderService.getOrderItems(orderId);
+            const data = await AdminOrderService.getOrderItems(orderId);
+            const itemsList = Array.isArray(data) ? data : [];
+            
             setKitchenOrders(prev =>
-                prev.map(o =>
-                    o.id === orderId
-                        ? { ...o, items: items as OrderItem[], itemsLoaded: true }
-                        : o
-                )
+                prev.map(o => {
+                    if (o.id !== orderId) return o;
+                    // Treat itemsList (from order_items table) as the source of truth
+                    // It contains the correct IDs for markItemPrepared and is_prepared status
+                    const finalItems = itemsList.length > 0 ? itemsList : o.items;
+                    return { ...o, items: finalItems as OrderItem[], itemsLoaded: true };
+                })
             );
         } catch (e) {
             console.error('Failed to load order items', e);
@@ -379,16 +377,7 @@ const KitchenPrepPage: React.FC = () => {
 
     // ── Event Handlers ────────────────────────────────────────────────────────
 
-    const handleToggle = useCallback((orderId: string) => {
-        setKitchenOrders(prev => prev.map(o => {
-            if (o.id !== orderId) return o;
-            const willExpand = !o.expanded;
-            if (willExpand && !o.itemsLoaded) {
-                loadOrderItems(orderId);
-            }
-            return { ...o, expanded: willExpand };
-        }));
-    }, [loadOrderItems]);
+
 
     const handleItemCheck = useCallback(async (orderId: string, itemId: string, checked: boolean) => {
         // Optimistic UI update
@@ -653,14 +642,14 @@ const KitchenPrepPage: React.FC = () => {
                                         <span className="text-[10px] font-black text-slate-400 bg-slate-100 px-3 py-1 rounded-full border border-slate-200 whitespace-nowrap">{orders.length} 单</span>
                                     </div>
 
-                                    <div className="space-y-3">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
                                         {orders.map(order => (
                                             <OrderCard
                                                 key={order.id}
                                                 order={order}
-                                                onToggle={handleToggle}
                                                 onCheck={handleItemCheck}
                                                 onConfirm={handleKitchenComplete}
+                                                onLoad={loadOrderItems}
                                                 loading={loadingItems}
                                                 confirming={confirmingOrders}
                                             />
@@ -729,24 +718,26 @@ const KitchenPrepPage: React.FC = () => {
                         </div>
                     </header>
                     <div className="p-[16px]">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                             {recipes.map((recipe: Recipe) => (
-                                <div key={recipe.id} className="bg-slate-50/50 p-4 rounded-xl border border-slate-100 flex flex-col gap-3 transition-all hover:shadow-sm group relative cursor-pointer">
-                                    <div className="flex items-center gap-3" onClick={() => setSelectedRecipe(recipe)}>
-                                        <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center text-blue-600 border border-slate-100 shadow-sm group-hover:bg-blue-50 transition-all">
-                                            <span className="material-icons-round text-xl">menu_book</span>
+                                <div key={recipe.id} className="group bg-slate-50 border border-slate-100/50 rounded-3xl p-5 hover:bg-white hover:shadow-2xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all duration-500 cursor-pointer flex flex-col gap-4">
+                                    <div className="flex items-center gap-4" onClick={() => setSelectedRecipe(recipe)}>
+                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 border border-slate-100 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all duration-500">
+                                            <span className="material-icons-round text-[24px]">restaurant_menu</span>
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm font-bold text-slate-800 tracking-tight truncate">{recipe.name}</h3>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase mt-0.5 tracking-widest">{recipe.ingredients.length} Ingredients</p>
+                                            <h3 className="text-sm font-black text-slate-800 tracking-tight truncate group-hover:text-blue-600 transition-colors">{recipe.name}</h3>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className="px-2 py-0.5 bg-slate-900/5 text-[9px] font-black text-slate-500 rounded-lg uppercase tracking-wider">{recipe.ingredients.length} Ingredients</span>
+                                            </div>
                                         </div>
                                     </div>
-                                    <div className="flex gap-2 pt-2 border-t border-slate-200/50">
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEditModal(recipe); }} className="flex-1 py-1.5 bg-white text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-50 hover:text-blue-600 transition-all flex items-center justify-center gap-1">
-                                            <span className="material-icons-round text-xs">edit</span> Edit
+                                    <div className="grid grid-cols-2 gap-2 mt-auto pt-4 border-t border-slate-200/50">
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEditModal(recipe); }} className="py-2.5 bg-white border border-slate-100 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-blue-600 hover:border-blue-100 hover:bg-blue-50 transition-all flex items-center justify-center gap-2">
+                                            <span className="material-icons-round text-sm">edit_note</span> Edit
                                         </button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="flex-1 py-1.5 bg-white text-slate-500 rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-red-50 hover:text-red-600 transition-all flex items-center justify-center gap-1">
-                                            <span className="material-icons-round text-xs">delete_outline</span> Delete
+                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="py-2.5 bg-white border border-slate-100 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-red-600 hover:border-red-100 hover:bg-red-50 transition-all flex items-center justify-center gap-2">
+                                            <span className="material-icons-round text-sm">delete_sweep</span> Delete
                                         </button>
                                     </div>
                                 </div>
@@ -784,7 +775,7 @@ const KitchenPrepPage: React.FC = () => {
                                 </div>
                             ))}
                         </div>
-                        <button onClick={() => setSelectedRecipe(null)} className="w-full py-5 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase tracking-widest shadow-2xl hover:bg-slate-800 transition-all active:scale-95">
+                        <button onClick={() => setSelectedRecipe(null)} className="w-full py-5 bg-slate-900 text-white rounded-[28px] font-black text-[10px] uppercase tracking-widest shadow-2xl shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-[0.98]">
                             Confirm Proportions
                         </button>
                     </div>
@@ -827,8 +818,8 @@ const KitchenPrepPage: React.FC = () => {
                                     ))}
                                 </div>
                             </div>
-                            <button type="submit" className="w-full py-5 bg-slate-900 text-white rounded-[28px] font-black text-sm uppercase tracking-widest shadow-2xl hover:bg-slate-800 transition-all active:scale-95">
-                                {editingRecipeId ? 'Update Recipe' : 'Save Recipe & Ingredients'}
+                            <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-[28px] font-black text-[10px] uppercase tracking-widest shadow-2xl shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-[0.98]">
+                                {editingRecipeId ? 'Update Master Recipe' : 'Create New Preparation'}
                             </button>
                         </form>
                     </div>

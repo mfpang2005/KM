@@ -35,6 +35,9 @@ export const FleetCenterPage: React.FC = () => {
         road_tax_expiry: ''
     });
 
+    const [searchQuery, setSearchQuery] = useState('');
+    const [vehicleSearchQuery, setVehicleSearchQuery] = useState('');
+
     const loadData = useCallback(async () => {
         try {
             const [fleetData, vehiclesData, ordersRes] = await Promise.all([
@@ -216,135 +219,216 @@ export const FleetCenterPage: React.FC = () => {
         window.open(url, '_blank');
     };
 
-    if (loading) return <div className="h-full flex items-center justify-center"><div className="animate-spin h-8 w-8 border-b-2 border-slate-900 rounded-full"></div></div>;
+    const filteredDrivers = useMemo(() => {
+        return drivers.filter(d => 
+            d.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+            d.phone?.includes(searchQuery) ||
+            d.activeAssignment?.vehicle?.plate_no?.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+    }, [drivers, searchQuery]);
+
+    const filteredVehicles = useMemo(() => {
+        return vehicles.filter(v => 
+            v.plate_no?.toLowerCase().includes(vehicleSearchQuery.toLowerCase()) || 
+            v.model?.toLowerCase().includes(vehicleSearchQuery.toLowerCase())
+        );
+    }, [vehicles, vehicleSearchQuery]);
+
+    if (loading) return (
+        <div className="h-screen flex flex-col items-center justify-center bg-slate-50/30">
+            <div className="relative">
+                <div className="w-16 h-16 border-4 border-blue-100 border-t-blue-600 rounded-full animate-spin"></div>
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="material-icons-round text-blue-600 text-xl">local_shipping</span>
+                </div>
+            </div>
+            <p className="mt-4 text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">Initializing Fleet Data...</p>
+        </div>
+    );
 
     if (error) return (
-        <div className="h-full flex flex-col items-center justify-center gap-4">
-            <span className="material-icons-round text-5xl text-red-500">error_outline</span>
-            <p className="text-slate-600 font-bold">{error}</p>
+        <div className="h-screen flex flex-col items-center justify-center gap-6 bg-slate-50/30 p-6 text-center">
+            <div className="w-24 h-24 bg-red-50 rounded-full flex items-center justify-center">
+                <span className="material-icons-round text-5xl text-red-500">cloud_off</span>
+            </div>
+            <div className="space-y-2">
+                <h2 className="text-2xl font-black text-slate-800">Connection Failed</h2>
+                <p className="text-slate-500 font-bold max-w-sm">{error}</p>
+            </div>
             <button 
                 onClick={loadData}
-                className="px-6 py-2 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-600 transition-all"
+                className="px-10 py-4 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all shadow-xl shadow-slate-900/20 active:scale-95 flex items-center gap-2"
             >
-                Retry
+                <span className="material-icons-round text-sm">refresh</span>
+                Try Reconecting
             </button>
         </div>
     );
 
     return (
-        <div className="min-h-full pt-10 pb-20 space-y-12 animate-in fade-in duration-500">
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row items-start justify-between gap-8">
-                <div className="space-y-6">
-                    <h1 className="text-5xl font-black text-slate-900 tracking-tighter">车队中心 <span className="text-blue-600">Fleet Center</span></h1>
-                    <div className="flex items-center gap-3">
-                        <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-sm border ${
-                            rtStatus === 'SUBSCRIBED' ? 'bg-emerald-50/50 text-emerald-600 border-emerald-100' : 'bg-red-50/50 text-red-600 border-red-100'
-                        }`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${
-                                rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'
-                            }`}></span>
-                            {rtStatus === 'SUBSCRIBED' ? 'Real-time Linked' : `Link Status: ${rtStatus}`}
+        <div className="min-h-full pt-6 pb-20 space-y-10 animate-in fade-in duration-500">
+            {/* High-Impact Dashboard Header */}
+            <div className="relative group p-1 tracking-tight">
+                {/* Background Accent */}
+                <div className="absolute -inset-4 bg-gradient-to-r from-blue-500/5 via-transparent to-purple-500/5 rounded-[4rem] blur-3xl opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
+
+                <div className="relative flex flex-col xl:flex-row items-center justify-between gap-8 bg-white/60 backdrop-blur-3xl border border-white p-8 xl:p-12 rounded-[3.5rem] shadow-2xl shadow-slate-900/5">
+                    <div className="space-y-8 flex-1 w-full text-center xl:text-left">
+                        <div className="space-y-3">
+                            <div className="flex items-center justify-center xl:justify-start gap-4 mb-2">
+                                <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-500/30">
+                                    <span className="material-icons-round text-2xl">fleet_manage</span>
+                                </div>
+                                <h1 className="text-5xl 2xl:text-6xl font-black text-slate-900 tracking-tighter">
+                                    车队管理 <span className="text-blue-600">Fleet Control</span>
+                                </h1>
+                            </div>
+                            <p className="text-slate-400 font-bold text-sm 2xl:text-base tracking-wide max-w-xl mx-auto xl:mx-0">
+                                Monitor real-time driver availability, vehicle assets, and dispatch upcoming missions.
+                            </p>
+                        </div>
+
+                        <div className="flex flex-wrap items-center justify-center xl:justify-start gap-3">
+                            <div className={`flex items-center gap-2 px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-wider backdrop-blur-sm border transition-all ${
+                                rtStatus === 'SUBSCRIBED' ? 'bg-emerald-50/80 text-emerald-600 border-emerald-100' : 'bg-red-50/80 text-red-600 border-red-100'
+                            }`}>
+                                <span className={`w-2 h-2 rounded-full ${
+                                    rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-red-500'
+                                }`}></span>
+                                {rtStatus === 'SUBSCRIBED' ? 'Live Sync Active' : `Sync: ${rtStatus}`}
+                            </div>
+                            <button 
+                                onClick={() => setShowAddVehicle(true)}
+                                className="px-8 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5 shadow-xl shadow-slate-900/20"
+                            >
+                                <span className="material-icons-round text-sm">add_circle</span>
+                                Enroll Vehicle
+                            </button>
                         </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                        <button 
-                            onClick={() => setShowAddVehicle(true)}
-                            className="px-6 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all flex items-center gap-2 shadow-2xl shadow-slate-900/20 active:scale-95"
-                        >
-                            <span className="material-icons-round text-sm">local_shipping</span>
-                            Add Vehicle
-                        </button>
-                    </div>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                    <div className="bg-white/80 backdrop-blur-2xl border border-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-900/5 flex items-center gap-5 min-w-[200px]">
-                        <div className="w-14 h-14 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-500 shadow-inner">
-                            <span className="material-icons-round text-2xl">person_pin</span>
+                    
+                    {/* Stats Dashboard */}
+                    <div className="flex flex-wrap items-center justify-center gap-4 xl:gap-6">
+                        <div className="bg-slate-50/50 border border-white p-6 2xl:p-8 rounded-[2.5rem] shadow-xl shadow-slate-900/5 flex flex-col items-center gap-3 min-w-[170px] hover:bg-white transition-colors cursor-default group/stat">
+                            <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-emerald-500 shadow-sm border border-emerald-100 group-hover/stat:scale-110 transition-transform">
+                                <span className="material-icons-round text-xl">person_search</span>
+                            </div>
+                            <div className="text-center">
+                                <p className="text-3xl font-black text-slate-800 font-mono italic leading-none">{stats.activeDrivers}</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">在线司机 Active</p>
+                            </div>
                         </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">在线司机</p>
-                            <p className="text-3xl font-black text-slate-800 font-mono italic leading-none">{stats.activeDrivers}</p>
-                        </div>
-                    </div>
-                    <div className="bg-white/80 backdrop-blur-2xl border border-white p-6 rounded-[2.5rem] shadow-xl shadow-slate-900/5 flex items-center gap-5 min-w-[200px]">
-                        <div className="w-14 h-14 rounded-2xl bg-purple-50 flex items-center justify-center text-purple-500 shadow-inner">
-                            <span className="material-icons-round text-2xl">inventory_2</span>
-                        </div>
-                        <div>
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-1">空闲车辆</p>
-                            <p className="text-3xl font-black text-slate-800 font-mono italic leading-none">{stats.availableVehicles}</p>
+                        <div className="bg-slate-50/50 border border-white p-6 2xl:p-8 rounded-[2.5rem] shadow-xl shadow-slate-900/5 flex flex-col items-center gap-3 min-w-[170px] hover:bg-white transition-colors cursor-default group/stat">
+                            <div className="w-12 h-12 rounded-2xl bg-white flex items-center justify-center text-purple-500 shadow-sm border border-purple-100 group-hover/stat:scale-110 transition-transform">
+                                <span className="material-icons-round text-xl">local_shipping</span>
+                            </div>
+                            <div className="text-center">
+                                <p className="text-3xl font-black text-slate-800 font-mono italic leading-none">{stats.availableVehicles}</p>
+                                <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] mt-2">空闲载具 Idle</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            {/* Navigation Tabs */}
-            <div className="flex gap-8 border-b border-slate-200/50 pb-2">
-                <button 
-                    onClick={() => setViewMode('fleet')}
-                    className={`relative pb-4 text-[11px] font-black uppercase tracking-[0.3em] transition-all ${viewMode === 'fleet' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                    Fleet Status
-                    {viewMode === 'fleet' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-full animate-in slide-in-from-left duration-300"></div>}
-                </button>
-                <button 
-                    onClick={() => setViewMode('inventory')}
-                    className={`relative pb-4 text-[11px] font-black uppercase tracking-[0.3em] transition-all ${viewMode === 'inventory' ? 'text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
-                >
-                    Vehicle Inventory
-                    {viewMode === 'inventory' && <div className="absolute bottom-0 left-0 right-0 h-1 bg-blue-600 rounded-full animate-in slide-in-from-left duration-300"></div>}
-                </button>
+            {/* Control Bar: Search & View Switcher */}
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6 bg-slate-50/50 p-3 rounded-[2.5rem] border border-slate-100">
+                <div className="flex bg-white p-1.5 rounded-[1.8rem] shadow-sm border border-slate-100 w-full md:w-auto self-stretch md:self-auto">
+                    <button 
+                        onClick={() => setViewMode('fleet')}
+                        className={`flex-1 md:flex-none px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
+                            viewMode === 'fleet' ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        <span className="material-icons-round text-sm">departure_board</span>
+                        Fleet Status
+                    </button>
+                    <button 
+                        onClick={() => setViewMode('inventory')}
+                        className={`flex-1 md:flex-none px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
+                            viewMode === 'inventory' ? 'bg-slate-900 text-white shadow-xl shadow-slate-900/10' : 'text-slate-400 hover:text-slate-600'
+                        }`}
+                    >
+                        <span className="material-icons-round text-sm">inventory</span>
+                        Vehicle Assets
+                    </button>
+                </div>
+
+                <div className="relative w-full md:w-96 group">
+                    <span className="material-icons-round absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors">search</span>
+                    <input 
+                        type="text"
+                        placeholder={viewMode === 'fleet' ? "Search Drivers or Plates..." : "Search Vehicle Plates..."}
+                        value={viewMode === 'fleet' ? searchQuery : vehicleSearchQuery}
+                        onChange={(e) => viewMode === 'fleet' ? setSearchQuery(e.target.value) : setVehicleSearchQuery(e.target.value)}
+                        className="w-full pl-14 pr-6 py-4 bg-white border border-slate-100 rounded-[1.8rem] text-sm font-bold shadow-sm focus:outline-none focus:ring-4 focus:ring-blue-100 focus:border-blue-600 transition-all placeholder:text-slate-300"
+                    />
+                </div>
             </div>
 
             {viewMode === 'fleet' ? (
                 <>
-                    {/* Package Arrangement (待指派订单) */}
+                    {/* Mission Pool (Pending Orders) */}
                     {pendingOrders.length > 0 && (
                         <div className="space-y-6 animate-in slide-in-from-top-4 duration-700">
-                            <div className="flex items-center justify-between px-2">
-                                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">待指派订单池 <span className="text-blue-600 ml-2">Package Arrangement</span> ({pendingOrders.length})</h2>
-                                <div className="h-px flex-1 mx-8 bg-gradient-to-r from-slate-200 to-transparent"></div>
+                            <div className="flex items-center justify-between px-4">
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.3em]">待指派任务池 <span className="text-blue-600 ml-2">Mission Pool</span></h2>
+                                    <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black border border-blue-100/50">{pendingOrders.length}</span>
+                                </div>
+                                <div className="h-px flex-1 mx-10 bg-slate-100"></div>
                             </div>
-                            <div className="flex gap-6 overflow-x-auto no-scrollbar pb-6 -mx-4 px-4">
+
+                            <div className="flex gap-6 overflow-x-auto no-scrollbar pb-6 -mx-4 px-4 mask-fade-right">
                                 {pendingOrders.map(order => (
-                                    <div key={order.id} className="min-w-[340px] bg-white border border-slate-100 p-8 rounded-[3rem] shadow-2xl shadow-slate-900/5 hover:border-blue-500/30 transition-all flex flex-col gap-6 group relative overflow-hidden">
-                                        <div className="absolute top-0 right-0 w-24 h-24 bg-blue-50/50 blur-3xl -mr-12 -mt-12 group-hover:bg-blue-100/50 transition-all"></div>
-                                        <div className="flex justify-between items-start relative">
+                                    <div 
+                                        key={order.id} 
+                                        className={`min-w-[320px] bg-white border p-7 rounded-[3rem] shadow-xl transition-all flex flex-col gap-6 group relative overflow-hidden ${
+                                            selectedOrderForAssignment?.id === order.id ? 'border-blue-600 ring-4 ring-blue-100 scale-95' : 'border-slate-50 hover:border-blue-200'
+                                        }`}
+                                    >
+                                        <div className="flex justify-between items-start">
                                             <div>
-                                                <p className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1.5 flex items-center gap-1.5">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse"></span>
-                                                    Order #{order.order_number || order.id.slice(0, 8)}
-                                                </p>
+                                                <div className="flex items-center gap-2 mb-1.5">
+                                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">#{order.order_number || order.id.slice(0, 8)}</span>
+                                                    <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                                    <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest italic">{order.status}</span>
+                                                </div>
                                                 <h3 className="text-lg font-black text-slate-800 line-clamp-1">{order.customerName}</h3>
                                             </div>
-                                            <div className="w-12 h-12 rounded-2xl bg-blue-50 flex flex-col items-center justify-center text-blue-600 border border-blue-100">
-                                                <span className="text-[10px] font-black leading-none">{order.dueTime ? new Date(order.dueTime).getHours() : '--'}</span>
-                                                <span className="text-[10px] font-black leading-none opacity-50">{order.dueTime ? String(new Date(order.dueTime).getMinutes()).padStart(2, '0') : '--'}</span>
+                                            <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 text-center min-w-[50px]">
+                                                <p className="text-[9px] font-black text-slate-400 uppercase leading-none mb-1">Due</p>
+                                                <p className="text-sm font-black text-slate-800 font-mono leading-none">
+                                                    {order.dueTime ? new Date(order.dueTime).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
+                                                </p>
                                             </div>
                                         </div>
-                                        <div className="flex items-start gap-3 text-slate-500 bg-slate-50/80 p-4 rounded-2xl border border-slate-100/50">
-                                            <span className="material-icons-round text-blue-400 text-lg mt-0.5">location_on</span>
-                                            <p className="text-[11px] font-bold leading-relaxed line-clamp-2">{order.address}</p>
+
+                                        <div className="flex items-center gap-3 bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50">
+                                            <div className="w-8 h-8 rounded-xl bg-white flex items-center justify-center text-blue-500 shadow-sm border border-slate-50 shrink-0">
+                                                <span className="material-icons-round text-lg">near_me</span>
+                                            </div>
+                                            <p className="text-[11px] font-bold text-slate-500 leading-snug line-clamp-2">{order.address}</p>
                                         </div>
-                                        <div className="pt-2 flex items-center justify-between">
-                                            <span className="px-3 py-1.5 rounded-xl bg-purple-50 text-purple-600 text-[10px] font-black uppercase tracking-widest border border-purple-100/50">Ready to Ship</span>
-                                            <button 
-                                                onClick={() => {
-                                                    if (selectedOrderForAssignment?.id === order.id) {
-                                                        setSelectedOrderForAssignment(null);
-                                                    } else {
-                                                        setSelectedOrderForAssignment(order);
-                                                        // Scroll to fleet list maybe?
-                                                        document.getElementById('fleet-list')?.scrollIntoView({ behavior: 'smooth' });
-                                                    }
-                                                }}
-                                                className={`flex items-center gap-1.5 text-[11px] font-black uppercase tracking-widest transition-all ${selectedOrderForAssignment?.id === order.id ? 'text-red-500' : 'text-blue-600 hover:translate-x-1'}`}
-                                            >
-                                                {selectedOrderForAssignment?.id === order.id ? '取消指派' : '指派任务'} <span className="material-icons-round text-sm">{selectedOrderForAssignment?.id === order.id ? 'close' : 'arrow_forward'}</span>
-                                            </button>
-                                        </div>
+
+                                        <button 
+                                            onClick={() => {
+                                                if (selectedOrderForAssignment?.id === order.id) {
+                                                    setSelectedOrderForAssignment(null);
+                                                } else {
+                                                    setSelectedOrderForAssignment(order);
+                                                    document.getElementById('fleet-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                                }
+                                            }}
+                                            className={`w-full py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 ${
+                                                selectedOrderForAssignment?.id === order.id 
+                                                ? 'bg-red-50 text-red-600 border border-red-100 shadow-sm' 
+                                                : 'bg-blue-600 text-white shadow-lg shadow-blue-500/30 hover:bg-blue-700 hover:scale-105'
+                                            }`}
+                                        >
+                                            <span className="material-icons-round text-sm">{selectedOrderForAssignment?.id === order.id ? 'close' : 'assignment_ind'}</span>
+                                            {selectedOrderForAssignment?.id === order.id ? 'Cancel Selection' : 'Assign Mission'}
+                                        </button>
                                     </div>
                                 ))}
                             </div>
@@ -352,121 +436,133 @@ export const FleetCenterPage: React.FC = () => {
                     )}
 
                     {/* Fleet List */}
-                    <div id="fleet-list" className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                        {drivers.map(driver => (
-                            <div key={driver.id} className="group relative bg-slate-900 border border-white/5 rounded-[3.5rem] p-10 shadow-2xl overflow-hidden transition-all hover:translate-y-[-8px] hover:shadow-blue-500/20">
-                                <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[100px] rounded-full group-hover:bg-blue-500/20 transition-all pointer-events-none"></div>
-                                
-                                <div className="relative flex flex-col lg:flex-row gap-10 items-start">
-                                    {/* Driver Identity */}
-                                    <div className="flex flex-row lg:flex-col items-center lg:items-start gap-6 shrink-0">
-                                        <div className="relative">
-                                            <div className="w-24 h-24 rounded-[2.5rem] bg-white/5 border border-white/10 flex items-center justify-center text-white/20 overflow-hidden shadow-inner">
-                                                {driver.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover" alt="" /> : <span className="material-icons-round text-5xl">person</span>}
+                    <div id="fleet-list" className="grid grid-cols-1 xl:grid-cols-2 gap-8 pb-10">
+                        {filteredDrivers.map(driver => (
+                            <div 
+                                key={driver.id} 
+                                className={`group relative bg-white border rounded-[3rem] p-1 shadow-2xl transition-all duration-500 hover:-translate-y-2 ${
+                                    selectedOrderForAssignment ? 'border-blue-200 ring-8 ring-blue-50/50' : 'border-slate-50'
+                                }`}
+                            >
+                                <div className="bg-slate-900 rounded-[2.8rem] p-8 xl:p-10 relative overflow-hidden h-full flex flex-col">
+                                    {/* Accent background */}
+                                    <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 blur-[100px] rounded-full group-hover:bg-blue-500/20 transition-all pointer-events-none"></div>
+                                    
+                                    <div className="relative flex flex-col lg:flex-row gap-8 items-start flex-1">
+                                        {/* Driver Identity */}
+                                        <div className="flex flex-row lg:flex-col items-center lg:items-start gap-5 shrink-0">
+                                            <div className="relative">
+                                                <div className="w-20 h-20 rounded-3xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20 overflow-hidden shadow-inner group-hover:scale-105 transition-transform duration-500">
+                                                    {driver.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover" alt="" /> : <span className="material-icons-round text-4xl">person</span>}
+                                                </div>
+                                                <div className={`absolute -bottom-1 -right-1 w-8 h-8 rounded-xl border-4 border-slate-900 flex items-center justify-center shadow-xl ${driver.activeOrders.length > 0 ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+                                                    <span className="material-icons-round text-white text-[16px]">{driver.activeOrders.length > 0 ? 'local_shipping' : 'potted_plant'}</span>
+                                                </div>
                                             </div>
-                                            <div className={`absolute -bottom-2 -right-2 w-10 h-10 rounded-2xl border-4 border-slate-900 flex items-center justify-center shadow-2xl ${driver.activeOrders.length > 0 ? 'bg-emerald-500 shadow-emerald-500/40' : 'bg-red-500 shadow-red-500/40'}`}>
-                                                <span className="material-icons-round text-white text-[20px]">{driver.activeOrders.length > 0 ? 'bolt' : 'power_settings_new'}</span>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h3 className="text-2xl font-black text-white tracking-tight">{driver.name}</h3>
-                                            <div className="flex items-center gap-2 mt-2">
-                                                <span className="material-icons-round text-blue-400 text-sm">phone</span>
-                                                <p className="text-[11px] font-black text-blue-400 uppercase tracking-widest">{driver.phone || 'No Phone'}</p>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Status & Vehicle Info */}
-                                    <div className="flex-1 space-y-8 w-full">
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="bg-white/5 rounded-[2rem] p-6 border border-white/5 backdrop-blur-md">
-                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-3">当前车辆 Vehicle</p>
-                                                <p className="text-lg font-black text-white font-mono tracking-[0.2em]">{driver.activeAssignment?.vehicle ? driver.activeAssignment.vehicle.plate_no : '---'}</p>
-                                                <p className="text-[11px] font-bold text-slate-400 mt-1 truncate opacity-60 italic">{driver.activeAssignment?.vehicle?.model || '未绑定车辆'}</p>
-                                            </div>
-                                            <div className="bg-white/5 rounded-[2rem] p-6 border border-white/5 backdrop-blur-md">
-                                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.3em] mb-3">今日任务 Task</p>
-                                                <div className="flex items-baseline gap-2">
-                                                    <span className="text-3xl font-black text-white font-mono leading-none tracking-tighter">{driver.completedToday}</span>
-                                                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Delivered</span>
+                                            <div className="text-left lg:text-left">
+                                                <h3 className="text-xl font-black text-white tracking-tight">{driver.name}</h3>
+                                                <div className="flex items-center gap-2 mt-1">
+                                                    <span className="material-icons-round text-blue-400 text-xs">settings_phone</span>
+                                                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{driver.phone || 'NO PHONE'}</p>
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="flex flex-wrap items-center justify-between gap-6">
-                                            <div className="flex flex-col gap-2">
-                                                {driver.activeOrders.length > 0 ? (
-                                                    <div className="flex flex-col gap-3 w-full">
-                                                        {driver.activeOrders.map(o => (
-                                                            <div key={o.id} className="flex flex-col gap-3 p-4 rounded-3xl bg-white/5 border border-white/5 animate-in slide-in-from-right duration-300">
-                                                                <div className="flex items-center justify-between">
-                                                                    <div className="flex items-center gap-3">
-                                                                        <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-                                                                        <span className="text-[11px] font-black text-emerald-400 uppercase tracking-widest">{o.order_number || o.id.slice(0,8)}</span>
-                                                                    </div>
-                                                                    <span className="text-[10px] font-black text-slate-500 uppercase">{o.status}</span>
-                                                                </div>
-                                                                <p className="text-xs font-bold text-white line-clamp-1">{o.customerName}</p>
-                                                                
-                                                                <div className="flex items-center gap-2">
-                                                                    <button 
-                                                                        onClick={() => handleWhatsAppOrderDetails(o)}
-                                                                        title="发送订单详情"
-                                                                        className="flex-1 py-2 bg-emerald-500/20 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1"
-                                                                    >
-                                                                        <span className="material-icons-round text-sm">receipt_long</span>
-                                                                        详情
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={() => handleWhatsAppDeparture(o)}
-                                                                        title="发送出发通知"
-                                                                        className="flex-1 py-2 bg-blue-500/20 text-blue-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-blue-500 hover:text-white transition-all flex items-center justify-center gap-1"
-                                                                    >
-                                                                        <span className="material-icons-round text-sm">rocket_launch</span>
-                                                                        出发
-                                                                    </button>
-                                                                    <button 
-                                                                        onClick={() => handleUnassignOrder(o.id)}
-                                                                        title="退回待指派池"
-                                                                        className="w-9 h-9 bg-red-500/20 text-red-500 rounded-xl flex items-center justify-center hover:bg-red-500 hover:text-white transition-all"
-                                                                    >
-                                                                        <span className="material-icons-round text-base">undo</span>
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        ))}
+                                        {/* Operational Info */}
+                                        <div className="flex-1 space-y-6 w-full">
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="bg-white/5 rounded-2xl p-5 border border-white/5 backdrop-blur-md group-hover:bg-white/10 transition-colors">
+                                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Current Asset</p>
+                                                    <p className="text-sm font-black text-white font-mono tracking-widest leading-none">
+                                                        {driver.activeAssignment?.vehicle ? driver.activeAssignment.vehicle.plate_no : '---'}
+                                                    </p>
+                                                    <p className="text-[10px] font-bold text-slate-400 mt-2 truncate opacity-50 italic">
+                                                        {driver.activeAssignment?.vehicle?.model || 'UNASSIGNED'}
+                                                    </p>
+                                                </div>
+                                                <div className="bg-white/5 rounded-2xl p-5 border border-white/5 backdrop-blur-md group-hover:bg-white/10 transition-colors">
+                                                    <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Today's Load</p>
+                                                    <div className="flex items-baseline gap-2">
+                                                        <span className="text-2xl font-black text-white font-mono leading-none">{driver.completedToday}</span>
+                                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Done</span>
                                                     </div>
-                                                ) : (
-                                                    <div className="flex items-center gap-3 px-4 py-2 rounded-2xl bg-white/5 text-slate-500 text-[11px] font-black uppercase tracking-widest border border-white/5">
-                                                        <span className="w-2 h-2 rounded-full bg-slate-700"></span>
-                                                        等待指派 IDLE
-                                                    </div>
-                                                )}
+                                                </div>
                                             </div>
 
-                                            <div className="flex items-center gap-3">
-                                                {selectedOrderForAssignment ? (
-                                                    <button 
-                                                        disabled={isAssigningOrder}
-                                                        onClick={() => handleAssignOrder(driver.id)}
-                                                        className="px-6 py-3 bg-blue-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-slate-900 transition-all shadow-xl animate-bounce"
-                                                    >
-                                                        {isAssigningOrder ? 'Processing...' : 'Assign to Me'}
-                                                    </button>
+                                            {/* Mission Section */}
+                                            <div className="space-y-3">
+                                                {driver.activeOrders.length > 0 ? (
+                                                    driver.activeOrders.map(o => (
+                                                        <div key={o.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3 group/mission hover:bg-white/10 transition-all">
+                                                            <div className="flex items-center justify-between">
+                                                                <div className="flex items-center gap-2">
+                                                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                                                                    <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest">#{o.order_number || o.id.slice(0,8)}</span>
+                                                                </div>
+                                                                <span className="text-[9px] font-black text-slate-500 uppercase px-2 py-0.5 rounded-md bg-white/5">{o.status}</span>
+                                                            </div>
+                                                            <p className="text-xs font-bold text-white line-clamp-1">{o.customerName}</p>
+                                                            
+                                                            <div className="grid grid-cols-3 gap-2">
+                                                                <button 
+                                                                    onClick={() => handleWhatsAppOrderDetails(o)}
+                                                                    className="py-2 bg-emerald-500/10 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1"
+                                                                >
+                                                                    <span className="material-icons-round text-sm">info</span>
+                                                                    Detail
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => handleWhatsAppDeparture(o)}
+                                                                    className="py-2 bg-blue-500/10 text-blue-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-blue-500 hover:text-white transition-all flex items-center justify-center gap-1"
+                                                                >
+                                                                    <span className="material-icons-round text-sm">rocket</span>
+                                                                    Depart
+                                                                </button>
+                                                                <button 
+                                                                    onClick={() => handleUnassignOrder(o.id)}
+                                                                    className="py-2 bg-red-500/10 text-red-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-1"
+                                                                >
+                                                                    <span className="material-icons-round text-sm">backspace</span>
+                                                                    Return
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    ))
                                                 ) : (
-                                                    <button 
-                                                        onClick={() => setAssigningVehicleTo(driver)}
-                                                        className="px-6 py-3 bg-white text-slate-900 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all shadow-xl active:scale-95"
-                                                    >
-                                                        Assign Vehicle
-                                                    </button>
+                                                    <div className="flex items-center justify-center gap-3 p-4 rounded-2xl bg-white/[0.02] text-slate-500 text-[10px] font-black uppercase tracking-widest border border-dashed border-white/10">
+                                                        <span className="material-icons-round text-sm">hourglass_empty</span>
+                                                        Standby Mode
+                                                    </div>
                                                 )}
-                                                <button className="w-12 h-12 bg-white/5 hover:bg-white/10 text-slate-400 rounded-2xl flex items-center justify-center transition-all border border-white/5">
-                                                    <span className="material-icons-round text-xl">more_vert</span>
-                                                </button>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    {/* Action Footer */}
+                                    <div className="mt-8 pt-6 border-t border-white/5 flex items-center justify-between gap-4">
+                                        {selectedOrderForAssignment ? (
+                                            <button 
+                                                disabled={isAssigningOrder}
+                                                onClick={() => handleAssignOrder(driver.id)}
+                                                className="flex-1 py-4 bg-blue-600 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] hover:bg-blue-500 transition-all shadow-xl shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2 animate-pulse"
+                                            >
+                                                <span className="material-icons-round text-sm">task_alt</span>
+                                                Assign Mission To {driver.name?.split(' ')[0] || 'Driver'}
+                                            </button>
+                                        ) : (
+                                            <>
+                                                <button 
+                                                    onClick={() => setAssigningVehicleTo(driver)}
+                                                    className="flex-1 py-4 bg-white text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 hover:text-white transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
+                                                >
+                                                    <span className="material-icons-round text-sm">key</span>
+                                                    Update Vehicle
+                                                </button>
+                                                <button className="w-14 h-14 bg-white/5 hover:bg-white/10 text-slate-400 rounded-2xl flex items-center justify-center transition-all border border-white/5">
+                                                    <span className="material-icons-round text-xl">settings</span>
+                                                </button>
+                                            </>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -476,71 +572,75 @@ export const FleetCenterPage: React.FC = () => {
             ) : (
                 /* Vehicle Inventory View (车辆盘点) */
                 <div className="space-y-8 animate-in fade-in duration-700">
-                    <div className="flex items-center justify-between px-2">
-                        <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em]">车辆资产库 <span className="text-blue-600 ml-2">Vehicle Inventory</span></h2>
-                        <div className="h-px flex-1 mx-10 bg-gradient-to-r from-slate-200 to-transparent"></div>
+                    <div className="flex items-center justify-between px-4">
+                        <div className="flex items-center gap-3">
+                            <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.3em]">资产管理中心 <span className="text-blue-600 ml-2">Vehicle Asset Manager</span></h2>
+                            <span className="px-2.5 py-1 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-black border border-slate-200">{filteredVehicles.length}</span>
+                        </div>
+                        <div className="h-px flex-1 mx-10 bg-slate-100"></div>
                     </div>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                        {vehicles.map(v => (
-                            <div key={v.id} className="bg-white border border-slate-100 p-10 rounded-[3.5rem] shadow-2xl shadow-slate-900/5 hover:border-blue-500/30 transition-all group relative overflow-hidden">
-                                <div className="absolute top-0 right-0 w-32 h-32 bg-slate-50 blur-[60px] -mr-16 -mt-16 group-hover:bg-blue-50 transition-all"></div>
-                                
-                                <div className="flex items-center justify-between mb-8 relative">
-                                    <div className="w-16 h-16 rounded-[1.8rem] bg-slate-900 flex items-center justify-center text-white group-hover:bg-blue-600 group-hover:rotate-6 transition-all shadow-xl shadow-slate-900/10 group-hover:shadow-blue-600/20">
-                                        <span className="material-icons-round text-3xl">local_shipping</span>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-8">
+                        {filteredVehicles.map(v => (
+                            <div key={v.id} className="bg-white border border-slate-50 p-7 rounded-[3rem] shadow-xl hover:border-blue-500/20 transition-all group relative flex flex-col gap-8">
+                                <div className="flex items-center justify-between relative">
+                                    <div className="w-14 h-14 rounded-2xl bg-slate-900 flex items-center justify-center text-white group-hover:bg-blue-600 group-hover:rotate-12 transition-all shadow-xl shadow-slate-900/10 shrink-0">
+                                        <span className="material-icons-round text-2xl">
+                                            {v.type === 'Van' ? 'local_shipping' : v.type === 'Truck' ? 'fire_truck' : v.type === 'Motorcycle' ? 'moped' : 'directions_car'}
+                                        </span>
                                     </div>
-                                    <div className="flex flex-col items-end gap-2 relative">
-                                        <div className={`px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-sm ${
-                                            v.status === 'available' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 
-                                            v.status === 'busy' ? 'bg-orange-50 text-orange-600 border border-orange-100' :
-                                            'bg-red-50 text-red-600 border border-red-100'
+                                    <div className="flex flex-col items-end gap-2 text-right">
+                                        <div className={`relative px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-colors shadow-sm ${
+                                            v.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                                            v.status === 'busy' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                            'bg-red-50 text-red-600 border-red-100'
                                         }`}>
-                                            {v.status === 'available' ? '● Available' : v.status === 'busy' ? '○ Busy' : '⚠ Repair'}
+                                            {v.status === 'available' ? '● Ready' : v.status === 'busy' ? '○ Active' : '⚠ Action Needed'}
+                                            <select 
+                                                className="opacity-0 absolute inset-0 cursor-pointer w-full h-full"
+                                                value={v.status}
+                                                onChange={(e) => handleUpdateVehicleStatus(v.id, e.target.value as any)}
+                                            >
+                                                <option value="available">Available</option>
+                                                <option value="busy">Busy</option>
+                                                <option value="repair">Repair</option>
+                                            </select>
                                         </div>
-                                        <select 
-                                            className="opacity-0 absolute inset-0 cursor-pointer"
-                                            value={v.status}
-                                            onChange={(e) => handleUpdateVehicleStatus(v.id, e.target.value as any)}
-                                        >
-                                            <option value="available">Available</option>
-                                            <option value="busy">Busy</option>
-                                            <option value="repair">Repair</option>
-                                        </select>
+                                        <p className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">
+                                            Status: <span className="text-slate-500">{v.status}</span>
+                                        </p>
                                     </div>
                                 </div>
 
-                                <div className="relative space-y-1">
-                                    <h3 className="text-3xl font-black text-slate-900 font-mono tracking-[0.1em]">{v.plate_no}</h3>
-                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                        {v.model || 'Standard Model'} 
-                                        <span className="w-1 h-1 rounded-full bg-slate-300"></span>
-                                        <span className="text-blue-600">{v.type}</span>
+                                <div className="space-y-1 text-center">
+                                    <h3 className="text-2xl font-black text-slate-900 font-mono tracking-widest">{v.plate_no}</h3>
+                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center justify-center gap-2">
+                                        {v.model || 'GENERIC'} 
+                                        <span className="w-1 h-1 rounded-full bg-slate-200"></span>
+                                        <span className="text-blue-600 font-bold">{v.type}</span>
                                     </p>
                                 </div>
                                 
-                                <div className="mt-10 pt-8 border-t border-slate-50 flex items-center justify-between relative">
+                                <div className="bg-slate-50 rounded-2xl p-4 flex items-center justify-between border border-slate-100">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400">
-                                            <span className="material-icons-round text-xl">event_available</span>
-                                        </div>
+                                        <span className="material-icons-round text-slate-400 text-lg">event_repeat</span>
                                         <div>
-                                            <p className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">Road Tax Expiry</p>
-                                            <p className="text-sm font-black text-slate-700 font-mono italic">{v.road_tax_expiry || 'N/A'}</p>
+                                            <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter leading-none">Road Tax</p>
+                                            <p className="text-[11px] font-bold text-slate-600 font-mono whitespace-nowrap">{v.road_tax_expiry || 'No Expiry Set'}</p>
                                         </div>
                                     </div>
-                                    <div className="flex gap-3">
+                                    <div className="flex items-center gap-1.5">
                                         <button 
                                             onClick={() => setEditingVehicle(v)}
-                                            className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm border border-slate-100/50"
+                                            className="w-10 h-10 rounded-xl bg-white text-slate-400 flex items-center justify-center hover:bg-blue-600 hover:text-white transition-all shadow-sm border border-slate-200/50"
                                         >
-                                            <span className="material-icons-round text-[18px]">edit</span>
+                                            <span className="material-icons-round text-sm">edit</span>
                                         </button>
                                         <button 
                                             onClick={() => handleDeleteVehicle(v.id)}
-                                            className="w-12 h-12 rounded-2xl bg-slate-50 text-slate-400 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm border border-slate-100/50"
+                                            className="w-10 h-10 rounded-xl bg-white text-slate-400 flex items-center justify-center hover:bg-red-500 hover:text-white transition-all shadow-sm border border-slate-200/50"
                                         >
-                                            <span className="material-icons-round text-[18px]">delete_outline</span>
+                                            <span className="material-icons-round text-sm">delete</span>
                                         </button>
                                     </div>
                                 </div>

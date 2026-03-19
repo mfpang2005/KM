@@ -169,7 +169,7 @@ const KitchenCalendarPage: React.FC = () => {
             {/* Header / Month Selector */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
-                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Calendar Monitoring</h2>
+                    <h2 className="text-2xl font-black text-slate-800 tracking-tight">Event Calendar Monitoring</h2>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Real-time catering order & dispatch schedule</p>
                 </div>
                 <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">

@@ -107,7 +107,10 @@ async def delete_vehicle(
     return {"message": "Vehicle deleted successfully"}
 
 @router.post("/assign")
-async def assign_vehicle(assignment: DriverAssignmentBase):
+async def assign_vehicle(
+    assignment: DriverAssignmentBase,
+    current_user: dict = Depends(require_admin)
+):
     """将车辆派发给司机"""
     # 1. 检查车辆当前状态
     vehicle_resp = supabase.table("vehicles").select("*").eq("id", assignment.vehicle_id).execute()
