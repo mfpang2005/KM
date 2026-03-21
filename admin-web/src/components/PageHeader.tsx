@@ -30,7 +30,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
         if (!scrollContainer) return;
 
         const handleScroll = () => {
-            setIsCompact(scrollContainer.scrollTop > 60);
+            const scroll = scrollContainer.scrollTop;
+            if (scroll > 80) {
+                setIsCompact(true);
+            } else if (scroll < 60) {
+                setIsCompact(false);
+            }
         };
 
         scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
@@ -53,7 +58,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({ title, subtitle, actions
 
     return (
         <header
-            className={`sticky top-[-1px] z-[80] transition-all duration-500 ease-[cubic-bezier(0.34,1.56,0.64,1)] mb-8
+            className={`sticky top-[-1px] z-[80] transition-all duration-300 ease-[cubic-bezier(0.4,0,0.2,1)] mb-8
                 ${isCompact
                     ? 'py-2 px-6 bg-slate-900/90 backdrop-blur-xl shadow-2xl border-b border-white/10 rounded-b-[24px] -mx-10 translate-y-2'
                     : 'py-2 px-0 bg-transparent'

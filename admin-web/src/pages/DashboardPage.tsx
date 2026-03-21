@@ -33,18 +33,26 @@ export const DashboardPage: React.FC = () => {
 
         loadStats(true);
 
+        let timeoutId: ReturnType<typeof setTimeout>;
+
         const channel = supabase
             .channel('dashboard-stats-sync')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
                 () => {
-                    loadStats(false);
+                    clearTimeout(timeoutId);
+                    timeoutId = setTimeout(() => {
+                        loadStats(false);
+                    }, 1500);
                 }
             )
-            .subscribe();
+            .subscribe((status, err) => {
+                if (err) console.log(`[Realtime Dashboard] Status: ${status}, Error:`, err);
+            });
 
         return () => {
+            clearTimeout(timeoutId);
             supabase.removeChannel(channel);
         };
     }, [authUser?.role]);
@@ -58,9 +66,9 @@ export const DashboardPage: React.FC = () => {
     };
 
     const statusColors: Record<string, string> = {
-        pending: 'bg-yellow-50 text-yellow-600 border border-yellow-200',
+        pending: 'bg-amber-50 text-amber-600 border border-amber-200',
         preparing: 'bg-blue-50 text-blue-600 border border-blue-200',
-        ready: 'bg-cyan-50 text-cyan-600 border border-cyan-200',
+        ready: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
         delivering: 'bg-purple-50 text-purple-600 border border-purple-200',
         completed: 'bg-green-50 text-green-600 border border-green-200',
         delayed: 'bg-red-50 text-red-600 border border-red-200',
@@ -104,28 +112,28 @@ export const DashboardPage: React.FC = () => {
 
             <FinanceWidget />
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 <div
-                    onClick={() => navigate('/orders?status=all&reset=true')}
-                    className="bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-6 hover:-translate-y-1 hover:shadow-xl hover:shadow-red-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
+                    onClick={() => navigate('/orders')}
+                    className="bg-white p-6 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-5 hover:-translate-y-1 hover:shadow-xl hover:shadow-red-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
                 >
-                    <div className="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
-                        <span className="material-icons-round text-3xl max-w-full truncate">receipt_long</span>
+                    <div className="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 flex items-center justify-center text-white shadow-lg shadow-red-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
+                        <span className="material-icons-round text-2xl max-w-full truncate">receipt_long</span>
                     </div>
                     <div className="min-w-0">
                         <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Today Orders</p>
                         <p className="text-3xl md:text-4xl font-black text-slate-800 tracking-tighter truncate">
-                            {(stats?.orders_by_status?.pending || 0) + (stats?.orders_by_status?.completed || 0)}
+                            {stats?.total_orders || 0}
                         </p>
                     </div>
                 </div>
 
                 <div
                     onClick={() => navigate('/finance')}
-                    className="bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-6 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
+                    className="bg-white p-6 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-5 hover:-translate-y-1 hover:shadow-xl hover:shadow-orange-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
                 >
-                    <div className="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
-                        <span className="material-icons-round text-3xl max-w-full truncate">payments</span>
+                    <div className="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white shadow-lg shadow-orange-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
+                        <span className="material-icons-round text-2xl max-w-full truncate">payments</span>
                     </div>
                     <div className="min-w-0">
                         <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Monthly Revenue</p>
@@ -138,10 +146,10 @@ export const DashboardPage: React.FC = () => {
 
                 <div
                     onClick={() => navigate('/users')}
-                    className="bg-white p-8 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-6 hover:-translate-y-1 hover:shadow-xl hover:shadow-rose-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
+                    className="bg-white p-6 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-5 hover:-translate-y-1 hover:shadow-xl hover:shadow-rose-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
                 >
-                    <div className="w-16 h-16 shrink-0 rounded-2xl bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
-                        <span className="material-icons-round text-3xl max-w-full truncate">people</span>
+                    <div className="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
+                        <span className="material-icons-round text-2xl max-w-full truncate">people</span>
                     </div>
                     <div className="min-w-0">
                         <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Total Users</p>
@@ -215,7 +223,7 @@ export const DashboardPage: React.FC = () => {
                                         {statusLabels[status] || status}
                                     </span>
                                     <div className="flex-1 h-3 bg-slate-50 border border-slate-100 rounded-full overflow-hidden shadow-inner group-hover:border-blue-100 transition-colors">
-                                        <div className="h-full bg-gradient-to-r from-red-500 to-rose-500 rounded-full transition-all duration-1000 ease-out relative overflow-hidden" style={{ width: `${pct}%` }}>
+                                        <div className={`h-full progress-${status} rounded-full transition-all duration-1000 ease-out relative overflow-hidden`} style={{ width: `${pct}%` }}>
                                             <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
                                         </div>
                                     </div>
@@ -267,9 +275,12 @@ export const DashboardPage: React.FC = () => {
                                 </div>
                             ))
                         ) : (
-                            <div className="flex flex-col items-center justify-center h-full text-slate-300">
-                                <span className="material-icons-round text-6xl mb-4 opacity-50">hourglass_empty</span>
-                                <p className="text-sm font-bold uppercase tracking-widest">No recent orders found</p>
+                            <div className="flex flex-col items-center justify-center h-full py-12 text-slate-300 relative">
+                                <div className="w-32 h-32 rounded-full border border-slate-100 flex items-center justify-center relative overflow-hidden mb-6 group">
+                                    <div className="absolute inset-0 animate-radar rounded-full"></div>
+                                    <span className="material-icons-round text-4xl text-slate-200 relative z-10 group-hover:scale-110 transition-transform">radar</span>
+                                </div>
+                                <p className="text-xs font-black uppercase tracking-[0.3em] text-slate-400 animate-pulse">系统监控中：暂无异常动态</p>
                             </div>
                         )}
                     </div>

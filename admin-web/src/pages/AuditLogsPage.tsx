@@ -106,13 +106,18 @@ export const AuditLogsPage: React.FC = () => {
     useEffect(() => { loadLogs(); }, [loadLogs]);
 
     useEffect(() => {
+        let timeoutId: ReturnType<typeof setTimeout>;
+
         const channel = supabase
             .channel('audit-logs-realtime')
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'audit_logs' },
                 () => {
-                    loadLogs(true);
+                    clearTimeout(timeoutId);
+                    timeoutId = setTimeout(() => {
+                        loadLogs(true);
+                    }, 1500);
                 }
             )
             .subscribe((status) => {
@@ -120,6 +125,7 @@ export const AuditLogsPage: React.FC = () => {
             });
 
         return () => {
+            clearTimeout(timeoutId);
             supabase.removeChannel(channel);
         };
     }, [loadLogs]);

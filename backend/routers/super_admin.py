@@ -65,7 +65,8 @@ async def get_stats_overview(
         "total_orders": total_orders,
         "total_revenue": total_revenue,
         "total_users": total_users,
-        "orders_by_status": status_counts
+        "orders_by_status": status_counts,
+        "recent_orders": recent_resp.data or []
     }
 
 
@@ -286,9 +287,9 @@ async def get_financials(
     now = datetime.now(timezone.utc)
     today_str = now.strftime("%Y-%m-%d")
 
-    # Fetch orders from a wider 60-day window to ensure all active orders are included in metrics.
+    # Fetch orders from a wider 365-day window to ensure all active orders are included in metrics.
     # This prevents missing orders created in previous months but due in the current month.
-    window_start = (now - timedelta(days=60)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    window_start = (now - timedelta(days=365)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     
     query = supabase.table("orders").select("*").gte("created_at", window_start).neq("status", "cancelled")
     
@@ -338,9 +339,12 @@ async def get_financials(
         # Period calculation
         if is_in_period:
             period_order_count += 1
-            period_revenue += payment
+            # Use amount for total sales volume, or payment_received for cash flow.
+            # We'll stick to amount for "Financials" volume overview.
+            amt = float(o.get("amount") or 0.0)
+            period_revenue += amt
             
-            # Payment Method Stats
+            # Payment Method Stats (based on actual received)
             if payment > 0:
                 method = o.get("paymentMethod") or "cash"
                 if method not in pm_stats:
@@ -350,7 +354,7 @@ async def get_financials(
         
         # Today's Revenue (regardless of range filter, for top card consistency)
         if is_today:
-            today_revenue += payment
+            today_revenue += amt
             today_order_count += 1
 
     # Global Unpaid Total: SUM(balance)

@@ -11,6 +11,46 @@ router = APIRouter(
     tags=["orders"]
 )
 
+async def _sync_items_to_table(order_id: str, items: list):
+    """
+    辅助函数：将订单项同步到 order_items 表。
+    采用先删后增的策略确保与 orders 表中的 JSON 数据保持一致。
+    """
+    if not items:
+        return
+    
+    try:
+        from fastapi.concurrency import run_in_threadpool
+        # 1. 清除旧数据
+        await run_in_threadpool(
+            supabase.table("order_items").delete().eq("order_id", order_id).execute
+        )
+        
+        # 2. 准备新数据
+        prep_items = []
+        for item in items:
+            prep_items.append({
+                "order_id": order_id,
+                "product_id": item.get("id"),
+                "name": item.get("name", "Unnamed Item"),
+                "quantity": item.get("quantity", 1),
+                "status": item.get("status", "pending"),
+                "is_prepared": item.get("is_prepared", False),
+                "note": item.get("note"),
+                "price": item.get("price", 0)
+            })
+        
+        # 3. 批量插入
+        if prep_items:
+            await run_in_threadpool(
+                supabase.table("order_items").insert(prep_items).execute
+            )
+            
+    except Exception as e:
+        # 即使同步失败也不中断主流程
+        print(f"WARNING: Failed to sync items for order {order_id}: {e}")
+
+
 @router.get("", response_model=List[Order])
 async def get_orders(
     status: Optional[str] = None, 
@@ -19,7 +59,8 @@ async def get_orders(
 ):
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
-    window_start = (now - timedelta(days=60)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
+    # Include orders created in the last year or due in the future
+    window_start = (now - timedelta(days=365)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     
     query = supabase.table("orders").select("*").gte("created_at", window_start)
     if status and status != 'all':
@@ -138,8 +179,9 @@ async def mark_item_prepared(item_id: str, payload: dict, current_user: dict = D
         
         return response.data[0]
     except postgrest.exceptions.APIError as e:
-        if "PGRST205" in str(e):
-            # 假装更新成功，不阻塞前端流程
+        err_msg = str(e)
+        if "PGRST205" in err_msg or "22P02" in err_msg:
+            # 假装更新成功，不阻塞前端流程 (这种情况通常发生在旧数据未同步到 order_items 表时)
             return {"id": item_id, "is_prepared": is_prepared, "status": "ready" if is_prepared else "pending"}
         raise e
 
@@ -214,25 +256,9 @@ async def create_order(
             # GoEasy Notification
             await notify_order_update(response.data[0], action="create")
             
-            # Sync items to order_items table for granular production tracking
+            # Sync items for granular production tracking
             items = order_data.get("items", [])
-            if items:
-                prep_items = []
-                for item in items:
-                    prep_items.append({
-                        "order_id": response.data[0]["id"],
-                        "name": item["name"],
-                        "quantity": item["quantity"],
-                        "status": "pending",
-                        "note": item.get("note"),
-                        "price": item.get("price", 0)
-                    })
-                try:
-                    supabase.table("order_items").insert(prep_items).execute()
-                except Exception as e:
-                    # NOTE: If order_items table is missing (PGRST205), we log it but don't fail the order creation
-                    # as orders table insertion was already successful.
-                    print(f"WARNING: Failed to sync items to order_items (Table may be missing): {e}")
+            await _sync_items_to_table(response.data[0]["id"], items)
             
             # Record Audit
             await record_audit(
@@ -299,6 +325,10 @@ async def update_order(
             # GoEasy Notification
             from services.goeasy import notify_order_update
             await notify_order_update(response.data[0], action="update")
+            
+            # Sync items if provided
+            if "items" in order_data:
+                await _sync_items_to_table(order_id, order_data["items"])
             
             # Record Audit
             await record_audit(
@@ -394,6 +424,10 @@ async def partial_update_order(
     # GoEasy Notification
     from services.goeasy import notify_order_update
     await notify_order_update(response.data[0], action="partial_update")
+    
+    # Sync items if provided in partial update
+    if "items" in update_data:
+        await _sync_items_to_table(order_id, update_data["items"])
     
     # Determine Audit Action
     audit_action = AuditActions.ORDER_UPDATE

@@ -81,6 +81,9 @@ class OrderBase(BaseModel):
     eventDate: Optional[str] = None
     eventTime: Optional[str] = None
     mapsLink: Optional[str] = None
+    billingUnit: Optional[str] = 'PAX'
+    billingQuantity: Optional[float] = 0.0
+    billingPricePerUnit: Optional[float] = 0.0
 
     @model_validator(mode='after')
     def validate_finance_logic(self) -> 'OrderBase':
@@ -119,6 +122,10 @@ class OrderUpdate(BaseModel):
     eventDate: Optional[str] = None
     eventTime: Optional[str] = None
     mapsLink: Optional[str] = None
+    billingUnit: Optional[str] = None
+    billingQuantity: Optional[float] = None
+    billingPricePerUnit: Optional[float] = None
+    items: Optional[List[OrderItem]] = None
 
     @model_validator(mode='after')
     def validate_finance_update(self) -> 'OrderUpdate':

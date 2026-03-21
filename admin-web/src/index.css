@@ -50,6 +50,54 @@
     50% { opacity: 0.7; transform: scale(0.98); }
 }
 
+/* 定义侧边栏的基础动画曲线 */
+.sidebar-transition {
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* 强制文字在侧边栏收缩时不换行，防止高度跳动 */
+.keep-inline {
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* Progress bar semantic colors */
+.progress-delivering { background-color: #8b5cf6 !important; }
+.progress-pending { background-color: #f59e0b !important; }
+.progress-preparing { background-color: #3b82f6 !important; }
+.progress-ready { background-color: #10b981 !important; }
+
+/* Radar scanning animation for empty states */
+@keyframes radar-scan {
+  0% { transform: rotate(0deg); opacity: 0.2; }
+  50% { opacity: 0.8; }
+  100% { transform: rotate(360deg); opacity: 0.2; }
+}
+
+.animate-radar {
+  animation: radar-scan 4s linear infinite;
+  background: conic-gradient(from 0deg, rgba(220,38,38,0.2) 0%, rgba(220,38,38,0) 25%, rgba(220,38,38,0) 75%, rgba(220,38,38,0.2) 100%);
+}
+
+/* 消除闪屏的通用 CSS 补丁 */
+header, aside, .sticky-element {
+  /* 1. 开启 3D 硬件加速 */
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+  transform: translateZ(0);
+  
+  /* 2. 告诉浏览器哪些属性会变，提前做好优化 */
+  will-change: width, height, padding, box-shadow, transform;
+  
+  /* 3. 确保过渡动画平滑 */
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+}
+
+/* 防止布局抖动 */
+body {
+  overflow-y: scroll; /* 强制显示滚动条占位，防止宽度左右抖动 */
+}
+
 /* 隐藏滚动条但保留滚动功能 */
 .no-scrollbar::-webkit-scrollbar {
     display: none;

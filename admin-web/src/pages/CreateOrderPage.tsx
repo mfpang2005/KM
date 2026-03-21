@@ -44,8 +44,8 @@ const generateOrderRef = (): string => {
 };
 
 const EQUIPMENT_LIST = [
-    "设备 (可选数量)", "汤匙", "烤鸡网", "叉子", "垃圾袋",
-    "Food Tong", "盘子", "红烧桶", "高盖", "杯子", "篮子", "铁脚架", "装酱碗"
+    "汤匙", "叉子", "盘子", "杯子", "垃圾袋",
+    "烤鸡网", "Food Tong", "红烧桶", "高盖", "篮子", "铁脚架", "装酱碗"
 ];
 
 export const CreateOrderPage: React.FC = () => {
@@ -62,6 +62,9 @@ export const CreateOrderPage: React.FC = () => {
     const [remarks, setRemarks] = useState('');
     const [eventDate, setEventDate] = useState('');
     const [eventTime, setEventTime] = useState('');
+    const [billingUnit, setBillingUnit] = useState<'PAX' | 'SET' | 'PACKET'>('PAX');
+    const [billingQuantity, setBillingQuantity] = useState<number>(0);
+    const [billingPricePerUnit, setBillingPricePerUnit] = useState<number>(0);
     const [paymentReceived, setPaymentReceived] = useState<number>(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderSnapshot | null>(null);
@@ -70,6 +73,9 @@ export const CreateOrderPage: React.FC = () => {
     const [equipments, setEquipments] = useState<Record<string, number>>(
         EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {})
     );
+    const [customEquipments, setCustomEquipments] = useState<string[]>([]);
+    const [isAddingCustom, setIsAddingCustom] = useState(false);
+    const [newCustomName, setNewCustomName] = useState('');
 
     // 客户聯想狀態
     const [customerSuggestions, setCustomerSuggestions] = useState<Customer[]>([]);
@@ -154,8 +160,8 @@ export const CreateOrderPage: React.FC = () => {
     }), [products, activeCategory, searchQuery]);
 
     const totalAmount = useMemo(() =>
-        cart.reduce((sum, item) => sum + (item.priceOverride ?? item.product.price) * item.quantity, 0),
-        [cart]
+        billingQuantity * billingPricePerUnit,
+        [billingQuantity, billingPricePerUnit]
     );
 
     /** 将产品加入购物车 */
@@ -237,12 +243,14 @@ export const CreateOrderPage: React.FC = () => {
                     note: i.note || undefined,
                 })),
                 status: OrderStatus.PENDING,
-                dueTime: new Date(Date.now() + 60 * 60 * 1000)
-                    .toLocaleTimeString('zh-MY', { hour: '2-digit', minute: '2-digit' }),
+                dueTime: new Date(`${eventDate.trim()}T${eventTime.trim()}:00`).toISOString(),
                 amount: totalAmount,
                 type: address.trim() ? 'delivery' : 'takeaway',
                 paymentMethod: PaymentMethod.CASH, // Default to cash, finalized in Financials
                 payment_received: paymentReceived,
+                billingUnit,
+                billingQuantity,
+                billingPricePerUnit,
                 order_number: undefined, // Let backend generate initial DD/NNN
                 driverId: undefined, // 強制不指派司机
                 equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
@@ -703,27 +711,96 @@ export const CreateOrderPage: React.FC = () => {
                             </h3>
                         </div>
                         <div className="p-4 grid grid-cols-2 lg:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto no-scrollbar">
-                            {EQUIPMENT_LIST.map(eq => (
+                            {[...EQUIPMENT_LIST, ...customEquipments].map(eq => (
                                 <div key={eq} className={`flex flex-col justify-between p-3 rounded-2xl border transition-all ${equipments[eq] > 0 ? 'bg-blue-50/50 border-blue-200' : 'bg-white border-slate-100 hover:border-slate-200'}`}>
                                     <span className="text-xs font-bold text-slate-700 mb-2 truncate" title={eq}>{eq}</span>
                                     <div className="flex items-center justify-between mt-auto">
                                         <button
                                             onClick={() => updateEquipmentQty(eq, -1)}
                                             className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors disabled:opacity-50"
-                                            disabled={equipments[eq] === 0}
+                                            disabled={equipments[eq] === 0 || (billingUnit === 'PAX' && billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq))}
                                         >
                                             <span className="material-icons-round text-sm">remove</span>
                                         </button>
-                                        <span className="text-sm font-black w-8 text-center">{equipments[eq]}</span>
+                                        <span className="text-sm font-black w-8 text-center">{equipments[eq] || 0}</span>
                                         <button
                                             onClick={() => updateEquipmentQty(eq, 1)}
-                                            className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors"
+                                            className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors disabled:opacity-50"
+                                            disabled={billingUnit === 'PAX' && billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq)}
                                         >
                                             <span className="material-icons-round text-sm">add</span>
                                         </button>
                                     </div>
+                                    {billingUnit === 'PAX' && billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq) && (
+                                        <p className="text-[8px] font-bold text-blue-500 italic mt-1 text-center">Auto-locked: PAX x 2</p>
+                                    )}
                                 </div>
                             ))}
+
+                            {/* Add Custom Equipment Card */}
+                            <div
+                                className={`border-2 border-dashed rounded-2xl p-3 flex flex-col items-center justify-center min-h-[90px] transition-all cursor-pointer ${isAddingCustom ? 'border-blue-400 bg-blue-50/30' : 'border-slate-200 hover:border-blue-300 hover:bg-slate-50'}`}
+                                onClick={() => !isAddingCustom && setIsAddingCustom(true)}
+                            >
+                                {isAddingCustom ? (
+                                    <div className="w-full space-y-2">
+                                        <input
+                                            autoFocus
+                                            type="text"
+                                            placeholder="设备名..."
+                                            className="w-full bg-transparent border-b border-blue-200 py-1 text-xs font-bold outline-none focus:border-blue-500"
+                                            value={newCustomName}
+                                            onChange={(e) => setNewCustomName(e.target.value)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    if (newCustomName.trim()) {
+                                                        const name = newCustomName.trim();
+                                                        setCustomEquipments(prev => [...prev, name]);
+                                                        setEquipments(prev => ({ ...prev, [name]: 0 }));
+                                                        setNewCustomName('');
+                                                        setIsAddingCustom(false);
+                                                    }
+                                                } else if (e.key === 'Escape') {
+                                                    setIsAddingCustom(false);
+                                                    setNewCustomName('');
+                                                }
+                                            }}
+                                        />
+                                        <div className="flex justify-between items-center px-1">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setIsAddingCustom(false);
+                                                    setNewCustomName('');
+                                                }}
+                                                className="text-slate-400 hover:text-red-500 transition-colors"
+                                            >
+                                                <span className="material-icons-round text-sm">close</span>
+                                            </button>
+                                            <button
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    if (newCustomName.trim()) {
+                                                        const name = newCustomName.trim();
+                                                        setCustomEquipments(prev => [...prev, name]);
+                                                        setEquipments(prev => ({ ...prev, [name]: 0 }));
+                                                        setNewCustomName('');
+                                                        setIsAddingCustom(false);
+                                                    }
+                                                }}
+                                                className="text-blue-500 hover:text-blue-700 transition-colors"
+                                            >
+                                                <span className="material-icons-round text-sm">check_circle</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="flex flex-col items-center gap-1 text-slate-400 group-hover:text-blue-500 transition-colors">
+                                        <span className="material-icons-round text-lg">add</span>
+                                        <span className="text-[10px] font-black uppercase tracking-wider">Add Item</span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -974,6 +1051,84 @@ export const CreateOrderPage: React.FC = () => {
                                         onChange={e => setEventTime(e.target.value)}
                                         required
                                     />
+                                </div>
+                            </div>
+
+                            {/* 计费模块 (Billing Module) */}
+                            <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 space-y-4">
+                                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                    <span className="material-icons-round text-sm">payments</span>
+                                    计费详情 (Billing Details)
+                                </h4>
+                                <div className="grid grid-cols-12 gap-3 items-end">
+                                    <div className="col-span-3">
+                                        <p className="text-[9px] font-bold text-slate-400 mb-1">单位 (Unit)</p>
+                                        <select
+                                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                            value={billingUnit}
+                                            onChange={(e) => {
+                                                const unit = e.target.value as 'PAX' | 'SET' | 'PACKET';
+                                                setBillingUnit(unit);
+                                                if (unit === 'PAX' && billingQuantity > 0) {
+                                                    const autoQty = billingQuantity * 2;
+                                                    setEquipments(prev => ({
+                                                        ...prev,
+                                                        '盘子': autoQty,
+                                                        '汤匙': autoQty,
+                                                        '叉子': autoQty,
+                                                        '杯子': autoQty
+                                                    }));
+                                                }
+                                            }}
+                                        >
+                                            <option value="PAX">PAX</option>
+                                            <option value="SET">SET</option>
+                                            <option value="PACKET">PACKET</option>
+                                        </select>
+                                    </div>
+                                    <div className="col-span-3">
+                                        <p className="text-[9px] font-bold text-slate-400 mb-1">数量 (Qty)</p>
+                                        <input
+                                            type="number"
+                                            placeholder="0"
+                                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                            value={billingQuantity || ''}
+                                            onChange={(e) => {
+                                                const qty = parseFloat(e.target.value) || 0;
+                                                setBillingQuantity(qty);
+                                                if (billingUnit === 'PAX' && qty > 0) {
+                                                    const autoQty = qty * 2;
+                                                    setEquipments(prev => ({
+                                                        ...prev,
+                                                        '盘子': autoQty,
+                                                        '汤匙': autoQty,
+                                                        '叉子': autoQty,
+                                                        '杯子': autoQty
+                                                    }));
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="col-span-3">
+                                        <p className="text-[9px] font-bold text-slate-400 mb-1">单价 (RM)</p>
+                                        <div className="relative">
+                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">RM</span>
+                                            <input
+                                                type="number"
+                                                step="0.01"
+                                                placeholder="0.00"
+                                                className="w-full pl-7 pr-2 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                                value={billingPricePerUnit || ''}
+                                                onChange={(e) => setBillingPricePerUnit(parseFloat(e.target.value) || 0)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-span-3">
+                                        <p className="text-[9px] font-bold text-slate-400 mb-1">小计 (Subtotal)</p>
+                                        <div className="w-full p-2 bg-slate-100 border border-transparent rounded-xl text-xs font-black text-slate-700 font-mono">
+                                            RM {(billingQuantity * billingPricePerUnit).toFixed(2)}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 

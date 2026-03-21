@@ -65,11 +65,17 @@ export const OrdersPage: React.FC = () => {
         payment_received: 0,
         eventDate: '',
         eventTime: '',
+        billingUnit: 'PAX' as 'PAX' | 'SET' | 'PACKET',
+        billingQuantity: 0,
+        billingPricePerUnit: 0,
         items: [] as { product: Product, quantity: number, priceOverride?: number }[],
         equipments: {} as Record<string, number>
     });
     const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
-    const EQUIPMENTS_LIST = ['汤匙', '烤鸡网', '叉子', '垃圾袋', 'Food Tong', '盘子', '红烧桶', '高盖', '杯子', '篮子', '铁脚架', '装酱碗'];
+    const EQUIPMENTS_LIST = ['汤匙', '叉子', '盘子', '杯子', '垃圾袋', '烤鸡网', 'Food Tong', '红烧桶', '高盖', '篮子', '铁脚架', '装酱碗'];
+    const [customEquipments, setCustomEquipments] = useState<string[]>([]);
+    const [isAddingCustom, setIsAddingCustom] = useState(false);
+    const [newCustomName, setNewCustomName] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const loadOrders = useCallback(async () => {
@@ -104,18 +110,26 @@ export const OrdersPage: React.FC = () => {
         loadOrders();
         fetchProducts();
 
+        let timeoutId: ReturnType<typeof setTimeout>;
+
         const channel = supabase
             .channel('orders-page-sync')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
                 () => {
-                    loadOrders();
+                    clearTimeout(timeoutId);
+                    timeoutId = setTimeout(() => {
+                        loadOrders();
+                    }, 1500);
                 }
             )
-            .subscribe();
+            .subscribe((status, err) => {
+                if (err) console.log(`[Realtime Orders] Status: ${status}, Error:`, err);
+            });
         
         return () => {
+            clearTimeout(timeoutId);
             supabase.removeChannel(channel);
         };
     }, [loadOrders, fetchProducts]);
@@ -149,6 +163,9 @@ export const OrdersPage: React.FC = () => {
             type: order.type as any,
             remark: order.remark || '',
             payment_received: order.payment_received || 0,
+            billingUnit: order.billingUnit || 'PAX',
+            billingQuantity: order.billingQuantity || 0,
+            billingPricePerUnit: order.billingPricePerUnit || 0,
             items: preparedItems,
             equipments: order.equipments || {},
             eventDate,
@@ -173,7 +190,7 @@ export const OrdersPage: React.FC = () => {
 
         try {
             setIsSubmitting(true);
-            const amount = newOrder.items.reduce((sum, item) => sum + ((item.priceOverride ?? item.product.price) || 0) * item.quantity, 0);
+            const amount = newOrder.billingQuantity * newOrder.billingPricePerUnit;
 
             const itemsPayload = newOrder.items.map(i => ({
                 id: i.product.id,
@@ -203,6 +220,9 @@ export const OrdersPage: React.FC = () => {
                 type: newOrder.type,
                 remark: newOrder.remark,
                 payment_received: newOrder.payment_received,
+                billingUnit: newOrder.billingUnit,
+                billingQuantity: newOrder.billingQuantity,
+                billingPricePerUnit: newOrder.billingPricePerUnit,
                 dueTime,
                 status: editingOrder ? editingOrder.status : OrderStatus.PENDING,
                 equipments: newOrder.equipments
@@ -226,6 +246,9 @@ export const OrdersPage: React.FC = () => {
                 type: 'delivery',
                 remark: '',
                 payment_received: 0,
+                billingUnit: 'PAX',
+                billingQuantity: 0,
+                billingPricePerUnit: 0,
                 eventDate: '',
                 eventTime: '',
                 items: [],
@@ -401,25 +424,12 @@ export const OrdersPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => {
-                                    setStatusFilter('all');
-                                    setSearchQuery('');
-                                    window.history.replaceState({}, '', window.location.pathname);
-                                }}
-                                className="px-4 py-2 bg-slate-100/50 text-slate-500 rounded-xl font-bold text-sm hover:bg-slate-200 transition-all flex items-center gap-2"
-                                title="Reset all filters"
-                            >
-                                <span className="material-icons-round text-[18px]">restart_alt</span>
-                            </button>
-                            <button
                                 onClick={() => setShowCreateModal(true)}
                                 className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-sm hover:shadow-lg transition-all flex items-center gap-2"
                             >
                                 <span className="material-icons-round text-[18px]">add</span>
                                 <span className="hidden lg:inline">New Order</span>
                             </button>
-
-                            <NotificationBell />
 
                             <select
                                 id="order-status-filter"
@@ -448,14 +458,16 @@ export const OrdersPage: React.FC = () => {
                                     className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white/50 backdrop-blur text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
                                 />
                             </div>
+
+                            <NotificationBell />
                         </div>
                     </div>
                 }
             />
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm relative">
-                {/* 锁定高度与固定表头加固 */}
-                <div className="h-[60vh] min-h-[400px] overflow-y-auto custom-scrollbar scroll-smooth">
+                {/* 锁定高度与固定表头加固 - 增加高度以展现更多“资讯” */}
+                <div className="h-[75vh] min-h-[500px] overflow-y-auto custom-scrollbar scroll-smooth">
                     <table className="w-full text-left border-collapse min-w-max table-auto">
                         <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-md shadow-sm border-b border-slate-200">
                             <tr className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">
@@ -595,6 +607,17 @@ export const OrdersPage: React.FC = () => {
                             )}
                         </tbody>
                     </table>
+                </div>
+
+                {/* Table Summary Footer - Showing key "Information" (资讯) */}
+                <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
+                    <div className="flex items-center gap-4">
+                        <span>Total Items: {filteredOrders.length}</span>
+                        <div className="h-3 w-px bg-slate-200" />
+                        <span className="text-slate-800">
+                            Total RM: <span className="text-blue-600 font-mono text-sm ml-1">RM {filteredOrders.reduce((sum, o) => sum + (o.amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </span>
+                    </div>
                 </div>
 
                 {/* Pagination Controls */}
@@ -778,16 +801,99 @@ export const OrdersPage: React.FC = () => {
 
                                     <hr className="border-slate-100" />
 
-                                    {/* Deposit Input */}
-                                    <div className="md:col-span-2">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">定金 Deposit (RM)</label>
+                                    {/* 计费模块 (Billing Module) */}
+                                    <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 space-y-4">
+                                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                            <span className="material-icons-round text-sm">payments</span>
+                                            计费详情 (Billing Details)
+                                        </h4>
+                                        <div className="grid grid-cols-12 gap-3 items-end">
+                                            <div className="col-span-3">
+                                                <p className="text-[9px] font-bold text-slate-400 mb-1">单位 (Unit)</p>
+                                                <select
+                                                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                                    value={newOrder.billingUnit}
+                                                    onChange={(e) => {
+                                                        const unit = e.target.value as 'PAX' | 'SET' | 'PACKET';
+                                                        const updates: any = { billingUnit: unit };
+                                                        if (unit === 'PAX' && newOrder.billingQuantity > 0) {
+                                                            const autoQty = newOrder.billingQuantity * 2;
+                                                            updates.equipments = {
+                                                                ...newOrder.equipments,
+                                                                '盘子': autoQty,
+                                                                '汤匙': autoQty,
+                                                                '叉子': autoQty,
+                                                                '杯子': autoQty
+                                                            };
+                                                        }
+                                                        setNewOrder({ ...newOrder, ...updates });
+                                                    }}
+                                                >
+                                                    <option value="PAX">PAX</option>
+                                                    <option value="SET">SET</option>
+                                                    <option value="PACKET">PACKET</option>
+                                                </select>
+                                            </div>
+                                            <div className="col-span-3">
+                                                <p className="text-[9px] font-bold text-slate-400 mb-1">数量 (Qty)</p>
+                                                <input
+                                                    type="number"
+                                                    placeholder="0"
+                                                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                                    value={newOrder.billingQuantity || ''}
+                                                    onChange={(e) => {
+                                                        const qty = parseFloat(e.target.value) || 0;
+                                                        const updates: any = { billingQuantity: qty };
+                                                        if (newOrder.billingUnit === 'PAX' && qty > 0) {
+                                                            const autoQty = qty * 2;
+                                                            updates.equipments = {
+                                                                ...newOrder.equipments,
+                                                                '盘子': autoQty,
+                                                                '汤匙': autoQty,
+                                                                '叉子': autoQty,
+                                                                '杯子': autoQty
+                                                            };
+                                                        }
+                                                        setNewOrder({ ...newOrder, ...updates });
+                                                    }}
+                                                />
+                                            </div>
+                                            <div className="col-span-3">
+                                                <p className="text-[9px] font-bold text-slate-400 mb-1">单价 (RM)</p>
+                                                <div className="relative">
+                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">RM</span>
+                                                    <input
+                                                        type="number"
+                                                        step="0.01"
+                                                        placeholder="0.00"
+                                                        className="w-full pl-7 pr-2 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
+                                                        value={newOrder.billingPricePerUnit || ''}
+                                                        onChange={(e) => setNewOrder({ ...newOrder, billingPricePerUnit: parseFloat(e.target.value) || 0 })}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="col-span-3">
+                                                <p className="text-[9px] font-bold text-slate-400 mb-1">小计 (Subtotal)</p>
+                                                <div className="w-full p-2 bg-slate-100 border border-transparent rounded-xl text-xs font-black text-slate-700 font-mono">
+                                                    RM {(newOrder.billingQuantity * newOrder.billingPricePerUnit).toFixed(2)}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">定金 Deposit (RM)</p>
+                                            <p className="text-[10px] font-black text-red-500 italic">
+                                                * 待收余款 Balance Due: RM {Math.max(0, (newOrder.billingQuantity * newOrder.billingPricePerUnit) - newOrder.payment_received).toFixed(2)}
+                                            </p>
+                                        </div>
                                         <div className="relative group">
-                                            <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-indigo-500 transition-colors">payments</span>
+                                            <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">payments</span>
                                             <input
                                                 type="number"
                                                 step="0.01"
-                                                min="0"
-                                                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-all font-mono font-bold"
+                                                className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-slate-300"
                                                 placeholder="0.00"
                                                 value={newOrder.payment_received || ''}
                                                 onChange={(e) => setNewOrder({ ...newOrder, payment_received: parseFloat(e.target.value) || 0 })}
@@ -846,7 +952,7 @@ export const OrdersPage: React.FC = () => {
                                     <div>
                                         <h4 className="font-bold text-xs text-slate-500 mb-3 uppercase tracking-wider">包含设备 (Equipments)</h4>
                                         <div className="grid grid-cols-2 gap-2">
-                                            {EQUIPMENTS_LIST.map((eq) => (
+                                            {[...EQUIPMENTS_LIST, ...customEquipments].map((eq) => (
                                                 <div
                                                     key={eq}
                                                     className={`bg-slate-50 rounded-xl p-2 border transition-all flex flex-col gap-2 shadow-sm ${(newOrder.equipments[eq] || 0) > 0 ? 'border-primary/50 bg-primary/5' : 'border-slate-100'
@@ -858,13 +964,80 @@ export const OrdersPage: React.FC = () => {
                                                         <input
                                                             type="number"
                                                             placeholder="0"
-                                                            className="w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-6 pr-2 text-xs font-bold text-primary focus:ring-1 focus:ring-primary/20 outline-none"
+                                                            disabled={newOrder.billingUnit === 'PAX' && newOrder.billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq)}
+                                                            className={`w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-6 pr-2 text-xs font-bold text-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:bg-slate-100 disabled:text-slate-400`}
                                                             value={newOrder.equipments[eq] || ''}
                                                             onChange={(e) => handleEquipQuantityChange(eq, e.target.value)}
                                                         />
                                                     </div>
+                                                    {newOrder.billingUnit === 'PAX' && newOrder.billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq) && (
+                                                        <span className="text-[8px] font-bold text-primary italic opacity-70">
+                                                            Auto-locked: PAX x 2
+                                                        </span>
+                                                    )}
                                                 </div>
                                             ))}
+
+                                            {/* Add Custom Equipment Card */}
+                                            <div
+                                                className={`border-2 border-dashed rounded-xl p-2 flex flex-col items-center justify-center min-h-[70px] transition-all cursor-pointer ${isAddingCustom ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50'}`}
+                                                onClick={() => !isAddingCustom && setIsAddingCustom(true)}
+                                            >
+                                                {isAddingCustom ? (
+                                                    <div className="w-full space-y-2">
+                                                        <input
+                                                            autoFocus
+                                                            type="text"
+                                                            placeholder="设备名称..."
+                                                            className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 text-[10px] font-bold outline-none focus:ring-1 focus:ring-primary/20"
+                                                            value={newCustomName}
+                                                            onChange={(e) => setNewCustomName(e.target.value)}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') {
+                                                                    if (newCustomName.trim()) {
+                                                                        setCustomEquipments(prev => [...prev, newCustomName.trim()]);
+                                                                        setNewCustomName('');
+                                                                        setIsAddingCustom(false);
+                                                                    }
+                                                                } else if (e.key === 'Escape') {
+                                                                    setIsAddingCustom(false);
+                                                                    setNewCustomName('');
+                                                                }
+                                                            }}
+                                                        />
+                                                        <div className="flex justify-between items-center px-1">
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    setIsAddingCustom(false);
+                                                                    setNewCustomName('');
+                                                                }}
+                                                                className="text-slate-400 hover:text-red-500 transition-colors"
+                                                            >
+                                                                <span className="material-icons-round text-sm">close</span>
+                                                            </button>
+                                                            <button
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    if (newCustomName.trim()) {
+                                                                        setCustomEquipments(prev => [...prev, newCustomName.trim()]);
+                                                                        setNewCustomName('');
+                                                                        setIsAddingCustom(false);
+                                                                    }
+                                                                }}
+                                                                className="text-primary hover:text-primary-dark transition-colors"
+                                                            >
+                                                                <span className="material-icons-round text-sm">check_circle</span>
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="flex flex-col items-center gap-1 text-slate-400 group-hover:text-primary transition-colors">
+                                                        <span className="material-icons-round text-sm">add</span>
+                                                        <span className="text-[9px] font-black uppercase tracking-wider">Add Custom</span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
 
@@ -876,7 +1049,7 @@ export const OrdersPage: React.FC = () => {
                                         <span className="font-bold text-slate-400 text-xs uppercase tracking-widest">Total Amount</span>
                                         <span className="text-3xl font-black text-red-600 transition-all font-mono">
                                             <span className="text-sm mr-1">RM</span>
-                                            {newOrder.items.reduce((s, i) => s + ((i.priceOverride ?? i.product.price) || 0) * i.quantity, 0).toFixed(2)}
+                                            {(newOrder.billingQuantity * newOrder.billingPricePerUnit).toFixed(2)}
                                         </span>
                                     </div>
                                     <button

@@ -54,6 +54,9 @@ export interface Order {
     order_number?: string;
     eventDate?: string;
     eventTime?: string;
+    billingUnit?: 'PAX' | 'SET' | 'PACKET';
+    billingQuantity?: number;
+    billingPricePerUnit?: number;
     mapsLink?: string;
     payment_received?: number;
     balance?: number;
@@ -83,6 +86,9 @@ export interface OrderCreate {
     order_number?: string;
     eventDate?: string;
     eventTime?: string;
+    billingUnit?: 'PAX' | 'SET' | 'PACKET';
+    billingQuantity?: number;
+    billingPricePerUnit?: number;
     mapsLink?: string;
     remarks?: string;
 }

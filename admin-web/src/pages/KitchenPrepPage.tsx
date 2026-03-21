@@ -116,6 +116,10 @@ const OrderCard: React.FC<{
                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Order Ticket</span>
                             <span className="text-[10px] font-bold text-slate-300 leading-none">#</span>
                             <span className="text-xs font-black text-slate-900 tracking-tight leading-none">{order.id}</span>
+                            <span className={`ml-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider
+                                ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
+                                {order.status}
+                            </span>
                         </div>
                         <h3 className="text-base font-black text-slate-800 tracking-tight truncate pr-2">{order.customerName}</h3>
                     </div>
@@ -342,13 +346,18 @@ const KitchenPrepPage: React.FC = () => {
         fetchOrders();
         fetchRecipes();
 
+        let ordersTimeout: ReturnType<typeof setTimeout>;
+        let recipesTimeout: ReturnType<typeof setTimeout>;
+
         // Realtime: listen to both orders AND order_items tables
         const ch = supabase.channel('kitchen-prep-v3')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                fetchOrders();
+                clearTimeout(ordersTimeout);
+                ordersTimeout = setTimeout(() => fetchOrders(), 1500);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes' }, () => {
-                fetchRecipes();
+                clearTimeout(recipesTimeout);
+                recipesTimeout = setTimeout(() => fetchRecipes(), 1500);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, (payload: any) => {
                 // Update the specific item in state directly
@@ -363,13 +372,17 @@ const KitchenPrepPage: React.FC = () => {
                     );
                 }
             })
-            .subscribe();
+            .subscribe((status, err) => {
+                if (err) console.log(`[Realtime Kitchen] Status: ${status}, Error:`, err);
+            });
 
         const timer = setInterval(() => {
             setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         }, 10_000);
 
         return () => {
+            clearTimeout(ordersTimeout);
+            clearTimeout(recipesTimeout);
             clearInterval(timer);
             supabase.removeChannel(ch);
         };
