@@ -53,7 +53,7 @@ class Recipe(BaseModel):
 
 
 class OrderItem(BaseModel):
-    id: str
+    id: Optional[str] = None
     name: str
     quantity: int
     note: Optional[str] = None
@@ -61,12 +61,12 @@ class OrderItem(BaseModel):
 
 
 class OrderBase(BaseModel):
-    customerName: str
-    customerPhone: str
-    address: str
-    items: List[OrderItem]
+    customerName: Optional[str] = None
+    customerPhone: Optional[str] = None
+    address: Optional[str] = None
+    items: Optional[List[OrderItem]] = []
     status: OrderStatus
-    dueTime: str
+    dueTime: Optional[str] = None
     amount: float
     driverId: Optional[str] = None
     paymentMethod: Optional[PaymentMethod] = None

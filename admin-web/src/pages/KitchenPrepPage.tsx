@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AdminOrderService } from '../services/api';
 import type { Order } from '../types';
 import { OrderStatus } from '../types';
 import { supabase } from '../lib/supabase';
-import * as XLSX from 'xlsx';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,20 +32,6 @@ interface KitchenOrder {
     /** true = currently being removed after confirm (animation) */
     removing: boolean;
 }
-
-interface Ingredient {
-    name: string;
-    baseQty: number;
-    unit: string;
-}
-
-interface Recipe {
-    id: string;
-    name: string;
-    ingredients: Ingredient[];
-}
-
-const INITIAL_RECIPES: Recipe[] = [];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -248,17 +234,12 @@ const OrderCard: React.FC<{
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const KitchenPrepPage: React.FC = () => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'production' | 'history'>('production');
     const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
     const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
     const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
     const [confirmingOrders, setConfirmingOrders] = useState<Set<string>>(new Set());
-    const [recipes, setRecipes] = useState<Recipe[]>(INITIAL_RECIPES);
-    const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
-    const [isAddingRecipe, setIsAddingRecipe] = useState(false);
-    const [editingRecipeId, setEditingRecipeId] = useState<string | null>(null);
-    const [newRecipeName, setNewRecipeName] = useState('');
-    const [newRecipeIngredients, setNewRecipeIngredients] = useState<Ingredient[]>([{ name: '', baseQty: 0, unit: '' }]);
     const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
 
     // NOTE: Track orders being fetched to avoid duplicate item loads
@@ -309,15 +290,6 @@ const KitchenPrepPage: React.FC = () => {
         }
     }, []);
 
-    const fetchRecipes = useCallback(async () => {
-        try {
-            const data = await AdminOrderService.getRecipes();
-            setRecipes(data);
-        } catch (e) {
-            console.error('Failed to fetch recipes', e);
-        }
-    }, []);
-
     // NOTE: Load order_items when a card is expanded
     const loadOrderItems = useCallback(async (orderId: string) => {
         if (fetchingItemsRef.current.has(orderId)) return;
@@ -344,20 +316,14 @@ const KitchenPrepPage: React.FC = () => {
 
     useEffect(() => {
         fetchOrders();
-        fetchRecipes();
 
         let ordersTimeout: ReturnType<typeof setTimeout>;
-        let recipesTimeout: ReturnType<typeof setTimeout>;
 
         // Realtime: listen to both orders AND order_items tables
         const ch = supabase.channel('kitchen-prep-v3')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
                 clearTimeout(ordersTimeout);
                 ordersTimeout = setTimeout(() => fetchOrders(), 1500);
-            })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'recipes' }, () => {
-                clearTimeout(recipesTimeout);
-                recipesTimeout = setTimeout(() => fetchRecipes(), 1500);
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, (payload: any) => {
                 // Update the specific item in state directly
@@ -382,7 +348,6 @@ const KitchenPrepPage: React.FC = () => {
 
         return () => {
             clearTimeout(ordersTimeout);
-            clearTimeout(recipesTimeout);
             clearInterval(timer);
             supabase.removeChannel(ch);
         };
@@ -461,133 +426,6 @@ const KitchenPrepPage: React.FC = () => {
     const activeCount = kitchenOrders.filter(o => !o.removing).length;
     const preparedCount = kitchenOrders.filter(o => o.items.every(i => i.is_prepared) && o.items.length > 0).length;
 
-    // ── Recipe Handlers ───────────────────────────────────────────────────────
-
-    const handleOpenAddModal = () => {
-        setEditingRecipeId(null);
-        setNewRecipeName('');
-        setNewRecipeIngredients([{ name: '', baseQty: 0, unit: '' }]);
-        setIsAddingRecipe(true);
-    };
-
-    const handleOpenEditModal = (recipe: Recipe) => {
-        setEditingRecipeId(recipe.id);
-        setNewRecipeName(recipe.name);
-        setNewRecipeIngredients(recipe.ingredients.length > 0 ? [...recipe.ingredients] : [{ name: '', baseQty: 0, unit: '' }]);
-        setIsAddingRecipe(true);
-    };
-
-    const handleDeleteRecipe = async (id: string) => {
-        if (window.confirm('Are you sure you want to delete this recipe?')) {
-            try {
-                await AdminOrderService.deleteRecipe(id);
-                fetchRecipes();
-            } catch (e) {
-                console.error('Failed to delete recipe', e);
-            }
-        }
-    };
-
-    const handleAddOrUpdateRecipe = async (e: React.FormEvent<HTMLFormElement>) => {
-        e.preventDefault();
-        const validIngredients = newRecipeIngredients.filter(ing => ing.name.trim() !== '');
-        try {
-            if (editingRecipeId) {
-                await AdminOrderService.updateRecipe(editingRecipeId, {
-                    name: newRecipeName,
-                    ingredients: validIngredients
-                });
-            } else {
-                await AdminOrderService.addRecipe({
-                    name: newRecipeName,
-                    ingredients: validIngredients
-                });
-            }
-            fetchRecipes();
-            setIsAddingRecipe(false);
-            setEditingRecipeId(null);
-            setNewRecipeName('');
-            setNewRecipeIngredients([{ name: '', baseQty: 0, unit: '' }]);
-        } catch (e) {
-            console.error('Failed to save recipe', e);
-            alert('保存失败，请重试');
-        }
-    };
-
-    const handleExportExcel = () => {
-        const exportData = recipes.flatMap(recipe =>
-            recipe.ingredients.map(ing => ({
-                'Recipe Name (菜名)': recipe.name,
-                'Ingredient (配料)': ing.name,
-                'Unit (单位)': ing.unit,
-                'Volume (分量/10pax)': ing.baseQty
-            }))
-        );
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, 'Recipes');
-        XLSX.writeFile(wb, `KimLong_Recipes_${new Date().toISOString().split('T')[0]}.xlsx`);
-    };
-
-    const handleImportExcel = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            const bstr = evt.target?.result as string;
-            const wb = XLSX.read(bstr, { type: 'binary' });
-            const ws = wb.Sheets[wb.SheetNames[0]];
-            const data: any[] = XLSX.utils.sheet_to_json(ws);
-            const importedMap: Record<string, Ingredient[]> = {};
-            data.forEach(row => {
-                const name = row['Recipe Name (菜名)'] || row['菜名'];
-                const ingName = row['Ingredient (配料)'] || row['配料'];
-                const unit = row['Unit (单位)'] || row['单位'];
-                const qty = parseFloat(row['Volume (分量/10pax)'] || row['分量']);
-                if (name && ingName) {
-                    if (!importedMap[name]) importedMap[name] = [];
-                    importedMap[name].push({ name: ingName, unit: unit || '', baseQty: qty || 0 });
-                }
-            });
-            const newRecipes = Object.entries(importedMap).map(([name, ingredients]) => ({
-                id: 'r-import-' + Math.random().toString(36).substr(2, 9),
-                name,
-                ingredients
-            }));
-            const currentNames = new Set(recipes.map(r => r.name));
-            const filtered = newRecipes.filter(r => !currentNames.has(r.name));
-
-            // Batch add imported recipes to database
-            Promise.all(filtered.map(r => AdminOrderService.addRecipe({
-                name: r.name,
-                ingredients: r.ingredients
-            }))).then(() => {
-                fetchRecipes();
-                alert(`Imported ${filtered.length} new recipes!`);
-            }).catch(e => {
-                console.error('Failed to import recipes', e);
-                alert('部分或全部菜谱导入失败');
-            });
-        };
-        reader.readAsBinaryString(file);
-    };
-
-    const addIngredientRow = () => setNewRecipeIngredients([...newRecipeIngredients, { name: '', baseQty: 0, unit: '' }]);
-
-    const removeIngredientRow = (index: number) => {
-        if (newRecipeIngredients.length > 1) {
-            const updated = [...newRecipeIngredients];
-            updated.splice(index, 1);
-            setNewRecipeIngredients(updated);
-        }
-    };
-
-    const updateIngredient = (index: number, field: keyof Ingredient, value: string | number) => {
-        const updated = [...newRecipeIngredients];
-        updated[index] = { ...updated[index], [field]: value };
-        setNewRecipeIngredients(updated);
-    };
-
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
@@ -605,6 +443,14 @@ const KitchenPrepPage: React.FC = () => {
                     </div>
                     {/* Stats badges */}
                     <div className="hidden md:flex items-center gap-3">
+                        <button 
+                            onClick={() => navigate('/kitchen-recipes')}
+                            className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all shadow-sm flex items-center group relative"
+                        >
+                            <span className="material-icons-round mr-2">menu_book</span>
+                            <span className="font-bold text-xs uppercase">Recipes</span>
+                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">进入独立食谱管理</div>
+                        </button>
                         <div className="px-4 py-2 bg-amber-50 border border-amber-100 rounded-2xl text-center">
                             <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Active</p>
                             <p className="text-xl font-black text-amber-700 leading-none">{activeCount}</p>
@@ -706,138 +552,8 @@ const KitchenPrepPage: React.FC = () => {
 
             </main>
 
-            {/* ── Separate Recipes Card ── */}
-            <div className="px-6 pb-6">
-                <div className="bg-white rounded-[12px] shadow-md border border-slate-100 overflow-hidden">
-                    <header className="p-4 border-b border-slate-50 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                            <span className="material-icons-round text-blue-900 font-bold">menu_book</span>
-                            <h2 className="text-base font-bold text-blue-900 uppercase tracking-tight">RECIPES</h2>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <label className="bg-emerald-50 text-emerald-600 px-3 py-1.5 rounded-xl flex items-center gap-1.5 cursor-pointer hover:bg-emerald-100 transition-all active:scale-95 border border-emerald-100">
-                                <span className="material-icons-round text-xs">upload_file</span>
-                                <span className="text-[9px] font-black uppercase">Import</span>
-                                <input type="file" accept=".xlsx, .xls" className="hidden" onChange={handleImportExcel} />
-                            </label>
-                            <button onClick={handleExportExcel} className="bg-slate-50 text-slate-600 px-3 py-1.5 rounded-xl flex items-center gap-1.5 hover:bg-slate-100 transition-all active:scale-95 border border-slate-100">
-                                <span className="material-icons-round text-xs">download</span>
-                                <span className="text-[9px] font-black uppercase">Export</span>
-                            </button>
-                            <button onClick={handleOpenAddModal} className="bg-blue-600 text-white px-3 py-1.5 rounded-xl flex items-center gap-1.5 active:scale-95 transition-all shadow-md shadow-blue-500/10">
-                                <span className="material-icons-round text-xs">add</span>
-                                <span className="text-[9px] font-black uppercase">Add</span>
-                            </button>
-                        </div>
-                    </header>
-                    <div className="p-[16px]">
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                            {recipes.map((recipe: Recipe) => (
-                                <div key={recipe.id} className="group bg-slate-50 border border-slate-100/50 rounded-3xl p-5 hover:bg-white hover:shadow-2xl hover:shadow-blue-500/5 hover:-translate-y-1 transition-all duration-500 cursor-pointer flex flex-col gap-4">
-                                    <div className="flex items-center gap-4" onClick={() => setSelectedRecipe(recipe)}>
-                                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-blue-600 border border-slate-100 shadow-sm group-hover:bg-blue-600 group-hover:text-white transition-all duration-500">
-                                            <span className="material-icons-round text-[24px]">restaurant_menu</span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h3 className="text-sm font-black text-slate-800 tracking-tight truncate group-hover:text-blue-600 transition-colors">{recipe.name}</h3>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <span className="px-2 py-0.5 bg-slate-900/5 text-[9px] font-black text-slate-500 rounded-lg uppercase tracking-wider">{recipe.ingredients.length} Ingredients</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="grid grid-cols-2 gap-2 mt-auto pt-4 border-t border-slate-200/50">
-                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEditModal(recipe); }} className="py-2.5 bg-white border border-slate-100 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-blue-600 hover:border-blue-100 hover:bg-blue-50 transition-all flex items-center justify-center gap-2">
-                                            <span className="material-icons-round text-sm">edit_note</span> Edit
-                                        </button>
-                                        <button onClick={(e) => { e.stopPropagation(); handleDeleteRecipe(recipe.id); }} className="py-2.5 bg-white border border-slate-100 text-slate-400 rounded-xl text-[9px] font-black uppercase tracking-widest hover:text-red-600 hover:border-red-100 hover:bg-red-50 transition-all flex items-center justify-center gap-2">
-                                            <span className="material-icons-round text-sm">delete_sweep</span> Delete
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-                </div>
-            </div>
 
 
-            {/* ── Recipe Details Modal ── */}
-            {selectedRecipe && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-md rounded-[48px] p-10 shadow-2xl animate-in zoom-in duration-300 flex flex-col max-h-[85vh]">
-                        <header className="flex justify-between items-start mb-8 flex-shrink-0">
-                            <div className="flex-1">
-                                <div className="flex items-center gap-2 mb-1">
-                                    <span className="material-icons-round text-blue-600 text-sm">calculate</span>
-                                    <h2 className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Calculated Portions</h2>
-                                </div>
-                                <h3 className="text-3xl font-black text-slate-800 tracking-tighter">{selectedRecipe.name}</h3>
-                            </div>
-                            <button onClick={() => setSelectedRecipe(null)} className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-all active:scale-90">
-                                <span className="material-icons-round">close</span>
-                            </button>
-                        </header>
-                        <div className="flex-1 overflow-y-auto no-scrollbar space-y-3 mb-10 pr-2">
-                            {selectedRecipe.ingredients.map((ing: Ingredient, idx: number) => (
-                                <div key={idx} className="bg-slate-50 p-6 rounded-[28px] border border-slate-100 flex items-center justify-between">
-                                    <span className="text-sm font-black text-slate-600 uppercase tracking-tight">{ing.name}</span>
-                                    <div className="text-right flex items-baseline gap-1.5">
-                                        <span className="text-2xl font-black text-slate-900">{ing.baseQty.toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-                                        <span className="text-[10px] font-black text-slate-400 uppercase">{ing.unit}</span>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                        <button onClick={() => setSelectedRecipe(null)} className="w-full py-5 bg-slate-900 text-white rounded-[28px] font-black text-[10px] uppercase tracking-widest shadow-2xl shadow-slate-900/20 hover:bg-slate-800 transition-all active:scale-[0.98]">
-                            Confirm Proportions
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* ── Add/Edit Recipe Modal ── */}
-            {isAddingRecipe && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white w-full max-w-4xl rounded-[48px] p-10 shadow-2xl animate-in zoom-in duration-300">
-                        <header className="flex justify-between items-start mb-8">
-                            <div>
-                                <h1 className="text-2xl font-black text-slate-800 tracking-tight uppercase">{editingRecipeId ? 'Edit Recipe' : 'New Recipe'}</h1>
-                                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Update central database</p>
-                            </div>
-                            <button onClick={() => setIsAddingRecipe(false)} className="w-12 h-12 bg-slate-50 rounded-full flex items-center justify-center text-slate-400 hover:bg-slate-100 transition-all">
-                                <span className="material-icons-round">close</span>
-                            </button>
-                        </header>
-                        <form onSubmit={handleAddOrUpdateRecipe} className="space-y-8">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black text-slate-400 uppercase ml-4">Recipe Name</label>
-                                <input value={newRecipeName} onChange={e => setNewRecipeName(e.target.value)} type="text" required placeholder="e.g. Traditional Curry Chicken" className="w-full px-6 py-4 bg-slate-50 border border-slate-100 rounded-[28px] focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all font-bold text-slate-800" />
-                            </div>
-                            <div className="space-y-4">
-                                <div className="flex items-center justify-between px-4">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase">Ingredients</label>
-                                    <button type="button" onClick={addIngredientRow} className="text-[10px] font-black text-blue-600 bg-blue-50 px-4 py-2 rounded-full hover:bg-blue-100 transition-all flex items-center gap-1">
-                                        <span className="material-icons-round text-sm">add</span> Add Row
-                                    </button>
-                                </div>
-                                <div className="max-h-[300px] overflow-y-auto pr-2 no-scrollbar space-y-3">
-                                    {newRecipeIngredients.map((ing, idx) => (
-                                        <div key={idx} className="grid grid-cols-12 gap-3 items-center bg-slate-50 p-3 rounded-[24px] border border-slate-100/50">
-                                            <div className="col-span-5"><input placeholder="Ingredient" value={ing.name} onChange={e => updateIngredient(idx, 'name', e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-100 rounded-2xl outline-none focus:border-blue-500 text-[11px] font-bold" /></div>
-                                            <div className="col-span-3"><input placeholder="Unit" value={ing.unit} onChange={e => updateIngredient(idx, 'unit', e.target.value)} className="w-full px-4 py-3 bg-white border border-slate-100 rounded-2xl outline-none focus:border-blue-500 text-[11px] font-bold uppercase" /></div>
-                                            <div className="col-span-3"><input type="number" step="0.01" placeholder="Vol/10pax" value={ing.baseQty || ''} onChange={e => updateIngredient(idx, 'baseQty', parseFloat(e.target.value) || 0)} className="w-full px-4 py-3 bg-white border border-slate-100 rounded-2xl outline-none focus:border-blue-500 text-[11px] font-bold" /></div>
-                                            <div className="col-span-1 flex justify-center"><button type="button" onClick={() => removeIngredientRow(idx)} className="w-8 h-8 flex items-center justify-center text-slate-300 hover:text-red-500 transition-all"><span className="material-icons-round text-lg">remove_circle_outline</span></button></div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                            <button type="submit" className="w-full py-5 bg-blue-600 text-white rounded-[28px] font-black text-[10px] uppercase tracking-widest shadow-2xl shadow-blue-600/20 hover:bg-blue-700 transition-all active:scale-[0.98]">
-                                {editingRecipeId ? 'Update Master Recipe' : 'Create New Preparation'}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
 
             {/* ── Bottom Stats Bar ── */}
             <div className="px-8 py-6 bg-white border-t border-slate-100 shadow-[0_-8px_24px_rgba(0,0,0,0.02)]">

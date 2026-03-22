@@ -144,14 +144,14 @@ export const FinancePage: React.FC = () => {
                     {/* 1. Revenue Card */}
                     <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
+                            <p className="font-black uppercase tracking-[0.2em] text-sm text-slate-700">
                                 {range} Revenue
                             </p>
                             <span className="material-icons-round text-emerald-500/20 text-2xl">analytics</span>
                         </div>
                         <div className="flex items-baseline gap-1">
-                            <span className="font-black text-emerald-500 font-mono-finance text-lg">RM</span>
-                            <h2 className="font-black tracking-tighter font-mono-finance text-3xl text-slate-800">
+                            <span className="font-black text-emerald-500 font-mono-finance text-xl">RM</span>
+                            <h2 className="font-black tracking-tighter font-mono-finance text-4xl text-slate-800">
                                 {(data?.periodRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h2>
                         </div>
@@ -160,7 +160,7 @@ export const FinancePage: React.FC = () => {
                     {/* 2. Collection Data Card */}
                     <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : 'glass-card p-5 h-36 rounded-3xl hover:-translate-y-2 hover:shadow-indigo-500/10 hover:shadow-2xl overflow-hidden'}`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
+                            <p className="font-black uppercase tracking-[0.2em] text-sm text-slate-700">
                                 Collection Data
                             </p>
                             <span className="material-icons-round text-indigo-500/20 text-2xl">receipt_long</span>
@@ -169,10 +169,10 @@ export const FinancePage: React.FC = () => {
                             {data?.collections.slice(0, 3).map((item, idx) => (
                                 <div key={idx} className="flex items-center justify-between">
                                     <div className="flex items-center gap-1.5 overflow-hidden">
-                                        <span className="material-icons-round text-[10px] text-slate-300">{getPaymentIcon(item.method)}</span>
-                                        <span className="text-[9px] font-black text-slate-500 truncate uppercase tracking-tight">{getPaymentLabel(item.method)}</span>
+                                        <span className="material-icons-round text-[12px] text-slate-300">{getPaymentIcon(item.method)}</span>
+                                        <span className="text-[11px] font-black text-slate-500 truncate uppercase tracking-tight">{getPaymentLabel(item.method)}</span>
                                     </div>
-                                    <span className="text-[9px] font-black text-slate-800 font-mono-finance">RM{item.amount.toLocaleString()}</span>
+                                    <span className="text-[11px] font-black text-slate-800 font-mono-finance">RM{item.amount.toLocaleString()}</span>
                                 </div>
                             ))}
                         </div>
@@ -181,14 +181,14 @@ export const FinancePage: React.FC = () => {
                     {/* 3. Unpaid Card (Neon Flow) */}
                     <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : `px-5 h-36 rounded-3xl hover:-translate-y-2 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }` }`}>
                         <div className="flex items-center justify-between mb-3">
-                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
+                            <p className="font-black uppercase tracking-[0.2em] text-sm text-slate-700">
                                 Unpaid Total
                             </p>
                             <span className={`material-icons-round text-2xl ${(data?.totalUnpaidBalance || 0) > 0 ? 'text-red-500 breathing-red' : 'text-slate-200'}`}>warning</span>
                         </div>
                         <div className="flex items-baseline gap-1">
-                            <span className="font-black font-mono-finance text-lg text-red-500">RM</span>
-                            <h2 className="font-black tracking-tighter font-mono-finance text-3xl text-slate-800">
+                            <span className="font-black font-mono-finance text-xl text-red-500">RM</span>
+                            <h2 className="font-black tracking-tighter font-mono-finance text-4xl text-slate-800">
                                 {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </h2>
                         </div>
@@ -197,12 +197,12 @@ export const FinancePage: React.FC = () => {
                     {/* 4. Orders Card */}
                     <div className={`group inner-border transition-all duration-500 flex flex-col justify-center ${isCollapsed ? 'bg-transparent border-none p-0 h-auto opacity-0 pointer-events-none' : 'glass-card px-3 h-36 rounded-xl hover:-translate-y-1 hover:shadow-indigo-500/10 hover:shadow-xl'}`}>
                         <div className="flex items-center justify-between mb-2">
-                            <p className="font-black uppercase tracking-[0.2em] text-xs text-slate-700">
+                            <p className="font-black uppercase tracking-[0.2em] text-sm text-slate-700">
                                 {range} Orders
                             </p>
                             <span className="material-icons-round text-indigo-500/20 text-xl">shopping_bag</span>
                         </div>
-                        <h2 className="font-black tracking-tighter font-mono-finance text-2xl text-slate-800">
+                        <h2 className="font-black tracking-tighter font-mono-finance text-3xl text-slate-800">
                             {data?.periodOrders || 0}
                         </h2>
                     </div>

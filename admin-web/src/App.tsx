@@ -14,6 +14,7 @@ import { CreateOrderPage } from './pages/CreateOrderPage';
 import { FleetCenterPage } from './pages/FleetCenterPage';
 import KitchenCalendarPage from './pages/KitchenCalendarPage';
 import KitchenPrepPage from './pages/KitchenPrepPage';
+import KitchenRecipesPage from './pages/KitchenRecipesPage';
 import { FinancePage } from './pages/FinancePage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -76,6 +77,7 @@ const App: React.FC = () => {
           <Route path="products" element={<ProductsPage />} />
           <Route path="walkie-talkie" element={<WalkieTalkiePage />} />
           <Route path="kitchen-prep" element={<KitchenPrepPage />} />
+          <Route path="kitchen-recipes" element={<KitchenRecipesPage />} />
           <Route path="event-calendar" element={<KitchenCalendarPage />} />
           <Route path="finance" element={<FinancePage />} />
           <Route path="config" element={<ConfigPage />} />

@@ -5,6 +5,11 @@ from fastapi.concurrency import run_in_threadpool
 
 logger = logging.getLogger(__name__)
 
+import uuid
+
+# 常量：系统默认 UUID (当操作人不是标准 UUID 格式时使用，如系统自动任务或测试)
+FALLBACK_SYSTEM_UUID = "00000000-0000-0000-0000-000000000000"
+
 async def record_audit(
     actor_id: str,
     actor_role: str,
@@ -17,13 +22,31 @@ async def record_audit(
     此函数设计为不阻塞主业务流程，但在记录失败时会记录错误日志。
     """
     try:
+        # UUID 校验与转换逻辑
+        final_actor_id = actor_id
+        is_valid_uuid = False
+        
+        try:
+            if actor_id:
+                uuid.UUID(str(actor_id))
+                is_valid_uuid = True
+        except (ValueError, TypeError, AttributeError):
+            is_valid_uuid = False
+
+        if not is_valid_uuid:
+            final_actor_id = FALLBACK_SYSTEM_UUID
+            # 在 detail 中保留原始不合法的 actor_id 供参考
+            detail = detail or {}
+            detail["_original_actor_id"] = actor_id
+
         data = {
-            "actor_id": actor_id,
-            "actor_role": actor_role,
+            "actor_id": final_actor_id,
+            "actor_role": actor_role or "system",
             "action": action,
             "target": target,
             "detail": detail or {},
         }
+        
         # 使用 run_in_threadpool 确保同步库调用不会阻塞异步事件循环
         await run_in_threadpool(
             supabase.table("audit_logs")

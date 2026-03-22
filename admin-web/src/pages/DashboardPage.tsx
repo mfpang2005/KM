@@ -121,8 +121,8 @@ export const DashboardPage: React.FC = () => {
                         <span className="material-icons-round text-2xl max-w-full truncate">receipt_long</span>
                     </div>
                     <div className="min-w-0">
-                        <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Today Orders</p>
-                        <p className="text-3xl md:text-4xl font-black text-slate-800 tracking-tighter truncate">
+                        <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Today Orders</p>
+                        <p className="text-4xl md:text-5xl font-black text-slate-800 tracking-tighter truncate">
                             {stats?.total_orders || 0}
                         </p>
                     </div>
@@ -136,9 +136,9 @@ export const DashboardPage: React.FC = () => {
                         <span className="material-icons-round text-2xl max-w-full truncate">payments</span>
                     </div>
                     <div className="min-w-0">
-                        <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Monthly Revenue</p>
-                        <p className="text-3xl md:text-4xl font-black text-orange-500 tracking-tighter truncate font-mono">
-                            <span className="text-sm md:text-lg text-orange-400/80 mr-1 font-sans">RM</span>
+                        <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Monthly Revenue</p>
+                        <p className="text-4xl md:text-5xl font-black text-orange-500 tracking-tighter truncate font-mono">
+                            <span className="text-lg md:text-xl text-orange-400/80 mr-1 font-sans">RM</span>
                             {Number(stats?.total_revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </p>
                     </div>
@@ -152,8 +152,8 @@ export const DashboardPage: React.FC = () => {
                         <span className="material-icons-round text-2xl max-w-full truncate">people</span>
                     </div>
                     <div className="min-w-0">
-                        <p className="text-[10px] md:text-xs text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Total Users</p>
-                        <p className="text-3xl md:text-4xl font-black text-rose-600 tracking-tighter truncate">{stats?.total_users || 0}</p>
+                        <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Total Users</p>
+                        <p className="text-4xl md:text-5xl font-black text-rose-600 tracking-tighter truncate">{stats?.total_users || 0}</p>
                     </div>
                 </div>
             </div>
@@ -175,7 +175,7 @@ export const DashboardPage: React.FC = () => {
                         <span className="text-sm font-black text-slate-700 group-hover:text-red-600">Create Order</span>
                     </button>
                     <button
-                        onClick={() => navigate('/drivers')}
+                        onClick={() => navigate('/fleet')}
                         className="flex flex-col items-center justify-center p-6 bg-slate-50 border border-slate-100 rounded-2xl hover:bg-red-50 hover:border-red-200 hover:-translate-y-1 hover:shadow-lg hover:shadow-red-500/10 transition-all group"
                     >
                         <span className="material-icons-round text-3xl text-slate-400 group-hover:text-red-500 mb-3 transition-colors">local_shipping</span>

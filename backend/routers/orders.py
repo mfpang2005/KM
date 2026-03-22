@@ -354,6 +354,56 @@ async def update_order(
 
     raise HTTPException(status_code=500, detail="Order update failed after max retries")
 
+@router.patch("/{order_id:path}/approve")
+async def approve_order(
+    order_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """
+    管理员手动审批订单，直接标记为 ready (跳过厨房准备 / 快捷准备)。
+    """
+    from services.goeasy import notify_kitchen_complete
+
+    # 1. 更新订单状态为 ready
+    response = await run_in_threadpool(
+        supabase.table("orders")
+        .update({"status": "ready"})
+        .eq("id", order_id)
+        .execute
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order_data = response.data[0]
+
+    # 2. 将关联的所有项也标记为 ready (防止厨房页面残留)
+    import postgrest
+    try:
+        await run_in_threadpool(
+            supabase.table("order_items")
+            .update({"is_prepared": True, "status": "ready"})
+            .eq("order_id", order_id)
+            .execute
+        )
+    except postgrest.exceptions.APIError as e:
+        if "PGRST205" not in str(e):
+            print(f"Error updating order items during approval: {e}")
+
+    # 3. 发送 GoEasy 通知通知司机和管理员
+    await notify_kitchen_complete(order_data)
+
+    # 4. 记录审计日志
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.ORDER_STATUS_CHANGE,
+        target=order_id,
+        detail={"status": "ready", "method": "manual_approve"}
+    )
+
+    return order_data
+
+
 @router.post("/{order_id:path}/status", response_model=Order)
 async def update_order_status(
     order_id: str, 
@@ -535,54 +585,7 @@ async def assign_driver(
 
 
 
-@router.patch("/{order_id:path}/approve")
-async def approve_order(
-    order_id: str,
-    current_user: dict = Depends(require_admin)
-):
-    """
-    管理员手动审批订单，直接标记为 ready (跳过厨房准备 / 快捷准备)。
-    """
-    from services.goeasy import notify_kitchen_complete
 
-    # 1. 更新订单状态为 ready
-    response = await run_in_threadpool(
-        supabase.table("orders")
-        .update({"status": "ready"})
-        .eq("id", order_id)
-        .execute
-    )
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Order not found")
-
-    order_data = response.data[0]
-
-    # 2. 将关联的所有项也标记为 ready (防止厨房页面残留)
-    import postgrest
-    try:
-        await run_in_threadpool(
-            supabase.table("order_items")
-            .update({"is_prepared": True, "status": "ready"})
-            .eq("order_id", order_id)
-            .execute
-        )
-    except postgrest.exceptions.APIError as e:
-        if "PGRST205" not in str(e):
-            print(f"Error updating order items during approval: {e}")
-
-    # 3. 发送 GoEasy 通知通知司机和管理员
-    await notify_kitchen_complete(order_data)
-
-    # 4. 记录审计日志
-    await record_audit(
-        actor_id=current_user.get("id"),
-        actor_role=current_user.get("role"),
-        action=AuditActions.ORDER_STATUS_CHANGE,
-        target=order_id,
-        detail={"status": "ready", "method": "manual_approve"}
-    )
-
-    return order_data
 
 
 # ─── Kitchen Prep Endpoints ──────────────────────────────────────────────────

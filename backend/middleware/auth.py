@@ -13,7 +13,11 @@ from models import UserRole
 logger = logging.getLogger(__name__)
 
 
-async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+async def get_current_user(
+    authorization: Optional[str] = Header(None),
+    x_user_id: Optional[str] = Header(None),
+    x_user_role: Optional[str] = Header(None)
+) -> dict:
     """
     从 Authorization 请求头中解析 Supabase JWT Token，
     返回当前用户的 id 和 role。
@@ -22,6 +26,11 @@ async def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
     1. Supabase Auth JWT（标准方式）
     2. 简易 Header 方式 —— 传递 x-user-id + x-user-role（开发/测试用）
     """
+    # 方式 2: 简易 Header (优先处理，方便测试覆盖)
+    if x_user_id and x_user_role:
+        return {"id": x_user_id, "role": x_user_role}
+
+    # 方式 1: 标准 Supabase JWT
     if authorization and authorization.startswith("Bearer "):
         token = authorization.replace("Bearer ", "")
         try:

@@ -321,11 +321,12 @@ export const OrdersPage: React.FC = () => {
 
     const handleApprove = async (orderId: string) => {
         try {
-            await api.patch(`/orders/${encodeURIComponent(orderId)}/approve`);
+            await api.patch(`/orders/${orderId}/approve`);
             await loadOrders();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to approve order', error);
-            alert('审批失败 / Approval failed.');
+            const errorMsg = error.response?.data?.detail || error.message || 'Unknown Error';
+            alert(`审批失败 / Approval failed: ${errorMsg}`);
         }
     };
 
@@ -361,11 +362,12 @@ export const OrdersPage: React.FC = () => {
 
     const handleInlineStatusChange = async (orderId: string, newStatus: string) => {
         try {
-            await api.post(`/orders/${encodeURIComponent(orderId)}/status?status=${newStatus}`);
+            await api.post(`/orders/${orderId}/status?status=${newStatus}`);
             await loadOrders();
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to update order status inline', error);
-            alert('状态更新失败 / Status update failed.');
+            const errorMsg = error.response?.data?.detail || error.message || 'Unknown Error';
+            alert(`状态更新失败 / Status update failed: ${errorMsg}`);
         }
     };
 

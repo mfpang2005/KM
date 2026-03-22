@@ -35,13 +35,13 @@ export const FinanceWidget: React.FC = () => {
                     <span className="material-icons-round text-[90px] leading-none">account_balance_wallet</span>
                 </div>
                 <div className="relative z-10">
-                    <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-2">Today's Revenue</p>
+                    <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-2">Today's Revenue</p>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-black text-blue-400/80 font-sans">RM</span>
+                        <span className="text-xl font-black text-blue-400/80 font-sans">RM</span>
                         <h2 className="text-5xl font-black text-slate-800 tracking-tighter font-mono leading-none">
                             {daily.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </h2>
-                        {daily > 0 && <span className="trend-label px-2 py-0.5 rounded-lg bg-green-50 text-green-500 text-[10px] font-black flex items-center gap-0.5 shrink-0 ml-1">↑ 8.4%</span>}
+                        {daily > 0 && <span className="trend-label px-2 py-0.5 rounded-lg bg-blue-50 text-blue-500 text-[10px] font-black flex items-center gap-0.5 shrink-0 ml-1">REAL-TIME</span>}
                     </div>
                     <div className="mt-5 flex items-center gap-2 text-[11px] font-bold text-blue-600 bg-blue-50/50 w-fit px-3 py-1 rounded-full border border-blue-100/50">
                         <span className="material-icons-round text-sm">trending_up</span>
@@ -55,13 +55,13 @@ export const FinanceWidget: React.FC = () => {
                     <span className="material-icons-round text-[90px] leading-none">insights</span>
                 </div>
                 <div className="relative z-10">
-                    <p className="text-[10px] text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-2">Month to Date</p>
+                    <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-2">Month to Date</p>
                     <div className="flex items-baseline gap-2">
-                        <span className="text-lg font-black text-indigo-400/80 font-sans">RM</span>
+                        <span className="text-xl font-black text-indigo-400/80 font-sans">RM</span>
                         <h2 className="text-5xl font-black text-slate-800 tracking-tighter font-mono leading-none">
                             {monthly.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </h2>
-                        {monthly > 0 && <span className="trend-label px-2 py-0.5 rounded-lg bg-green-50 text-green-500 text-[10px] font-black flex items-center gap-0.5 shrink-0 ml-1">↑ 12.1%</span>}
+                        {monthly > 0 && <span className="trend-label px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-500 text-[10px] font-black flex items-center gap-0.5 shrink-0 ml-1">MONTHLY TOTAL</span>}
                     </div>
                     <div className="mt-5 flex items-center gap-2 text-[11px] font-bold text-indigo-600 bg-indigo-50/50 w-fit px-3 py-1 rounded-full border border-indigo-100/50">
                         <span className="material-icons-round text-sm">calendar_month</span>

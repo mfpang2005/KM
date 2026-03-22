@@ -14,7 +14,7 @@ envStr.split('\n').forEach(line => {
 const url = envVars.SUPABASE_URL;
 const key = envVars.SUPABASE_KEY;
 
-const sql = fs.readFileSync('init_missing_tables.sql', 'utf-8');
+const sql = fs.readFileSync('backend/add_billing_columns.sql', 'utf-8');
 
 async function tryExecSql() {
     console.log("--- Attempting to execute SQL via potential exec_sql RPC ---");

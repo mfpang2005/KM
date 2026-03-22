@@ -146,19 +146,19 @@ export const UsersPage: React.FC = () => {
 
     return (
         <div className="min-h-screen bg-[#FDFDFF] pb-20 px-6">
-            {/* Modern Header Section */}
-            <div className="relative py-12">
-                <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-blue-50/50 via-indigo-50/20 to-transparent -z-10"></div>
+            {/* Modern Header Section (Shrunk) */}
+            <div className="relative py-6">
+                <div className="absolute top-0 left-0 w-full h-[180px] bg-gradient-to-b from-blue-50/50 via-indigo-50/10 to-transparent -z-10"></div>
                 
                 <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-8">
                     <div className="space-y-4">
-                        <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-3">
                             <div className="relative">
-                                <span className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-500/30">
-                                    <span className="material-icons-round text-[32px]">manage_accounts</span>
+                                <span className="w-12 h-12 rounded-[18px] bg-gradient-to-br from-indigo-600 to-blue-600 flex items-center justify-center text-white shadow-xl shadow-blue-500/30">
+                                    <span className="material-icons-round text-[24px]">manage_accounts</span>
                                 </span>
-                                <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white rounded-full flex items-center justify-center shadow-md">
-                                    <span className={`w-2.5 h-2.5 rounded-full ${rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
+                                <div className="absolute -bottom-0.5 -right-0.5 w-5 h-5 bg-white rounded-full flex items-center justify-center shadow-md">
+                                    <span className={`w-2 h-2 rounded-full ${rtStatus === 'SUBSCRIBED' ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
                                 </div>
                             </div>
                             <div className="flex flex-col">
@@ -172,8 +172,8 @@ export const UsersPage: React.FC = () => {
                                         </span>
                                     )}
                                 </div>
-                                <h1 className="text-4xl lg:text-5xl font-black text-slate-900 tracking-tight mt-1">
-                                    用户管理 <span className="text-blue-600 font-serif italic text-3xl">.</span>
+                                <h1 className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight mt-0.5">
+                                    用户管理 <span className="text-blue-600 font-serif italic text-2xl">.</span>
                                 </h1>
                             </div>
                         </div>
@@ -182,7 +182,7 @@ export const UsersPage: React.FC = () => {
                     <div className="flex items-center gap-4">
                         <button
                             onClick={() => setShowAddModal(true)}
-                            className="group relative flex items-center gap-3 px-10 py-5 bg-slate-900 text-white rounded-[24px] font-black text-xs uppercase tracking-widest hover:bg-blue-600 transition-all duration-300 shadow-2xl shadow-slate-900/40 hover:shadow-blue-500/40 active:scale-95 overflow-hidden"
+                            className="group relative flex items-center gap-3 px-8 py-3.5 bg-slate-900 text-white rounded-[20px] font-black text-[10px] uppercase tracking-widest hover:bg-blue-600 transition-all duration-300 shadow-xl shadow-slate-900/30 hover:shadow-blue-500/40 active:scale-95 overflow-hidden"
                         >
                             <div className="absolute inset-0 bg-gradient-to-r from-white/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                             <span className="material-icons-round text-[20px] group-hover:scale-110 transition-transform">person_add</span>
@@ -193,7 +193,7 @@ export const UsersPage: React.FC = () => {
             </div>
 
             {/* Optimized Glass Search Bar */}
-            <div className="sticky top-6 z-30 bg-white/40 backdrop-blur-3xl p-3 rounded-[32px] border border-white/60 shadow-2xl shadow-slate-200/50 mb-12 flex flex-col md:flex-row gap-3 items-center mx-auto max-w-7xl">
+            <div className="sticky top-6 z-30 bg-white/40 backdrop-blur-3xl p-3 rounded-[32px] border border-white/60 shadow-2xl shadow-slate-200/50 mb-8 flex flex-col md:flex-row gap-3 items-center mx-auto max-w-7xl">
                 <div className="relative flex-1 w-full group">
                     <span className="absolute left-6 top-1/2 -translate-y-1/2 material-icons-round text-slate-400 text-[22px] group-focus-within:text-blue-500 transition-colors">search</span>
                     <input
