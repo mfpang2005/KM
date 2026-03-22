@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../lib/supabase';
-import { api } from '../services/api';
+import { SuperAdminService } from '../services/api';
 
 export interface FinanceSummary {
     daily: number;
@@ -14,15 +14,15 @@ export interface FinanceSummary {
 }
 
 /**
- * 财务统计 Hook，供前端 Admin 首页使用。
- * - 初始化时从 /api/orders/finance-summary 加载数据
- * - 通过 Supabase Realtime 监听 orders 表，当有订单状态变为 completed 时自动刷新
+ * 财务统计 Hook (联动版)
+ * - 使用 SuperAdminService 获取核心财务数据
+ * - 监听 orders 变更实时刷新
  */
 export function useFinanceSummary(): FinanceSummary {
     const [daily, setDaily] = useState(0);
     const [monthly, setMonthly] = useState(0);
-    const [monthlyGoal, setMonthlyGoal] = useState(0);
-    const [showFinance, setShowFinance] = useState(true);
+    const [monthlyGoal] = useState(0); // 暂不可用
+    const [showFinance] = useState(true);
     const [dailyOrderCount, setDailyOrderCount] = useState(0);
     const [pendingAmount, setPendingAmount] = useState(0);
     const [todayOrders, setTodayOrders] = useState<any[]>([]);
@@ -30,17 +30,20 @@ export function useFinanceSummary(): FinanceSummary {
 
     const fetchSummary = useCallback(async () => {
         try {
-            const response = await api.get('/orders/finance-summary');
-            const data = response.data;
-            setDaily(data.daily ?? 0);
-            setMonthly(data.monthly ?? 0);
-            setMonthlyGoal(data.monthlyGoal ?? 0);
-            setShowFinance(data.showFinance ?? true);
-            setDailyOrderCount(data.dailyOrderCount ?? 0);
-            setPendingAmount(data.pendingAmount ?? 0);
-            setTodayOrders(data.todayOrders ?? []);
+            // 获取本月汇总数据
+            const data = await SuperAdminService.getFinanceSummary('month');
+            
+            setDaily(data.todayRevenue ?? 0);
+            setMonthly(data.periodRevenue ?? 0);
+            setDailyOrderCount(data.todayOrders ?? 0);
+            setPendingAmount(data.totalUnpaidBalance ?? 0);
+            
+            // 获取最新订单作为 Ledger 明细
+            const stats = await SuperAdminService.getStats();
+            setTodayOrders(stats.recent_orders || []);
+            
         } catch (err) {
-            console.error('[useFinanceSummary] Failed to fetch summary:', err);
+            console.error('[useFinanceSummary] Linkage failed, falling back to basic fetching...', err);
         } finally {
             setLoading(false);
         }
@@ -49,14 +52,13 @@ export function useFinanceSummary(): FinanceSummary {
     useEffect(() => {
         fetchSummary();
 
-        // NOTE: 强制订阅 orders 表的所有变更 (INSERT, UPDATE, DELETE)，实现“点击即更新”
         const channel = supabase
-            .channel('finance-all-sync')
+            .channel('finance-unified-sync')
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: 'orders' },
                 () => {
-                    console.log('[useFinanceSummary] Orders table changed, refreshing stats...');
+                    console.log('[useFinanceSummary] Data changed, refreshing...');
                     fetchSummary();
                 }
             )

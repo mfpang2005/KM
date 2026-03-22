@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Order, OrderCreate, OrderStatus, Product, User, UserRole, Vehicle } from '../../types';
+import { Order, OrderCreate, OrderStatus, Product, User, UserRole, Vehicle, StatsOverview, AiSummary } from '../../types';
 import { supabase } from '../lib/supabase';
 
 export interface Customer {
@@ -141,7 +141,7 @@ export const UserService = {
  */
 export const SuperAdminService = {
     /** 获取全局统计总览 */
-    getStats: async () => {
+    getStats: async (): Promise<StatsOverview> => {
         const response = await api.get('/super-admin/stats');
         return response.data;
     },
@@ -194,9 +194,22 @@ export const SuperAdminService = {
         return response.data;
     },
 
-    /** 获取财务统计 */
-    getFinancials: async (range: string = 'today', paymentStatus: string = 'all'): Promise<any> => {
-        const response = await api.get(`/super-admin/financials?range=${range}&payment_status=${paymentStatus}`);
+    /** 获取财务统计总览 (今日/本月/全部)，range 传 today/month/all */
+    getFinanceSummary: async (range: 'today' | 'month' | 'all' = 'month'): Promise<{
+        periodRevenue: number;
+        periodOrders: number;
+        todayRevenue: number;
+        todayOrders: number;
+        totalUnpaidBalance: number;
+        collections: Array<{ method: string; amount: number; count: number }>;
+    }> => {
+        const response = await api.get(`/super-admin/financials?range=${range}`);
+        return response.data;
+    },
+
+    /** 获取 AI 营业额分析摘要 */
+    getAiSummary: async (): Promise<AiSummary> => {
+        const response = await api.get('/super-admin/ai-summary');
         return response.data;
     },
 };

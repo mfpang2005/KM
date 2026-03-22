@@ -118,6 +118,7 @@ const SuperAdminPanel: React.FC = () => {
 
 const OverviewSection: React.FC = () => {
     const [stats, setStats] = useState<StatsData | null>(null);
+    const [aiSummary, setAiSummary] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [isResetting, setIsResetting] = useState(false);
     const navigate = useNavigate();
@@ -125,8 +126,12 @@ const OverviewSection: React.FC = () => {
     const loadStats = async () => {
         try {
             setLoading(true);
-            const data = await SuperAdminService.getStats();
-            setStats(data);
+            const [statsData, aiData] = await Promise.all([
+                SuperAdminService.getStats(),
+                SuperAdminService.getAiSummary().catch(() => ({ summary: '' }))
+            ]);
+            setStats(statsData);
+            setAiSummary(aiData.summary || '');
         } catch (error) {
             console.error('Failed to load stats:', error);
         } finally {
@@ -187,6 +192,24 @@ const OverviewSection: React.FC = () => {
 
     return (
         <div className="space-y-4">
+            {/* AI 智能简报 */}
+            {aiSummary && (
+                <div className="bg-indigo-900 rounded-2xl p-5 shadow-lg border border-indigo-700 relative overflow-hidden">
+                    <div className="absolute -right-4 -bottom-4 opacity-10">
+                        <span className="material-icons-round text-7xl text-white">auto_awesome</span>
+                    </div>
+                    <div className="relative z-10">
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="material-symbols-outlined text-amber-400 text-lg">auto_awesome</span>
+                            <h4 className="text-xs font-black text-indigo-200 uppercase tracking-widest">AI 智能分析助手</h4>
+                        </div>
+                        <p className="text-sm text-white font-medium leading-relaxed italic">
+                            “{aiSummary}”
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* 核心指标卡片 */}
             <div className="grid grid-cols-3 gap-3">
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">

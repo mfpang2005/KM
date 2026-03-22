@@ -5,6 +5,7 @@ import { SuperAdminService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { StatsOverview } from '../types';
 import { FinanceWidget } from '../components/FinanceWidget';
+import { AiSummaryWidget } from '../components/AiSummaryWidget';
 
 export const DashboardPage: React.FC = () => {
     const { user: authUser, isProfileLoading } = useAuth();
@@ -109,6 +110,8 @@ export const DashboardPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {isSuperAdmin && <AiSummaryWidget />}
 
             <FinanceWidget />
 

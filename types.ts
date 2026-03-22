@@ -122,12 +122,14 @@ export interface User {
 export interface Vehicle {
     id: string;
     plate_no: string;
+    plate?: string; // Legacy alias
     model?: string;
     type?: string;
-    status: 'available' | 'busy' | 'repair';
+    status: 'available' | 'busy' | 'repair' | 'good' | 'maintenance';
     road_tax_expiry?: string;
     capacity?: number;
     notes?: string;
+    driver_id?: string;
     driver_name?: string;
 }
 
@@ -137,5 +139,47 @@ export interface DriverAssignment {
     vehicle_id: string;
     assigned_at: string;
     returned_at?: string;
-    status: 'active' | 'completed';
+    status: 'active' | 'completed' | 'returned';
+}
+export interface StatsOverview {
+    total_orders: number;
+    total_revenue: number;
+    total_users: number;
+    orders_by_status: Record<string, number>;
+    recent_orders: Order[];
+}
+
+export interface AiAnomaly {
+    id: string;
+    amount: number;
+    status: string;
+}
+
+export interface AiWarning {
+    type: string;
+    message: string;
+    severity: 'info' | 'warning' | 'error';
+}
+
+export interface AiSummary {
+    today_vs_avg: {
+        today: number;
+        avg_7d: number;
+        ratio: number;
+    };
+    monthly_growth: number;
+    prediction: {
+        current: number;
+        predicted: number;
+        days_passed: number;
+        total_days: number;
+    };
+    anomalies: AiAnomaly[];
+    warnings: AiWarning[];
+}
+
+export interface CollectionStats {
+    method: string;
+    amount: number;
+    count: number;
 }

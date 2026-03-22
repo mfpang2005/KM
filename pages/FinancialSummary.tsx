@@ -1,32 +1,19 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '../src/lib/supabase';
-import { api } from '../src/services/api';
+import { api, SuperAdminService, OrderService } from '../src/services/api';
 import PullToRefresh from '../src/components/PullToRefresh';
+import { Order, OrderStatus, PaymentMethod } from '../types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Order {
-    id: string;
-    customerName: string;
-    customerPhone: string;
-    amount: number;
-    status: string;
-    paymentMethod: string;
-    paymentStatus: string; // 'paid' | 'unpaid'
-    created_at: string;
-    dueTime: string;
-    items?: { name: string; quantity: number }[];
-    delivery_photos?: string[];
+interface FinanceData {
+    periodRevenue: number;
+    periodOrders: number;
+    todayRevenue: number;
+    todayOrders: number;
+    totalUnpaidBalance: number;
+    collections: Array<{ method: string; amount: number; count: number }>;
 }
-
-interface FinanceSummary {
-    daily: number;
-    monthly: number;
-    monthlyGoal: number;
-}
-
-// ─── Helper ──────────────────────────────────────────────────────────────────
 
 const PM_LABELS: Record<string, string> = {
     cash: 'CASH',
@@ -35,558 +22,344 @@ const PM_LABELS: Record<string, string> = {
     cheque: 'CHEQUE',
 };
 
-const VALID_STATUSES = ['ready', 'delivering', 'completed'];
-
-// ─── Component ────────────────────────────────────────────────────────────────
-
-const AccountManagement: React.FC = () => {
-    const [summary, setSummary] = useState<FinanceSummary>({ daily: 0, monthly: 0, monthlyGoal: 0 });
-    const [orders, setOrders] = useState<Order[]>([]);
+const FinancialSummary: React.FC = () => {
+    const [range, setRange] = useState<'today' | 'month' | 'all'>('month');
     const [loading, setLoading] = useState(true);
-    const tzOffset = new Date().getTimezoneOffset() * 60000;
-    const localISOToday = new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
-    const [startDate, setStartDate] = useState<string>(localISOToday);
-    const [endDate, setEndDate] = useState<string>(localISOToday);
-    const [paidFilter, setPaidFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+    const [data, setData] = useState<FinanceData | null>(null);
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
     const [toggling, setToggling] = useState<string | null>(null);
+    const [isCollapsed, setIsCollapsed] = useState(false);
     const [viewingPhotos, setViewingPhotos] = useState<string[] | null>(null);
 
-    // ── Fetch summary KPIs
-    const fetchSummary = useCallback(async () => {
+    // ── Load Data ──────────────────────────────────────────────────────────────
+    const loadData = useCallback(async (silent = false) => {
+        if (!silent) setLoading(true);
         try {
-            const res = await api.get('/orders/finance-summary');
-            setSummary({
-                daily: res.data.daily ?? 0,
-                monthly: res.data.monthly ?? 0,
-                monthlyGoal: res.data.monthlyGoal ?? 0,
-            });
-        } catch (err) {
-            console.error('[AccountManagement] fetchSummary failed:', err);
+            // 1. Fetch Aggregated Aggregates (Mode: Today/Month/All)
+            const summary = await SuperAdminService.getFinanceSummary(range);
+            setData(summary);
+
+            // 2. Fetch Raw Orders for Transaction List
+            const allOrders = await OrderService.getAll();
+            // Filter relevant for accounting (ready, delivering, completed)
+            const relevant = allOrders.filter(o => 
+                [OrderStatus.READY, OrderStatus.DELIVERING, OrderStatus.COMPLETED].includes(o.status)
+            );
+            setOrders(relevant.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()));
+        } catch (error) {
+            console.error('Failed to load finance data', error);
+        } finally {
+            if (!silent) setLoading(false);
         }
-    }, []);
-
-    // ── Fetch orders with Account-relevant statuses
-    const fetchOrders = useCallback(async () => {
-        try {
-            const res = await api.get('/orders');
-            const all: Order[] = Array.isArray(res.data) ? res.data : [];
-
-            // NOTE: 仅显示进入配送/完成阶段的有效订单，过滤出财务统计范围内的数据
-            const relevant = all.filter(o => VALID_STATUSES.includes((o.status || '').toLowerCase()));
-            setOrders(relevant);
-        } catch (err) {
-            console.error('[AccountManagement] fetchOrders failed:', err);
-        }
-    }, []);
-
-    const loadAll = useCallback(async () => {
-        setLoading(true);
-        await Promise.all([fetchSummary(), fetchOrders()]);
-        setLoading(false);
-    }, [fetchSummary, fetchOrders]);
+    }, [range]);
 
     useEffect(() => {
-        loadAll();
+        loadData();
 
-        // NOTE: Supabase Realtime —— 任何订单变更时自动刷新，实现 <1s 状态联动
+        // ── Real-time Sync ──────────────────────────────────────────────────
         const channel = supabase
             .channel('finance-room')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-                fetchOrders();
-                fetchSummary();
+                loadData(true);
             })
-            .subscribe((status) => {
-                if (status === 'SUBSCRIBED') {
-                    console.log('SUBSCRIBED to finance-room');
-                }
-            });
+            .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
-    }, [loadAll, fetchOrders, fetchSummary]);
+        // Scroll listener for sticky collapse effect
+        const handleScroll = () => {
+            setIsCollapsed(window.scrollY > 100);
+        };
+        window.addEventListener('scroll', handleScroll);
 
-    // ── Toggle payment status
+        return () => {
+            supabase.removeChannel(channel);
+            window.removeEventListener('scroll', handleScroll);
+        };
+    }, [loadData]);
+
+    // ── Actions ────────────────────────────────────────────────────────────────
     const handleTogglePaid = async (order: Order) => {
         if (toggling) return;
         setToggling(order.id);
         const newStatus = order.paymentStatus === 'paid' ? 'unpaid' : 'paid';
         try {
+            // Direct Supabase update for <1s feeling
             await supabase.from('orders').update({ paymentStatus: newStatus }).eq('id', order.id);
-            // 本地立马变色，Realtime 会进行二次确认
-            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, paymentStatus: newStatus } : o));
-            await fetchSummary();
+            // Local optimistic update
+            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, paymentStatus: newStatus as any } : o));
+            // Trigger summary refresh
+            loadData(true);
         } catch (err) {
-            console.error('[AccountManagement] togglePaid failed:', err);
+            console.error('Toggle payment failed', err);
         } finally {
             setToggling(null);
         }
     };
 
-    // ── Filtered order list
-    const filteredOrders = useMemo(() => {
-        const now = new Date();
-        const todayStr = now.toDateString();
-
-        return orders.filter(o => {
-            let oDate = new Date(o.created_at);
-            try {
-                if (o.dueTime && o.dueTime.includes('T')) {
-                    oDate = new Date(o.dueTime);
-                }
-            } catch (e) {
-                // fallback remains created_at
-            }
-
-            // Date filter
-            if (startDate) {
-                const s = new Date(startDate);
-                s.setHours(0, 0, 0, 0);
-                if (oDate < s) return false;
-            }
-            if (endDate) {
-                const e = new Date(endDate);
-                e.setHours(23, 59, 59, 999);
-                if (oDate > e) return false;
-            }
-
-            // Paid filter
-            if (paidFilter === 'paid' && o.paymentStatus !== 'paid') return false;
-            if (paidFilter === 'unpaid' && o.paymentStatus === 'paid') return false;
-
-            return true;
-        });
-    }, [orders, startDate, endDate, paidFilter]);
-
-    // ── Daily sales metrics derived from today's orders
-    const todayOrders = useMemo(() => orders.filter(o => {
-        const tzOffset = new Date().getTimezoneOffset() * 60000;
-        const localISOToday = new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
+    const handleUpdateMethod = async (orderId: string, method: string) => {
         try {
-            if (o.dueTime && o.dueTime.includes('T')) {
-                return new Date(o.dueTime).toISOString().slice(0, 10) === localISOToday;
-            }
-            return new Date(o.created_at).toISOString().slice(0, 10) === localISOToday;
-        } catch (e) {
-            return new Date(o.created_at).toISOString().slice(0, 10) === localISOToday;
+            await supabase.from('orders').update({ paymentMethod: method }).eq('id', orderId);
+            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, paymentMethod: method as any } : o));
+            loadData(true);
+        } catch (err) {
+            console.error('Update method failed', err);
         }
-    }), [orders]);
+    };
 
-    const todayPaidCount = useMemo(() => todayOrders.filter(o => o.paymentStatus === 'paid').length, [todayOrders]);
-    const todayUnpaidCount = useMemo(() => todayOrders.filter(o => o.paymentStatus !== 'paid').length, [todayOrders]);
-    const collectionRate = todayOrders.length > 0 ? (todayPaidCount / todayOrders.length) * 100 : 0;
+    const getPaymentIcon = (method: string) => {
+        switch (method.toLowerCase()) {
+            case 'cash': return 'payments';
+            case 'bank_transfer': return 'account_balance';
+            case 'ewallet': return 'contactless';
+            default: return 'receipt';
+        }
+    };
 
-    // ── Export Functions
+    // ── Export ─────────────────────────────────────────────────────────────────
     const exportToCSV = () => {
-        if (filteredOrders.length === 0) {
-            alert('No data to export');
-            return;
-        }
+        const filtered = orders.filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter);
+        if (filtered.length === 0) return;
 
-        const headers = ['Order ID', 'Customer', 'Phone', 'Date', 'Type (Payment)', 'Status', 'Payment Status', 'Amount (RM)'];
-        const csvRows = [headers.join(',')];
-
-        filteredOrders.forEach(o => {
-            const dateStr = o.created_at ? new Date(o.created_at).toLocaleDateString() : '';
-            const row = [
-                o.id,
-                `"${o.customerName}"`,
-                `"${o.customerPhone}"`,
-                dateStr,
-                PM_LABELS[o.paymentMethod] || o.paymentMethod || '-',
-                o.status,
-                o.paymentStatus === 'paid' ? 'Paid' : 'Unpaid',
-                (o.amount || 0).toFixed(2)
-            ];
-            csvRows.push(row.join(','));
-        });
-
-        const csvString = csvRows.join('\n');
-        const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+        const headers = ['Order ID', 'Customer', 'Date', 'Amount', 'Status', 'Payment'];
+        const rows = filtered.map(o => [
+            o.id,
+            `"${o.customerName}"`,
+            new Date(o.created_at || '').toLocaleDateString(),
+            o.amount,
+            o.status,
+            o.paymentStatus
+        ]);
+        
+        const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const url = URL.createObjectURL(blob);
-        const link = document.createElement('a');
+        const link = document.createElement("a");
         link.href = url;
-        link.setAttribute('download', `Finance_Export_${startDate}_to_${endDate}.csv`);
-        document.body.appendChild(link);
+        link.download = `KM_Finance_${range}_${new Date().toISOString().slice(0,10)}.csv`;
         link.click();
-        document.body.removeChild(link);
     };
-
-    const generatePDF = () => {
-        window.print();
-    };
-
-    // TODAY REVENUE: delivery_date 为今日且已支付
-    const todayRevenue = todayOrders.filter(o => o.paymentStatus === 'paid').reduce((acc, o) => acc + (o.amount || 0), 0);
-    // PENDING: delivery_date 为今日且未支付
-    const todayPending = todayOrders.filter(o => o.paymentStatus !== 'paid').reduce((acc, o) => acc + (o.amount || 0), 0);
-
-    const goalPct = summary.monthlyGoal > 0 ? Math.min((summary.monthly / summary.monthlyGoal) * 100, 100) : 0;
 
     return (
-        <div className="flex flex-col min-h-full" style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}>
-
-            {/* ── HERO HEADER ──────────────────────────── */}
-            <div className="relative pt-14 pb-6 px-5 overflow-hidden no-print">
-                {/* Ambient glow */}
-                <div className="absolute -top-20 -left-20 w-72 h-72 bg-indigo-600/20 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute -bottom-10 -right-10 w-56 h-56 bg-violet-600/20 rounded-full blur-3xl pointer-events-none" />
-
-                <div className="relative z-10">
-                    <p className="text-[9px] font-black text-indigo-400 tracking-[0.4em] uppercase mb-1">Kim Long Catering</p>
-                    <h1 className="text-2xl font-black text-white tracking-tight">Account Management</h1>
-                    <p className="text-slate-400 text-xs mt-0.5">
-                        {new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'long' })}
-                    </p>
+        <div className="flex flex-col min-h-full pb-32" style={{ background: 'linear-gradient(145deg, #0f172a 0%, #1e1b4b 50%, #0f172a 100%)' }}>
+            
+            {/* 1. Header Section */}
+            <div className="pt-14 pb-8 px-6 no-print">
+                <div className="flex items-center justify-between mb-6">
+                    <div>
+                        <p className="text-[10px] font-black text-indigo-400 tracking-[0.4em] uppercase mb-1 italic">Unified Financials</p>
+                        <h1 className="text-2xl font-black text-white tracking-tight">Account Center / 财务对账</h1>
+                    </div>
+                    
+                    {/* Range Selector - Same as Admin-Web */}
+                    <div className="flex bg-white/5 backdrop-blur-xl p-1 rounded-2xl border border-white/10 shadow-xl">
+                        {(['today', 'month', 'all'] as const).map((r) => (
+                            <button
+                                key={r}
+                                onClick={() => setRange(r)}
+                                className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all duration-300 ${range === r ? 'bg-indigo-600 text-white shadow-lg scale-105' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+                            >
+                                {r}
+                            </button>
+                        ))}
+                    </div>
                 </div>
-            </div>
 
-            <PullToRefresh onRefresh={loadAll}>
-                <div className="px-4 pb-28 space-y-5">
-
-                    {/* ── GLASSMORPHISM KPI CARDS ──────────── */}
-                    <div className="grid grid-cols-2 gap-3">
-                        {/* Today Total — full-width */}
-                        <div
-                            className="col-span-2 relative rounded-[32px] overflow-hidden p-8"
-                            style={{
-                                background: 'rgba(255,255,255,0.03)',
-                                backdropFilter: 'blur(30px)',
-                                border: '1px solid rgba(255,255,255,0.1)',
-                                boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
-                            }}
-                        >
-                            {/* Decorative elements */}
-                            <div className="absolute -right-10 -top-10 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl" />
-                            <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-violet-500/10 rounded-full blur-2xl" />
-
-                            <p className="text-[10px] font-black text-indigo-400 tracking-[0.5em] uppercase mb-4 text-center">Today Total</p>
-                            {loading ? (
-                                <div className="h-16 w-full bg-white/5 animate-pulse rounded-2xl mb-8" />
-                            ) : (
-                                <div className="text-center mb-8">
-                                    <span className="text-6xl font-mono font-black text-white tracking-tighter drop-shadow-[0_10px_10px_rgba(0,0,0,0.5)] leading-none italic" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                                        RM {(todayRevenue + todayPending).toLocaleString('en-MY', { minimumFractionDigits: 2 })}
-                                    </span>
-                                </div>
-                            )}
-
-                            <div className="grid grid-cols-2 gap-2 pt-6 border-t border-white/5">
-                                <div className="text-center">
-                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">Order Count</p>
-                                    <p className="text-xl font-black text-white">{todayOrders.length}</p>
-                                </div>
-                                <div className="text-center border-x border-white/5">
-                                    <p className="text-[9px] text-slate-500 font-bold uppercase tracking-wider mb-1">已收 (RM)</p>
-                                    <p className="text-xl font-mono font-black text-[#10b981]">{todayRevenue.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</p>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Monthly KPI */}
-                        <div
-                            className="relative rounded-[28px] p-6 overflow-hidden"
-                            style={{
-                                background: 'rgba(99,102,241,0.1)',
-                                backdropFilter: 'blur(16px)',
-                                border: '1px solid rgba(99,102,241,0.2)',
-                            }}
-                        >
-                            <p className="text-[9px] font-black text-indigo-300 tracking-[0.3em] uppercase mb-2">Monthly</p>
-                            <p className="text-2xl font-mono font-black text-white">RM {summary.monthly.toLocaleString('en-MY', { minimumFractionDigits: 0 })}</p>
-                            <p className="text-[9px] text-indigo-400/60 mt-2 font-bold uppercase tracking-tighter">本月累计已收</p>
-                        </div>
-
-                        {/* Collection Rate */}
-                        <div
-                            className="relative rounded-[28px] p-6 overflow-hidden"
-                            style={{
-                                background: 'rgba(16,185,129,0.08)',
-                                backdropFilter: 'blur(16px)',
-                                border: '1px solid rgba(16,185,129,0.15)',
-                            }}
-                        >
-                            <p className="text-[9px] font-black text-emerald-300 tracking-[0.3em] uppercase mb-2">Collection</p>
-                            <p className="text-2xl font-mono font-black text-white">{collectionRate.toFixed(0)}<span className="text-sm ml-0.5">%</span></p>
-                            <p className="text-[9px] text-emerald-400/60 mt-2 font-bold uppercase tracking-tighter">{todayPaidCount}/{todayOrders.length} 订单已结清</p>
+                {/* 2. Metrics Bar (Sticky Mini-Dashboard Mode) */}
+                <div className={`grid gap-4 transition-all duration-500 ${isCollapsed ? 'grid-cols-4 scale-[0.85] origin-top' : 'grid-cols-2 lg:grid-cols-4'}`}>
+                    
+                    {/* Revenue Card */}
+                    <div className="glass-card p-6 rounded-[32px] relative overflow-hidden group">
+                        <div className="absolute -right-6 -top-6 w-24 h-24 bg-emerald-500/10 rounded-full blur-2xl group-hover:scale-150 transition-transform duration-700" />
+                        <p className="text-[9px] font-black text-emerald-400 tracking-[0.3em] uppercase mb-3 italic">Revenue ({range})</p>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-black text-emerald-500 font-mono-finance">RM</span>
+                            <h2 className="text-3xl font-black text-white font-mono-finance drop-shadow-lg leading-none">
+                                {(data?.periodRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </h2>
                         </div>
                     </div>
 
-                    {/* ── MONTHLY GOAL PROGRESS ─────────────── */}
-                    {summary.monthlyGoal > 0 && (
-                        <div
-                            className="rounded-[28px] p-6"
-                            style={{
-                                background: 'rgba(255,255,255,0.03)',
-                                border: '1px solid rgba(255,255,255,0.06)',
-                            }}
-                        >
-                            <div className="flex justify-between items-center mb-4">
-                                <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">月度回笼进度</p>
-                                <span className="text-xs font-black text-indigo-400">{goalPct.toFixed(1)}%</span>
-                            </div>
-                            <div className="h-3 bg-white/5 rounded-full overflow-hidden p-0.5 border border-white/5">
-                                <div
-                                    className="h-full rounded-full transition-all duration-1000 relative"
-                                    style={{
-                                        width: `${goalPct}%`,
-                                        background: goalPct >= 100
-                                            ? 'linear-gradient(90deg, #10b981, #059669)'
-                                            : 'linear-gradient(90deg, #6366f1, #8b5cf6)',
-                                        boxShadow: '0 0 20px rgba(99,102,241,0.3)'
-                                    }}
-                                >
-                                    <div className="absolute inset-0 bg-white/20 animate-pulse" />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* ── FILTER & EXPORTS ───────────────────── */}
-                    <div className="space-y-3 no-print">
-                        <div className="flex flex-col sm:flex-row gap-2">
-                            <div className="flex-1 flex gap-2">
-                                <div className="flex-1 flex flex-col bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 focus-within:border-indigo-500/50 transition-colors">
-                                    <span className="text-[9px] text-indigo-300/70 font-black uppercase tracking-widest mb-0.5">Start Date</span>
-                                    <input
-                                        type="date"
-                                        className="bg-transparent text-xs text-white outline-none [&::-webkit-calendar-picker-indicator]:filter-invert"
-                                        value={startDate}
-                                        onChange={e => setStartDate(e.target.value)}
-                                        max={endDate}
-                                    />
-                                </div>
-                                <div className="flex-1 flex flex-col bg-white/5 border border-white/10 rounded-xl px-3 py-1.5 focus-within:border-indigo-500/50 transition-colors">
-                                    <span className="text-[9px] text-indigo-300/70 font-black uppercase tracking-widest mb-0.5">End Date</span>
-                                    <input
-                                        type="date"
-                                        className="bg-transparent text-xs text-white outline-none [&::-webkit-calendar-picker-indicator]:filter-invert"
-                                        value={endDate}
-                                        onChange={e => setEndDate(e.target.value)}
-                                        min={startDate}
-                                    />
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={() => {
-                                        const d = new Date();
-                                        const sd = new Date(d.setDate(d.getDate() - 7)).toISOString().slice(0, 10);
-                                        const tzOffset = new Date().getTimezoneOffset() * 60000;
-                                        const ed = new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
-                                        setStartDate(sd);
-                                        setEndDate(ed);
-                                    }}
-                                    className="flex-1 sm:flex-none px-3 py-2 bg-white/10 hover:bg-white/20 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border border-white/10"
-                                >
-                                    Past 7 Days
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        const tzOffset = new Date().getTimezoneOffset() * 60000;
-                                        const today = new Date(Date.now() - tzOffset).toISOString().slice(0, 10);
-                                        setStartDate(today);
-                                        setEndDate(today);
-                                    }}
-                                    className="flex-1 sm:flex-none px-3 py-2 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors border border-indigo-500/50 shadow-lg shadow-indigo-900/20"
-                                >
-                                    Today
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-between items-center gap-2">
-                            <div className="flex bg-white/5 border border-white/10 rounded-xl p-1 w-full max-w-[240px]">
-                                {(['all', 'paid', 'unpaid'] as const).map(s => (
-                                    <button
-                                        key={s}
-                                        onClick={() => setPaidFilter(s)}
-                                        className={`flex-1 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-wider transition-all ${paidFilter === s
-                                            ? s === 'paid' ? 'bg-[#10b981] text-white shadow-md'
-                                                : s === 'unpaid' ? 'bg-[#ef4444] text-white shadow-md'
-                                                    : 'bg-indigo-600 text-white shadow-md'
-                                            : 'text-slate-400 hover:text-white'
-                                            }`}
-                                    >
-                                        {s === 'all' ? '全部' : s === 'paid' ? '✓ 已收' : '✗ 未收'}
-                                    </button>
-                                ))}
-                            </div>
-
-                            <div className="flex gap-2">
-                                <button onClick={exportToCSV} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors">
-                                    <span className="material-icons-round text-[14px]">download</span> CSV
-                                </button>
-                                <button onClick={generatePDF} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500/20 text-red-500 border border-red-500/30 hover:bg-red-500/30 rounded-xl text-[10px] font-black uppercase tracking-wider transition-colors">
-                                    <span className="material-icons-round text-[14px]">picture_as_pdf</span> PDF
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* ── ORDER CARD STREAM ─────────────────── */}
-                    <div className="space-y-3">
-                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest pl-1">
-                            对账单 ({filteredOrders.length} 笔)
-                        </p>
-
-                        {loading ? (
-                            [1, 2, 3].map(i => (
-                                <div key={i} className="rounded-[24px] p-5 animate-pulse" style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)' }}>
-                                    <div className="h-4 w-32 bg-white/10 rounded-lg mb-2" />
-                                    <div className="h-3 w-20 bg-white/5 rounded-lg" />
-                                </div>
-                            ))
-                        ) : filteredOrders.length === 0 ? (
-                            <div className="flex flex-col items-center py-16 text-slate-600">
-                                <span className="material-icons-round text-5xl mb-2">receipt_long</span>
-                                <p className="text-sm font-bold">暂无符合条件的订单</p>
-                            </div>
-                        ) : (
-                            filteredOrders.map(order => (
-                                <div
-                                    key={order.id}
-                                    className="relative rounded-[24px] overflow-hidden transition-all duration-300"
-                                    style={{
-                                        background: order.paymentStatus === 'paid'
-                                            ? 'rgba(16,185,129,0.08)'
-                                            : 'rgba(239,68,68,0.07)',
-                                        border: order.paymentStatus === 'paid'
-                                            ? '1px solid rgba(16,185,129,0.2)'
-                                            : '1px solid rgba(239,68,68,0.18)',
-                                    }}
-                                >
-                                    {/* Left status bar */}
-                                    <div
-                                        className="absolute left-0 top-0 bottom-0 w-1 transition-colors duration-500"
-                                        style={{ background: order.paymentStatus === 'paid' ? '#10b981' : '#ef4444' }}
-                                    />
-
-                                    <div className="pl-5 pr-4 py-4">
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex items-center gap-2 mb-0.5">
-                                                    <p className="text-[10px] font-mono font-bold text-slate-500">{order.id}</p>
-                                                    <span className={`text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase ${order.status === 'completed' ? 'bg-green-500/20 text-green-400' : 'bg-violet-500/20 text-violet-400'}`}>
-                                                        {order.status}
-                                                    </span>
-                                                </div>
-                                                <p className="text-sm font-black text-white truncate">{order.customerName}</p>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <select
-                                                        value={order.paymentMethod || 'cash'}
-                                                        onChange={async (e) => {
-                                                            const newMethod = e.target.value;
-                                                            try {
-                                                                await supabase.from('orders').update({ paymentMethod: newMethod }).eq('id', order.id);
-                                                                setOrders(prev => prev.map(o => o.id === order.id ? { ...o, paymentMethod: newMethod } : o));
-                                                            } catch (err) {
-                                                                console.error('Update payment method failed', err);
-                                                            }
-                                                        }}
-                                                        className="bg-white/5 border border-white/10 rounded-lg px-2 py-0.5 text-[9px] font-black text-indigo-300 outline-none cursor-pointer appearance-none hover:bg-white/10 transition-colors"
-                                                    >
-                                                        <option value="cash" className="bg-slate-900">CASH</option>
-                                                        <option value="bank_transfer" className="bg-slate-900">BANK TRF</option>
-                                                        <option value="ewallet" className="bg-slate-900">E-WALLET</option>
-                                                        <option value="cheque" className="bg-slate-900">CHEQUE</option>
-                                                    </select>
-                                                    <span className="text-slate-600 font-bold">•</span>
-                                                    <p className="text-[9px] text-slate-500">
-                                                        {order.created_at ? new Date(order.created_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : '-'}
-                                                    </p>
-                                                </div>
-                                            </div>
-
-                                            <div className="flex flex-col items-end gap-2 shrink-0">
-                                                <span className="text-lg font-mono font-black text-white">RM {(order.amount || 0).toFixed(2)}</span>
-
-                                                {/* NEW EVIDENCE BUTTON */}
-                                                {order.delivery_photos && order.delivery_photos.length > 0 && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); setViewingPhotos(order.delivery_photos!); }}
-                                                        className="flex items-center gap-1 text-[9px] font-black uppercase text-indigo-400 bg-indigo-500/10 px-2 py-1.5 rounded-lg border border-indigo-500/20 active:scale-95 transition-all shadow-lg"
-                                                    >
-                                                        <span className="material-icons-round text-[12px]">photo_library</span>
-                                                        查看存证 ({order.delivery_photos.length})
-                                                    </button>
-                                                )}
-
-                                                <button
-                                                    onClick={() => handleTogglePaid(order)}
-                                                    disabled={toggling === order.id}
-                                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider transition-all active:scale-95 shadow-lg ${order.paymentStatus === 'paid'
-                                                        ? 'bg-[#10b981] text-white border border-[#10b981]/50 hover:bg-[#059669]'
-                                                        : 'bg-[#ef4444] text-white border border-[#ef4444]/50 hover:bg-[#dc2626]'
-                                                        } ${toggling === order.id ? 'opacity-50 pointer-events-none' : ''}`}
-                                                >
-                                                    {toggling === order.id ? (
-                                                        <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                                                    ) : (
-                                                        <span className="material-icons-round text-[12px]">
-                                                            {order.paymentStatus === 'paid' ? 'check_circle' : 'radio_button_unchecked'}
-                                                        </span>
-                                                    )}
-                                                    {order.paymentStatus === 'paid' ? '已收款' : '待收款'}
-                                                </button>
-                                            </div>
-                                        </div>
+                    {/* Collection Stats Card */}
+                    <div className="glass-card p-6 rounded-[32px] overflow-hidden">
+                        <p className="text-[9px] font-black text-indigo-300 tracking-[0.3em] uppercase mb-3 italic">Collections ({range})</p>
+                        <div className="space-y-1.5">
+                            {data?.collections.slice(0, 3).map((item, idx) => (
+                                <div key={idx} className="flex items-center justify-between text-[10px] font-bold">
+                                    <div className="flex items-center gap-1.5 text-slate-400">
+                                        <span className="material-icons-round text-[12px]">{getPaymentIcon(item.method)}</span>
+                                        <span className="uppercase tracking-tighter truncate w-16">{PM_LABELS[item.method] || item.method}</span>
                                     </div>
-                                </div>
-                            ))
-                        )}
-                    </div>
-
-                    {/* ── DAILY BREAKDOWN TABLE ─────────────── */}
-                    <div
-                        className="rounded-[24px] overflow-hidden"
-                        style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)' }}
-                    >
-                        <div className="px-5 pt-5 pb-3 border-b border-white/5">
-                            <h3 className="text-[9px] font-black text-slate-400 uppercase tracking-widest">每日销售明细</h3>
-                        </div>
-                        <div className="divide-y divide-white/5">
-                            {[
-                                { label: '今日订单总数', value: `${todayOrders.length} 单`, icon: 'receipt_long' },
-                                { label: '今日总金额', value: `RM ${(todayRevenue + todayPending).toFixed(2)}`, icon: 'payments' },
-                                { label: '已收金额', value: `RM ${todayRevenue.toFixed(2)}`, icon: 'check_circle', color: 'text-emerald-400' },
-                                { label: '已收金额', value: `RM ${todayRevenue.toFixed(2)}`, icon: 'check_circle', color: 'text-emerald-400' },
-                            ].map(row => (
-                                <div key={row.label} className="flex items-center justify-between px-5 py-3.5">
-                                    <div className="flex items-center gap-2.5">
-                                        <span className={`material-icons-round text-[16px] ${row.color || 'text-slate-500'}`}>{row.icon}</span>
-                                        <span className="text-[11px] font-bold text-slate-400">{row.label}</span>
-                                    </div>
-                                    <span className={`text-[12px] font-mono font-black ${row.color || 'text-slate-200'}`}>{row.value}</span>
+                                    <span className="text-white font-mono-finance">RM{item.amount.toLocaleString()}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
 
+                    {/* Unpaid Card (Neon Flow Mode) */}
+                    <div className={`p-6 rounded-[32px] transition-all duration-500 ${ (data?.totalUnpaidBalance || 0) > 0 ? 'neon-flow-red' : 'glass-card' }`}>
+                        <div className="flex items-center justify-between mb-3">
+                            <p className={`text-[9px] font-black tracking-[0.3em] uppercase italic ${ (data?.totalUnpaidBalance || 0) > 0 ? 'text-red-400' : 'text-slate-400' }`}>
+                                Unpaid Total
+                            </p>
+                            {(data?.totalUnpaidBalance || 0) > 0 && <span className="material-icons-round text-red-500 text-sm breathing-red">warning</span>}
+                        </div>
+                        <div className="flex items-baseline gap-1">
+                            <span className="text-sm font-black text-red-500 font-mono-finance">RM</span>
+                            <h2 className="text-3xl font-black text-white font-mono-finance leading-none">
+                                {(data?.totalUnpaidBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </h2>
+                        </div>
+                    </div>
+
+                    {/* Orders Count Card */}
+                    <div className="glass-card p-6 rounded-[32px]">
+                        <p className="text-[9px] font-black text-slate-400 tracking-[0.3em] uppercase mb-3 italic">Volume ({range})</p>
+                        <div className="flex items-baseline gap-2">
+                            <h2 className="text-3xl font-black text-white font-mono-finance leading-none">
+                                {data?.periodOrders || 0}
+                            </h2>
+                            <span className="text-[10px] font-black text-slate-600 uppercase">Orders</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <PullToRefresh onRefresh={loadData}>
+                <div className="px-5 grid gap-6">
+                    
+                    {/* 3. Transaction List */}
+                    <div className="glass-card rounded-[40px] overflow-hidden border-white/5 shadow-2xl">
+                        <div className="px-6 py-5 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+                            <div className="flex items-center gap-4">
+                                <h4 className="font-black text-white text-[10px] uppercase tracking-[0.2em] italic">Live Ledger / 实时对账单</h4>
+                                <div className="flex bg-white/5 p-1 rounded-full border border-white/10">
+                                    {(['all', 'paid', 'unpaid'] as const).map(s => (
+                                        <button
+                                            key={s}
+                                            onClick={() => setStatusFilter(s)}
+                                            className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-[0.1em] transition-all ${statusFilter === s ? 'bg-white text-slate-900 shadow-lg' : 'text-slate-500 hover:text-slate-300'}`}
+                                        >
+                                            {s}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                            <button onClick={exportToCSV} className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center hover:bg-emerald-500/30 transition-all">
+                                <span className="material-icons-round text-sm">download</span>
+                            </button>
+                        </div>
+
+                        <div className="divide-y divide-white/5">
+                            {loading ? (
+                                [1, 2, 3].map(i => <div key={i} className="h-24 animate-pulse bg-white/5" />)
+                            ) : orders.filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter).length === 0 ? (
+                                <div className="py-20 flex flex-col items-center text-slate-600">
+                                    <span className="material-icons-round text-5xl mb-2">auto_graph</span>
+                                    <p className="text-xs font-black uppercase tracking-widest">No matching ledger entries</p>
+                                </div>
+                            ) : (
+                                orders
+                                .filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter)
+                                .map(order => (
+                                    <div key={order.id} className="relative group transition-all duration-300 hover:bg-white/[0.02]">
+                                        {/* Status Sidebar */}
+                                        <div className={`absolute left-0 top-0 bottom-0 w-1 ${order.paymentStatus === 'paid' ? 'bg-emerald-500' : 'bg-red-500'}`} />
+                                        
+                                        <div className="pl-6 pr-5 py-5 flex items-center justify-between gap-4">
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-[10px] font-mono font-bold text-slate-500 italic">#{order.id.slice(-6)}</span>
+                                                    <span className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter">
+                                                        {new Date(order.created_at || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                    </span>
+                                                </div>
+                                                <h5 className="text-sm font-black text-white truncate mb-2 uppercase tracking-tight">{order.customerName}</h5>
+                                                
+                                                <div className="flex items-center gap-3">
+                                                    {/* Method Switcher */}
+                                                    <select 
+                                                        value={order.paymentMethod || 'cash'}
+                                                        onChange={(e) => handleUpdateMethod(order.id, e.target.value)}
+                                                        className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[9px] font-black text-indigo-300 uppercase outline-none"
+                                                    >
+                                                        <option value="cash" className="bg-slate-900">Cash</option>
+                                                        <option value="bank_transfer" className="bg-slate-900">Bank Transfer</option>
+                                                        <option value="ewallet" className="bg-slate-900">E-Wallet</option>
+                                                        <option value="cheque" className="bg-slate-900">Cheque</option>
+                                                    </select>
+                                                    
+                                                    {order.delivery_photos && order.delivery_photos.length > 0 && (
+                                                        <button 
+                                                            onClick={() => setViewingPhotos(order.delivery_photos!)}
+                                                            className="text-indigo-400/60 hover:text-indigo-400 transition-colors"
+                                                        >
+                                                            <span className="material-icons-round text-sm">photo_library</span>
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col items-end gap-3 shrink-0">
+                                                <div className="text-lg font-black text-white font-mono-finance italic">
+                                                    <span className="text-[10px] mr-1 text-slate-500 font-sans not-italic">RM</span>
+                                                    {(order.amount || 0).toFixed(2)}
+                                                </div>
+                                                
+                                                <button
+                                                    onClick={() => handleTogglePaid(order)}
+                                                    disabled={toggling === order.id}
+                                                    className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 ${
+                                                        order.paymentStatus === 'paid' 
+                                                        ? 'bg-emerald-500 text-white hover:bg-emerald-400' 
+                                                        : 'bg-red-500 text-white hover:bg-red-400'
+                                                    }`}
+                                                >
+                                                    {toggling === order.id ? (
+                                                        <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                                    ) : (
+                                                        order.paymentStatus === 'paid' ? '已收款' : '待收款'
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 4. Daily Breakdown Summary */}
+                    <div className="glass-card rounded-[32px] p-6 border-white/5">
+                        <div className="flex items-center gap-2 mb-4">
+                            <span className="material-icons-round text-indigo-400">equalizer</span>
+                            <h4 className="font-black text-white text-[11px] uppercase tracking-widest italic">Daily Performance Summary</h4>
+                        </div>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center py-2 border-b border-white/5">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Today's Live Orders</span>
+                                <span className="text-sm font-black text-white font-mono-finance">{data?.todayOrders || 0}</span>
+                            </div>
+                            <div className="flex justify-between items-center py-2">
+                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-tighter">Gross Potential (Today)</span>
+                                <span className="text-sm font-black text-indigo-400 font-mono-finance">RM {((data?.todayRevenue || 0) + (data?.totalUnpaidBalance || 0)).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </PullToRefresh>
 
-            {/* EVIDENCE PHOTOS MODAL */}
+            {/* Evidence Modal */}
             {viewingPhotos && (
-                <div className="fixed inset-0 z-[200] bg-slate-900/95 backdrop-blur-xl flex flex-col animate-in fade-in duration-300">
-                    <header className="px-6 pt-12 pb-4 flex justify-between items-center border-b border-white/5 shrink-0">
-                        <div>
-                            <h2 className="font-black text-white text-base tracking-widest uppercase">交付存证</h2>
-                            <p className="text-[10px] text-indigo-400 font-bold uppercase tracking-tight mt-0.5">Delivery Evidence Photos</p>
-                        </div>
-                        <button onClick={() => setViewingPhotos(null)} className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-slate-300 active:scale-90 transition-transform">
+                <div className="fixed inset-0 z-[100] bg-slate-900/95 backdrop-blur-xl flex flex-col p-6 animate-in fade-in zoom-in duration-300">
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="font-black text-white uppercase tracking-widest italic">Delivery Evidence</h3>
+                        <button onClick={() => setViewingPhotos(null)} className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white">
                             <span className="material-icons-round">close</span>
                         </button>
-                    </header>
-                    <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                    </div>
+                    <div className="flex-1 overflow-y-auto space-y-4 no-scrollbar">
                         {viewingPhotos.map((url, idx) => (
-                            <div key={idx} className="bg-white/5 rounded-[24px] overflow-hidden border border-white/10">
-                                <img src={url} alt={`Evidence ${idx + 1}`} className="w-full h-auto object-contain" />
-                                <div className="p-4 flex justify-between items-center bg-slate-800/50">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Photo {idx + 1}</span>
-                                    <a href={url} target="_blank" rel="noreferrer" className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center transition-colors hover:bg-indigo-500/40">
-                                        <span className="material-icons-round text-[14px]">open_in_new</span>
-                                    </a>
-                                </div>
-                            </div>
+                            <img key={idx} src={url} className="w-full h-auto rounded-3xl border border-white/10 shadow-2xl" alt="Evidence" />
                         ))}
                     </div>
                 </div>
@@ -595,4 +368,4 @@ const AccountManagement: React.FC = () => {
     );
 };
 
-export default AccountManagement;
+export default FinancialSummary;
