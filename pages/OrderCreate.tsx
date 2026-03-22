@@ -45,7 +45,6 @@ const OrderCreate: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [isCartExpanded, setIsCartExpanded] = useState(false);
-    const [selectedDriver, setSelectedDriver] = useState<string | null>(null);
     const [isConfirming, setIsConfirming] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [generatedOrderId, setGeneratedOrderId] = useState('');
@@ -241,15 +240,15 @@ const OrderCreate: React.FC = () => {
                 eventTime,
                 mapsLink,
                 remarks,
-                billing_unit: billingUnit,
-                billing_qty: billingQty,
-                billing_price: billingPrice,
+                billingUnit: billingUnit as any,
+                billingQuantity: billingQty,
+                billingPricePerUnit: billingPrice,
                 deposit: deposit,
                 amount: billingSubtotal,
                 balance: balanceDue,
                 type: address ? 'delivery' : 'takeaway',
                 paymentMethod: PaymentMethod.CASH,
-                driverId: selectedDriver || undefined,
+                driverId: undefined,
                 equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined
             };
 
@@ -446,9 +445,6 @@ const OrderCreate: React.FC = () => {
                                     <div className="grid grid-cols-[100px_1fr] gap-y-1.5 text-sm print:text-xs">
                                         <span className="text-slate-500 font-medium">Payment:</span>
                                         <span className="font-bold text-slate-900 uppercase">Cash</span>
-
-                                        <span className="text-slate-500 font-medium">Status:</span>
-                                        <span className="font-bold text-slate-900 uppercase tracking-wider">PENDING</span>
                                     </div>
 
                                     {remarks && (
