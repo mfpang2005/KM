@@ -14,6 +14,7 @@ import DriverList from './pages/DriverList';
 import KitchenSummary from './pages/KitchenSummary';
 import NotificationCenter from './pages/NotificationCenter';
 import Profile from './pages/Profile';
+import OrderDetail from './pages/OrderDetail';
 import SuperAdminPanel from './pages/SuperAdminPanel';
 import MainLayout from './src/components/MainLayout';
 import { UserRole } from './types';
@@ -72,6 +73,7 @@ const App: React.FC = () => {
                             <Route path="/admin/kitchen-summary" element={isAdminOrSuper ? <KitchenSummary /> : <Navigate to="/login" />} />
                             <Route path="/admin/notifications" element={isAdminOrSuper ? <NotificationCenter /> : <Navigate to="/login" />} />
                             <Route path="/admin/profile" element={isAdminOrSuper ? <Profile onLogout={() => setUser(null)} /> : <Navigate to="/login" />} />
+                            <Route path="/orders/:id" element={isAdminOrSuper ? <OrderDetail /> : <Navigate to="/login" />} />
 
                             {/* Super Admin Routes — 仅 super_admin 可访问 */}
                             <Route path="/super-admin" element={user === UserRole.SUPER_ADMIN ? <SuperAdminPanel /> : <Navigate to="/login" />} />

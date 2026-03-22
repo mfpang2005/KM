@@ -44,8 +44,9 @@ const generateOrderRef = (): string => {
 };
 
 const EQUIPMENT_LIST = [
-    "汤匙", "叉子", "盘子", "杯子", "垃圾袋",
-    "烤鸡网", "Food Tong", "红烧桶", "高盖", "篮子", "铁脚架", "装酱碗"
+    "汤匙 OTU Spoon", "叉子 OTU Fork", "盘子 OTU Plate", "杯子 OTU Cup", 
+    "垃圾袋 Garbage Bag", "白钢网 S/L Net", "食物夹子 Serving Tong", "红烧桶 Plastic Sauce",
+    "白钢高盖 Chafing High Lid", "篮子 Plastic Basket", "铁脚架 Chafing Rack", "装酱碗 Sauce Bowl"
 ];
 
 export const CreateOrderPage: React.FC = () => {
@@ -718,7 +719,7 @@ export const CreateOrderPage: React.FC = () => {
                                         <button
                                             onClick={() => updateEquipmentQty(eq, -1)}
                                             className="w-7 h-7 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors disabled:opacity-50"
-                                            disabled={equipments[eq] === 0 || (billingUnit === 'PAX' && billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq))}
+                                            disabled={equipments[eq] === 0 || (billingUnit === 'PAX' && billingQuantity > 0 && ['盘子 OTU Plate', '汤匙 OTU Spoon', '叉子 OTU Fork', '杯子 OTU Cup'].includes(eq))}
                                         >
                                             <span className="material-icons-round text-sm">remove</span>
                                         </button>
@@ -726,12 +727,12 @@ export const CreateOrderPage: React.FC = () => {
                                         <button
                                             onClick={() => updateEquipmentQty(eq, 1)}
                                             className="w-7 h-7 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center hover:bg-blue-200 transition-colors disabled:opacity-50"
-                                            disabled={billingUnit === 'PAX' && billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq)}
+                                            disabled={billingUnit === 'PAX' && billingQuantity > 0 && ['盘子 OTU Plate', '汤匙 OTU Spoon', '叉子 OTU Fork', '杯子 OTU Cup'].includes(eq)}
                                         >
                                             <span className="material-icons-round text-sm">add</span>
                                         </button>
                                     </div>
-                                    {billingUnit === 'PAX' && billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq) && (
+                                    {billingUnit === 'PAX' && billingQuantity > 0 && ['盘子 OTU Plate', '汤匙 OTU Spoon', '叉子 OTU Fork', '杯子 OTU Cup'].includes(eq) && (
                                         <p className="text-[8px] font-bold text-blue-500 italic mt-1 text-center">Auto-locked: PAX x 2</p>
                                     )}
                                 </div>

@@ -99,16 +99,15 @@ const AdminLayout: React.FC = () => {
     // 侧边栏导航项
     const navItems = [
         { path: '/', label: 'Overview', icon: 'dashboard' },
-        { path: '/users', label: 'Users', icon: 'people' },
-        { path: '/orders', label: 'Orders', icon: 'receipt_long' },
-        { path: '/kitchen-prep', label: 'Kitchen Management', icon: 'precision_manufacturing' },
-        { path: '/event-calendar', label: 'Event Calendar', icon: 'calendar_month' },
-        { path: '/create-order', label: 'Create New Order', icon: 'add_shopping_cart' },
-        { path: '/fleet', label: 'Fleet Center', icon: 'local_shipping' },
-        { path: '/products', label: 'Products', icon: 'inventory_2' },
-        { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice' },
         { path: '/finance', label: 'Financials', icon: 'account_balance_wallet' },
-        { path: '/config', label: 'Settings', icon: 'settings', roles: ['super_admin'] },
+        { path: '/create-order', label: 'Create New Order', icon: 'add_shopping_cart' },
+        { path: '/orders', label: 'Orders', icon: 'receipt_long' },
+        { path: '/event-calendar', label: 'Event Calendar', icon: 'calendar_month' },
+        { path: '/fleet', label: 'Fleet Center', icon: 'local_shipping' },
+        { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice' },
+        { path: '/kitchen-prep', label: 'Kitchen Management', icon: 'precision_manufacturing' },
+        { path: '/products', label: 'Products', icon: 'inventory_2' },
+        { path: '/users', label: 'Users', icon: 'people' },
         { path: '/audit', label: 'Audit Logs', icon: 'history', roles: ['super_admin'] },
     ].filter(item => !item.roles || (user?.role && item.roles.includes(user.role)));
 

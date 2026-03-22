@@ -12,7 +12,7 @@ from models import (
     AuditLog, StatsOverview, Order, User,
 )
 from services.audit import record_audit, AuditActions
-from middleware.auth import require_super_admin
+from middleware.auth import require_super_admin, require_admin
 
 router = APIRouter(
     prefix="/super-admin",
@@ -26,7 +26,7 @@ router = APIRouter(
 
 @router.get("/stats", response_model=StatsOverview)
 async def get_stats_overview(
-    current_user: dict = Depends(require_super_admin),
+    current_user: dict = Depends(require_admin),
 ):
     """
     获取全局统计数据：订单总数、总营收、用户总数、各状态订单占比
@@ -274,7 +274,7 @@ async def get_all_orders(
 async def get_financials(
     range: str = "today",
     payment_status: str = "all",
-    current_user: dict = Depends(require_super_admin),
+    current_user: dict = Depends(require_admin),
 ):
     """
     获取财务汇总数据，支持范围过滤与支付状态过滤。
@@ -373,7 +373,7 @@ async def get_financials(
     }
 @router.get("/ai-summary")
 async def get_ai_summary(
-    current_user: dict = Depends(require_super_admin),
+    current_user: dict = Depends(require_admin),
 ):
     """
     AI 营业额监督助手：分析波动、预测趋势、检测异常

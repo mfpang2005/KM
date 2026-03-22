@@ -443,14 +443,6 @@ const KitchenPrepPage: React.FC = () => {
                     </div>
                     {/* Stats badges */}
                     <div className="hidden md:flex items-center gap-3">
-                        <button 
-                            onClick={() => navigate('/kitchen-recipes')}
-                            className="p-3 bg-blue-50 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all shadow-sm flex items-center group relative"
-                        >
-                            <span className="material-icons-round mr-2">menu_book</span>
-                            <span className="font-bold text-xs uppercase">Recipes</span>
-                            <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 px-3 py-1 bg-slate-800 text-white text-[10px] rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap">进入独立食谱管理</div>
-                        </button>
                         <div className="px-4 py-2 bg-amber-50 border border-amber-100 rounded-2xl text-center">
                             <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Active</p>
                             <p className="text-xl font-black text-amber-700 leading-none">{activeCount}</p>

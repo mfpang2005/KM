@@ -181,6 +181,14 @@ const DriverSchedule: React.FC = () => {
         try {
             await OrderService.updateStatus(orderId, status);
             fetchOrders();
+            
+            // If starting delivery, trigger WhatsApp departure message
+            if (status === OrderStatus.DELIVERING) {
+                const order = orders.find(o => o.id === orderId);
+                if (order) {
+                    handleWhatsApp(order, 'arrival'); // 'arrival' type uses the departure template
+                }
+            }
         } catch (e) {
             console.error("Failed to update status", e);
         }
@@ -505,7 +513,7 @@ const DriverSchedule: React.FC = () => {
         const cleanPhone = order.customerPhone.replace(/\D/g, '');
         let message = `你好 ${order.customerName}，我是金龙餐饮的配送司机。我正在配送您的订单 ${order.id}，预计于 ${order.dueTime} 左右到达。`;
         if (type === 'arrival') {
-            message = `【抵达预告】你好 ${order.customerName}，我是金龙餐饮司机。您的订单 ${order.id} 预计将在 30 分钟内抵达 (${order.address})，请准备签收。`;
+            message = `[金龙餐饮] 出发通知%0A----------------------%0A尊敬的 ${order.customerName}，您的订单 ${order.order_number || order.id.slice(0, 8)} 司机已整装出发！%0A%0A预计30-90分钟送达，请耐心等待和保持电话畅通。%0A配送地址: ${order.address}%0A%0A祝您用餐愉快！`;
             setNotifiedOrders(prev => new Set(prev).add(order.id));
         }
         window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
@@ -582,7 +590,7 @@ const DriverSchedule: React.FC = () => {
                                             </div>
                                             <div className="flex flex-col items-center">
                                                 <span className="text-[8px] font-black text-indigo-400 uppercase mb-1">Items</span>
-                                                <button onClick={() => setSelectedOrder(activeOrder)} className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white border border-white/10 active:scale-90 transition-all hover:bg-white/10">
+                                                <button onClick={() => navigate(`/orders/${activeOrder.id}`)} className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white border border-white/10 active:scale-90 transition-all hover:bg-white/10">
                                                     <span className="material-icons-round">inventory_2</span>
                                                 </button>
                                             </div>

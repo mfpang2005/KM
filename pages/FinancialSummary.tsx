@@ -28,7 +28,6 @@ const FinancialSummary: React.FC = () => {
     const [data, setData] = useState<FinanceData | null>(null);
     const [orders, setOrders] = useState<Order[]>([]);
     const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-    const [toggling, setToggling] = useState<string | null>(null);
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [viewingPhotos, setViewingPhotos] = useState<string[] | null>(null);
 
@@ -42,13 +41,12 @@ const FinancialSummary: React.FC = () => {
 
             // 2. Fetch Raw Orders for Transaction List
             const allOrders = await OrderService.getAll();
-            // Filter relevant for accounting (ready, delivering, completed)
-            const relevant = allOrders.filter(o => 
-                [OrderStatus.READY, OrderStatus.DELIVERING, OrderStatus.COMPLETED].includes(o.status)
-            );
+            // Sync with backend: display all orders in the ledger (like admin-web does)
+            const relevant = allOrders;
             setOrders(relevant.sort((a, b) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime()));
-        } catch (error) {
+        } catch (error: any) {
             console.error('Failed to load finance data', error);
+            // Optionally, we could show a toast here, but we'll ensure state is handled
         } finally {
             if (!silent) setLoading(false);
         }
@@ -78,33 +76,6 @@ const FinancialSummary: React.FC = () => {
     }, [loadData]);
 
     // ── Actions ────────────────────────────────────────────────────────────────
-    const handleTogglePaid = async (order: Order) => {
-        if (toggling) return;
-        setToggling(order.id);
-        const newStatus = order.paymentStatus === 'paid' ? 'unpaid' : 'paid';
-        try {
-            // Direct Supabase update for <1s feeling
-            await supabase.from('orders').update({ paymentStatus: newStatus }).eq('id', order.id);
-            // Local optimistic update
-            setOrders(prev => prev.map(o => o.id === order.id ? { ...o, paymentStatus: newStatus as any } : o));
-            // Trigger summary refresh
-            loadData(true);
-        } catch (err) {
-            console.error('Toggle payment failed', err);
-        } finally {
-            setToggling(null);
-        }
-    };
-
-    const handleUpdateMethod = async (orderId: string, method: string) => {
-        try {
-            await supabase.from('orders').update({ paymentMethod: method }).eq('id', orderId);
-            setOrders(prev => prev.map(o => o.id === orderId ? { ...o, paymentMethod: method as any } : o));
-            loadData(true);
-        } catch (err) {
-            console.error('Update method failed', err);
-        }
-    };
 
     const getPaymentIcon = (method: string) => {
         switch (method.toLowerCase()) {
@@ -276,17 +247,10 @@ const FinancialSummary: React.FC = () => {
                                                 <h5 className="text-sm font-black text-white truncate mb-2 uppercase tracking-tight">{order.customerName}</h5>
                                                 
                                                 <div className="flex items-center gap-3">
-                                                    {/* Method Switcher */}
-                                                    <select 
-                                                        value={order.paymentMethod || 'cash'}
-                                                        onChange={(e) => handleUpdateMethod(order.id, e.target.value)}
-                                                        className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[9px] font-black text-indigo-300 uppercase outline-none"
-                                                    >
-                                                        <option value="cash" className="bg-slate-900">Cash</option>
-                                                        <option value="bank_transfer" className="bg-slate-900">Bank Transfer</option>
-                                                        <option value="ewallet" className="bg-slate-900">E-Wallet</option>
-                                                        <option value="cheque" className="bg-slate-900">Cheque</option>
-                                                    </select>
+                                                    {/* Method Display */}
+                                                    <div className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-[9px] font-black text-indigo-300 uppercase">
+                                                        {order.paymentMethod || 'CASH'}
+                                                    </div>
                                                     
                                                     {order.delivery_photos && order.delivery_photos.length > 0 && (
                                                         <button 
@@ -299,28 +263,22 @@ const FinancialSummary: React.FC = () => {
                                                 </div>
                                             </div>
 
-                                            <div className="flex flex-col items-end gap-3 shrink-0">
-                                                <div className="text-lg font-black text-white font-mono-finance italic">
-                                                    <span className="text-[10px] mr-1 text-slate-500 font-sans not-italic">RM</span>
-                                                    {(order.amount || 0).toFixed(2)}
+                                                <div className="flex flex-col items-end gap-3 shrink-0">
+                                                    <div className="text-lg font-black text-white font-mono-finance italic">
+                                                        <span className="text-[10px] mr-1 text-slate-500 font-sans not-italic">RM</span>
+                                                        {(order.amount || 0).toFixed(2)}
+                                                    </div>
+                                                    
+                                                    <div
+                                                        className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] shadow-lg ${
+                                                            order.paymentStatus === 'paid' 
+                                                            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' 
+                                                            : 'bg-red-500/10 text-red-400 border border-red-500/20'
+                                                        }`}
+                                                    >
+                                                        {order.paymentStatus === 'paid' ? '已收款 (PAID)' : '待收款 (UNPAID)'}
+                                                    </div>
                                                 </div>
-                                                
-                                                <button
-                                                    onClick={() => handleTogglePaid(order)}
-                                                    disabled={toggling === order.id}
-                                                    className={`px-4 py-2 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] transition-all shadow-xl active:scale-95 ${
-                                                        order.paymentStatus === 'paid' 
-                                                        ? 'bg-emerald-500 text-white hover:bg-emerald-400' 
-                                                        : 'bg-red-500 text-white hover:bg-red-400'
-                                                    }`}
-                                                >
-                                                    {toggling === order.id ? (
-                                                        <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                                    ) : (
-                                                        order.paymentStatus === 'paid' ? '已收款' : '待收款'
-                                                    )}
-                                                </button>
-                                            </div>
                                         </div>
                                     </div>
                                 ))

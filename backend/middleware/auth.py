@@ -41,21 +41,21 @@ async def get_current_user(
                 raise HTTPException(status_code=401, detail="Invalid or expired token")
 
             user_id = str(user_response.user.id)
+            user_metadata = user_response.user.user_metadata or {}
             
-            # 優先從数据库 users 表獲取角色以確保數據一致性 (Metadata 容易過期)
+            # 优先从 metadata 获取角色 (这是 Auth 服务器签发的权威信息)
+            # 只有当需要业务表特有属性时才查询 DB
+            role = user_metadata.get("role", "user")
+            
+            # 可选：尝试从数据库同步/验证，但不应因为 DB 缺失而导致 401/403 (对于刚创建的 Admin)
             try:
                 db_response = await run_in_threadpool(
                     supabase.table("users").select("role").eq("id", user_id).single().execute
                 )
-                if db_response.data:
-                    role = db_response.data.get("role", "user")
-                else:
-                    role = "user"
+                if db_response.data and db_response.data.get("role"):
+                    role = db_response.data.get("role")
             except Exception as e:
-                logger.warning("Failed to fetch role from DB for %s: %s", user_id, str(e))
-                # Fallback to metadata
-                user_metadata = user_response.user.user_metadata or {}
-                role = user_metadata.get("role", "user")
+                logger.debug("DB role fetch skipped or failed for %s: %s", user_id, str(e))
 
             return {"id": user_id, "role": role}
         except HTTPException:

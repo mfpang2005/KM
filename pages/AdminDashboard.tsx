@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '../src/lib/supabase';
 import { OrderStatus, UserRole } from '../types';
 import FinanceWidget from '../src/components/FinanceWidget';
-import { AiSummaryWidget } from '../src/components/AiSummaryWidget';
 import { useStats } from '../src/hooks/useStats';
 
 const AdminDashboard: React.FC = () => {
@@ -74,8 +73,6 @@ const AdminDashboard: React.FC = () => {
             </header>
 
             <main className="flex-1 overflow-y-auto p-4 space-y-6 no-scrollbar pb-32">
-                {/* 1. AI 决策建议 (Linkage with Backend) */}
-                <AiSummaryWidget />
 
                 {/* 2. 实时财务指标 */}
                 <FinanceWidget user={userRole} />

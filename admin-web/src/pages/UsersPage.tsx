@@ -430,7 +430,7 @@ export const UsersPage: React.FC = () => {
                             </div>
 
                             {/* Group: Security & Permissions */}
-                            <div className="pt-4 border-t border-slate-50 space-y-4">
+                            <div className="pt-4 space-y-4">
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-1.5">
                                         <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">登录密码 (Password)</label>
