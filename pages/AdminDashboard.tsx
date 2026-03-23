@@ -82,7 +82,7 @@ const AdminDashboard: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div
                             onClick={() => navigate('/admin/orders')}
-                            className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/40 hover:-translate-y-1 transition-all group active:scale-95"
+                            className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/40 hover:-translate-y-1 transition-all group active:scale-95"
                         >
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-10 h-10 rounded-xl bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-500/20 group-hover:scale-110 transition-transform">
@@ -90,14 +90,14 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Orders</span>
                             </div>
-                            <p className="text-4xl font-black text-slate-800 tracking-tighter">
+                            <p className="text-3xl font-black text-slate-800 tracking-tighter">
                                 {statsLoading ? '...' : stats?.total_orders || 0}
                             </p>
                         </div>
 
                         <div
                             onClick={() => navigate('/admin/users')}
-                            className="bg-white p-6 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/40 hover:-translate-y-1 transition-all group active:scale-95"
+                            className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/40 hover:-translate-y-1 transition-all group active:scale-95"
                         >
                             <div className="flex items-center gap-3 mb-4">
                                 <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
@@ -105,7 +105,7 @@ const AdminDashboard: React.FC = () => {
                                 </div>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</span>
                             </div>
-                            <p className="text-4xl font-black text-slate-800 tracking-tighter">
+                            <p className="text-3xl font-black text-slate-800 tracking-tighter">
                                 {statsLoading ? '...' : stats?.total_users || 0}
                             </p>
                         </div>
@@ -113,7 +113,7 @@ const AdminDashboard: React.FC = () => {
 
                     <div
                         onClick={() => navigate('/admin/finance')}
-                        className="bg-slate-900 p-6 rounded-[2.5rem] border border-white/5 shadow-2xl hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden"
+                        className="bg-slate-900 p-6 rounded-3xl border border-white/5 shadow-2xl hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden"
                     >
                         <div className="absolute top-0 right-0 p-6 opacity-[0.05] text-white">
                             <span className="material-icons-round text-7xl">account_balance</span>
@@ -127,8 +127,8 @@ const AdminDashboard: React.FC = () => {
                             </div>
                             <div className="flex items-baseline gap-2">
                                 <span className="text-lg font-black text-indigo-400/80">RM</span>
-                                <p className="text-5xl font-black text-white tracking-tighter font-mono-finance">
-                                    {statsLoading ? '...' : Number(stats?.total_revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                <p className="text-4xl font-black text-white tracking-tighter">
+                                    {statsLoading ? '...' : Number(stats?.total_revenue || 0).toLocaleString('en-MY', { maximumFractionDigits: 0 })}
                                 </p>
                             </div>
                         </div>

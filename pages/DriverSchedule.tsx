@@ -5,6 +5,7 @@ import { Order, OrderStatus, User, Vehicle } from '../types';
 import GoEasy from 'goeasy';
 import { supabase } from '../src/lib/supabase';
 import { getGoogleMapsUrl } from '../src/utils/maps';
+import AudioPlayer from '../src/components/AudioPlayer';
 
 // NOTE: GoEasy 配置 — 对应控制台 [IM即时通讯] KIM_LONG_COMUNITY 应用
 const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
@@ -21,6 +22,7 @@ interface DriverChatMsg {
     timestamp: number;
     isMine: boolean;
     type?: 'text' | 'audio';
+    duration?: number;
 }
 
 const DriverSchedule: React.FC = () => {
@@ -58,6 +60,45 @@ const DriverSchedule: React.FC = () => {
     const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
     const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const chatBottomRef = useRef<HTMLDivElement | null>(null);
+    const messageIdsRef = useRef<Set<string>>(new Set());
+    const recordStartTimeRef = useRef<number | null>(null);
+
+    const addMessage = useCallback((msg: DriverChatMsg) => {
+        // 1. 根据 ID 去重
+        if (messageIdsRef.current.has(msg.id)) return;
+
+        // 2. 根据内容指纹去重（针对同一发送者在极短时间内发送的相同内容）
+        const fingerprint = `${msg.senderId}:${msg.type}:${msg.content.slice(0, 50)}:${Math.floor(msg.timestamp / 1000)}`;
+        if (messageIdsRef.current.has(fingerprint)) return;
+
+        messageIdsRef.current.add(msg.id);
+        messageIdsRef.current.add(fingerprint);
+        setDriverChatMessages(prev => [...prev, msg]);
+        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+    }, []);
+
+    const playAudio = useCallback(async (base64: string) => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+        try {
+            const binary = atob(base64);
+            const buf = new ArrayBuffer(binary.length);
+            const view = new Uint8Array(buf);
+            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
+            const src = audioContextRef.current.createBufferSource();
+            src.buffer = audioBuf;
+            src.connect(audioContextRef.current.destination);
+            src.onended = () => setPttStatus('CONNECTED');
+            src.start(0);
+            setPttStatus('LISTENING');
+        } catch (err) {
+            console.error('[GoEasy PTT] Audio decode error', err);
+            setPttStatus('CONNECTED');
+        }
+    }, []);
 
     const fetchOrders = async () => {
         try {
@@ -110,6 +151,7 @@ const DriverSchedule: React.FC = () => {
         }
     };
 
+    // ── Supabase Presence & Orders Sync ──
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
             if (session?.user) {
@@ -129,14 +171,33 @@ const DriverSchedule: React.FC = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
             .subscribe();
 
+        // Broadcast presence so Admin can see the driver
+        let presenceChannel: any = null;
+        if (userId) {
+            presenceChannel = supabase.channel('walkie-talkie-room', {
+                config: { presence: { key: userId } },
+            });
+            presenceChannel.subscribe(async (status: string) => {
+                if (status === 'SUBSCRIBED') {
+                    await presenceChannel.track({
+                        userId: userId,
+                        email: driverPhone || 'Driver', // Use phone or 'Driver'
+                        role: 'driver',
+                        joinedAt: new Date().toISOString()
+                    });
+                }
+            });
+        }
+
         const timer = setInterval(() => setNow(new Date()), 10000);
 
         return () => {
             clearInterval(timer);
             supabase.removeChannel(vehicleChannel);
             supabase.removeChannel(orderChannel);
+            if (presenceChannel) supabase.removeChannel(presenceChannel);
         };
-    }, [userId]);
+    }, [userId, driverPhone]);
 
     useEffect(() => {
         if (!isPttOpen || !userId) return;
@@ -144,29 +205,59 @@ const DriverSchedule: React.FC = () => {
             try {
                 const { data, error } = await supabase.from('messages')
                     .select('*')
-                    .or(`receiver_id.eq.GLOBAL,and(sender_id.eq.${userId}),and(receiver_id.eq.${userId})`)
+                    .or(`receiver_id.eq.GLOBAL,sender_id.eq.${userId},receiver_id.eq.${userId}`)
                     .order('created_at', { ascending: false })
                     .limit(50);
 
                 if (error) throw error;
                 if (data) {
-                    setDriverChatMessages(data.reverse().map(msg => ({
-                        id: msg.id,
-                        senderId: msg.sender_id,
-                        senderLabel: msg.sender_label || 'Unknown',
-                        senderRole: msg.sender_role || 'guest',
-                        type: msg.type,
-                        content: msg.content,
-                        timestamp: new Date(msg.created_at).getTime(),
-                        isMine: msg.sender_id === userId
-                    })));
+                    const history = data.reverse().map(msg => {
+                        messageIdsRef.current.add(msg.id);
+                        return {
+                            id: msg.id,
+                            senderId: msg.sender_id,
+                            senderLabel: msg.sender_label || 'Unknown',
+                            senderRole: msg.sender_role || 'guest',
+                            type: (msg.type as any) || 'text',
+                            content: msg.content,
+                            timestamp: new Date(msg.created_at).getTime(),
+                            isMine: msg.sender_id === userId,
+                            duration: msg.duration
+                        };
+                    });
+                    setDriverChatMessages(history);
                 }
             } catch (err) {
                 console.error('Failed to fetch driver chat history', err);
             }
         };
         fetchHistory();
-    }, [isPttOpen, userId]);
+
+        // ── Supabase Realtime Listener ──
+        const channel = supabase.channel('public:messages')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+                const msg = payload.new;
+                if (msg.sender_id === userId) return; // ignore own messages
+
+                addMessage({
+                    id: msg.id,
+                    senderId: msg.sender_id,
+                    senderLabel: msg.sender_label || 'Unknown',
+                    senderRole: msg.sender_role || 'guest',
+                    content: msg.content,
+                    timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+                    isMine: false,
+                    type: (msg.type as any) || 'text',
+                    duration: msg.duration
+                });
+
+                if (msg.type === 'audio' && msg.content) {
+                    await playAudio(msg.content);
+                }
+            }).subscribe();
+
+        return () => { supabase.removeChannel(channel); };
+    }, [isPttOpen, userId, addMessage, playAudio]);
 
     const taskOrders = useMemo(() => orders.filter(o =>
         o.status === OrderStatus.READY || o.status === OrderStatus.DELIVERING
@@ -254,28 +345,6 @@ const DriverSchedule: React.FC = () => {
             reader.readAsDataURL(blob);
         });
 
-    const playAudio = useCallback(async (base64: string) => {
-        if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
-        try {
-            const binary = atob(base64);
-            const buf = new ArrayBuffer(binary.length);
-            const view = new Uint8Array(buf);
-            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
-            const src = audioContextRef.current.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(audioContextRef.current.destination);
-            src.onended = () => setPttStatus('CONNECTED');
-            src.start(0);
-            setPttStatus('LISTENING');
-        } catch (err) {
-            console.error('[GoEasy PTT] Audio decode error', err);
-            setPttStatus('CONNECTED');
-        }
-    }, []);
 
     const startPttSession = async () => {
         setIsPttOpen(true);
@@ -296,63 +365,70 @@ const DriverSchedule: React.FC = () => {
                     data: { role: 'driver' },
                     onSuccess: () => {
                         setPttStatus('CONNECTED');
+
+                        // NOTE: 统一的消息处理函数，全局和私人频道共用，避免重复逻辑
+                        const handleIncoming = async (message: any) => {
+                            try {
+                                const payload = JSON.parse(message.content);
+                                if (payload.senderId === myId) return;
+
+                                const msgId = payload.id || `${payload.senderId}-${payload.timestamp}`;
+                                // NOTE: 兼容 content 和 audio 两种字段格式
+                                const audioContent = payload.content || payload.audio;
+
+                                if (payload.type === 'text') {
+                                    addMessage({
+                                        id: msgId,
+                                        senderId: payload.senderId,
+                                        senderLabel: payload.senderLabel ?? '管理员',
+                                        senderRole: payload.senderRole ?? 'admin',
+                                        content: payload.content,
+                                        timestamp: payload.timestamp || Date.now(),
+                                        isMine: false,
+                                        type: 'text',
+                                        duration: payload.duration
+                                    });
+                                } else if (payload.type === 'audio' && audioContent) {
+                                    addMessage({
+                                        id: msgId,
+                                        senderId: payload.senderId,
+                                        senderLabel: payload.senderLabel ?? '管理员',
+                                        senderRole: payload.senderRole ?? 'admin',
+                                        content: audioContent,
+                                        timestamp: payload.timestamp || Date.now(),
+                                        isMine: false,
+                                        type: 'audio',
+                                        duration: payload.duration
+                                    });
+                                    // NOTE: 自动播放收到的语音消息
+                                    await playAudio(audioContent);
+                                }
+                            } catch (err) {
+                                console.error('[GoEasy PTT] Failed to handle message', err);
+                            }
+                        };
+
+                        // 订阅全局广播频道
                         goEasy.pubsub.subscribe({
                             channel: CHANNEL,
-                            onMessage: async (message: any) => {
-                                try {
-                                    const payload = JSON.parse(message.content);
-                                    if (payload.senderId === myId) return;
-                                    if (payload.type === 'text') {
-                                        setDriverChatMessages(prev => [...prev, {
-                                            id: `${payload.senderId}-${payload.timestamp}`,
-                                            senderId: payload.senderId,
-                                            senderLabel: payload.senderLabel ?? '管理员',
-                                            senderRole: payload.senderRole ?? 'admin',
-                                            content: payload.content,
-                                            timestamp: payload.timestamp,
-                                            isMine: false,
-                                        }]);
-                                        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-                                    } else if (payload.type === 'audio' || payload.audio) {
-                                        await playAudio(payload.audio);
-                                    }
-                                } catch (err) {
-                                    console.error('[GoEasy PTT] Failed to handle message', err);
-                                }
-                            },
-                            onSuccess: () => console.log('[GoEasy PTT] Subscribed to Global'),
-                            onFailed: (err: any) => console.error('[GoEasy PTT] Subscribe failed', err),
+                            onMessage: handleIncoming,
+                            onSuccess: () => console.log('[GoEasy] Subscribed to', CHANNEL),
+                            onFailed: (err: any) => console.error('[GoEasy] Subscribe GLOBAL failed', err),
                         });
-                        const privateChannel = `driver_${myId}`;
+
+                        // 订阅我的私人频道（SuperAdmin 私信我）
                         goEasy.pubsub.subscribe({
-                            channel: privateChannel,
-                            onMessage: async (message: any) => {
-                                try {
-                                    const payload = JSON.parse(message.content);
-                                    if (payload.type === 'text') {
-                                        setDriverChatMessages(prev => [...prev, {
-                                            id: `${payload.senderId}-${payload.timestamp}`,
-                                            senderId: payload.senderId,
-                                            senderLabel: payload.senderLabel ?? '管理员',
-                                            senderRole: payload.senderRole ?? 'admin',
-                                            content: payload.content,
-                                            timestamp: payload.timestamp,
-                                            isMine: false,
-                                        }]);
-                                        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-                                    } else if (payload.type === 'audio' || payload.audio) {
-                                        await playAudio(payload.audio);
-                                    }
-                                } catch (err) {
-                                    console.error('[GoEasy Private] handle message error', err);
-                                }
-                            },
+                            channel: `driver_${myId}`,
+                            onMessage: handleIncoming,
+                            onSuccess: () => console.log('[GoEasy] Subscribed to private driver_' + myId),
+                            onFailed: (err: any) => console.error('[GoEasy] Subscribe private failed', err),
                         });
                     },
                     onFailed: () => setPttStatus('IDLE'),
                     onDisconnected: () => setPttStatus('IDLE')
                 });
             } catch (e) {
+                console.error('[GoEasy] Init error', e);
                 setPttStatus('IDLE');
             }
         };
@@ -401,6 +477,7 @@ const DriverSchedule: React.FC = () => {
             mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
             mr.start(100);
             mediaRecorderRef.current = mr;
+            recordStartTimeRef.current = Date.now();
             setIsTransmitting(true);
             setPttStatus('TALKING');
         } catch {
@@ -415,33 +492,75 @@ const DriverSchedule: React.FC = () => {
         const mr = mediaRecorderRef.current;
         mr.onstop = async () => {
             if (!goEasyRef.current) return;
-            const mimeType = mr.mimeType || 'audio/webm';
-            const blob = new Blob(audioChunksRef.current, { type: mimeType });
-            if (blob.size < 100) return;
             try {
+                const mimeType = mr.mimeType || 'audio/webm';
+                const blob = new Blob(audioChunksRef.current, { type: mimeType });
+                console.log(`[Driver PTT] Blob size: ${blob.size} bytes`);
+                if (blob.size < 100) {
+                    console.warn('[Driver PTT] Blob too small, ignoring.');
+                    return;
+                }
+
                 const myId = userId || 'unknown-driver';
+                const myName = driverName || '司机端';
                 const base64Audio = await blobToBase64(blob);
-                const payload = JSON.stringify({
-                    type: 'audio',
+                const ts = Date.now();
+                const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
+                const msgId = `${myId}-${ts}`;
+
+                console.log(`[Driver PTT] Sending audio ${msgId}, dur=${dur.toFixed(1)}s`);
+
+                // NOTE: 本地立即显示气泡，不等网络返回
+                addMessage({
+                    id: msgId,
                     senderId: myId,
-                    senderLabel: driverName || '司机端',
+                    senderLabel: myName,
                     senderRole: 'driver',
-                    audio: base64Audio,
+                    content: base64Audio,
+                    timestamp: ts,
+                    isMine: true,
+                    type: 'audio',
+                    duration: dur
                 });
+
+                // NOTE: 广播到全局频道，payload 统一用 content 字段（与 admin 读取逻辑一致）
                 goEasyRef.current.pubsub.publish({
                     channel: CHANNEL,
-                    message: payload,
+                    message: JSON.stringify({
+                        id: msgId,
+                        type: 'audio',
+                        senderId: myId,
+                        senderLabel: myName,
+                        senderRole: 'driver',
+                        content: base64Audio,
+                        timestamp: ts,
+                        receiverId: 'GLOBAL',
+                        duration: dur
+                    }),
+                    onSuccess: () => console.log('[Driver PTT] GoEasy broadcast success'),
+                    onFailed: (e: any) => console.error('[Driver PTT] GoEasy broadcast failed', e)
                 });
-                await supabase.from('messages').insert([{
+
+                // NOTE: 同步保存到 Supabase，供历史记录查询
+                const { error } = await supabase.from('messages').insert([{
+                    id: msgId,
                     sender_id: myId,
-                    sender_label: driverName || '司机端',
+                    sender_label: myName,
                     sender_role: 'driver',
                     receiver_id: 'GLOBAL',
                     content: base64Audio,
                     type: 'audio'
                 }]);
+
+                if (error) {
+                    console.error('[Driver PTT] DB Insert failed:', error);
+                    alert('声音保存失败，请检查数据库连接。');
+                } else {
+                    console.log('[Driver PTT] DB Insert success');
+                }
             } catch (err) {
-                console.error('[GoEasy PTT] Encode/send error', err);
+                console.error('[Driver PTT] Catch Error:', err);
+                alert(`发送失败: ${(err as Error).message}`);
             }
             audioChunksRef.current = [];
         };
@@ -452,13 +571,15 @@ const DriverSchedule: React.FC = () => {
     const stopPttSession = () => {
         if (goEasyRef.current) {
             try {
-                goEasyRef.current.pubsub.unsubscribe({ channel: CHANNEL, onSuccess: () => { }, onFailed: () => { } });
-            } catch { }
+                goEasyRef.current.pubsub.unsubscribe({ channel: CHANNEL, onSuccess: () => {}, onFailed: () => {} });
+                const myId = userId || `driver-${Math.random().toString(36).slice(2, 9)}`;
+                goEasyRef.current.pubsub.unsubscribe({ channel: `driver_${myId}`, onSuccess: () => {}, onFailed: () => {} });
+            } catch {}
         }
         mediaRecorderRef.current?.stop();
         try {
-            GoEasy.disconnect({ onSuccess: () => { }, onFailed: () => { } });
-        } catch { }
+            GoEasy.disconnect({ onSuccess: () => {}, onFailed: () => {} });
+        } catch {}
         if (presenceChannelRef.current) {
             supabase.removeChannel(presenceChannelRef.current);
             presenceChannelRef.current = null;
@@ -474,29 +595,44 @@ const DriverSchedule: React.FC = () => {
 
         const myId = userId || 'unknown-driver';
         const ts = Date.now();
+        const msgId = `${myId}-${ts}`;
+        const myName = driverName || '司机端';
 
-        setDriverChatMessages(prev => [...prev, {
-            id: `${myId}-${ts}`,
+        // 乐观 UI
+        addMessage({
+            id: msgId,
             senderId: myId,
-            senderLabel: driverName || '司机端',
+            senderLabel: myName,
             senderRole: 'driver',
             content: text,
             timestamp: ts,
             isMine: true,
-        }]);
+            type: 'text'
+        });
         setDriverChatInput('');
-        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
+
+        const payload = {
+            id: msgId,
+            type: 'text',
+            senderId: myId,
+            senderLabel: myName,
+            senderRole: 'driver',
+            content: text,
+            timestamp: ts,
+            receiverId: 'GLOBAL'
+        };
 
         goEasyRef.current.pubsub.publish({
             channel: CHANNEL,
-            message: JSON.stringify({ type: 'text', senderId: myId, senderLabel: driverName || '司机端', senderRole: 'driver', content: text, timestamp: ts }),
+            message: JSON.stringify(payload),
         });
 
         const insertMsg = async () => {
             try {
                 await supabase.from('messages').insert([{
+                    id: msgId,
                     sender_id: myId,
-                    sender_label: driverName || '司机端',
+                    sender_label: myName,
                     sender_role: 'driver',
                     receiver_id: 'GLOBAL',
                     content: text,
@@ -590,7 +726,7 @@ const DriverSchedule: React.FC = () => {
                                             </div>
                                             <div className="flex flex-col items-center">
                                                 <span className="text-[8px] font-black text-indigo-400 uppercase mb-1">Items</span>
-                                                <button onClick={() => navigate(`/orders/${activeOrder.id}`)} className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white border border-white/10 active:scale-90 transition-all hover:bg-white/10">
+                                                <button onClick={() => navigate(`/orders/${encodeURIComponent(activeOrder.id)}`)} className="w-14 h-14 bg-white/5 rounded-2xl flex items-center justify-center text-white border border-white/10 active:scale-90 transition-all hover:bg-white/10">
                                                     <span className="material-icons-round">inventory_2</span>
                                                 </button>
                                             </div>
@@ -702,7 +838,13 @@ const DriverSchedule: React.FC = () => {
                                 <span className="text-[9px] font-black text-indigo-400 uppercase tracking-widest group-hover:scale-110 transition-transform">Update</span>
                             </button>
                         </div>
-                        <button className="w-full px-6 py-4 flex items-center justify-between bg-rose-500/10 text-rose-500 rounded-2xl border border-rose-500/20 active:scale-95 transition-all" onClick={() => navigate('/login')}>
+                        <button 
+                            className="w-full px-6 py-4 flex items-center justify-between bg-rose-500/10 text-rose-500 rounded-2xl border border-rose-500/20 active:scale-95 transition-all" 
+                            onClick={async () => {
+                                await supabase.auth.signOut();
+                                navigate('/login');
+                            }}
+                        >
                             <div className="flex items-center gap-3"><span className="material-icons-round">logout</span><span className="text-xs font-bold">退出登录 LOGOUT</span></div>
                             <span className="material-icons-round">chevron_right</span>
                         </button>
@@ -754,8 +896,12 @@ const DriverSchedule: React.FC = () => {
                                     <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.senderRole === 'driver' ? 'bg-primary' : 'bg-purple-500'}`}><span className="material-icons-round text-white text-[12px]">person</span></div>
                                     <div className={`max-w-[70%] flex flex-col gap-0.5 ${msg.isMine ? 'items-end' : 'items-start'}`}>
                                         <div className="flex items-center gap-1.5">{!msg.isMine && <span className="text-[9px] font-black text-slate-400">{msg.senderLabel}</span>}<span className="text-[9px] text-slate-600">{time}</span></div>
-                                        <div className={`px-3.5 py-2 rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-slate-700/80 text-slate-100 rounded-tl-sm'}`}>
-                                            {msg.type === 'audio' ? <button onClick={() => playAudio(msg.content)} className="flex items-center gap-2 px-3 py-1.5 bg-white/10 rounded-xl">播放语音</button> : msg.content}
+                                        <div className={`rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-transparent' : 'bg-transparent'}`}>
+                                            {msg.type === 'audio' ? <AudioPlayer audioUrl={msg.content} initialDuration={msg.duration} /> : (
+                                                <div className={`px-3.5 py-2 rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-slate-700/80 text-slate-100 rounded-tl-sm'}`}>
+                                                    {msg.content}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -770,8 +916,33 @@ const DriverSchedule: React.FC = () => {
                         <p className="text-[10px] font-black uppercase tracking-widest text-white/40">Hold to Transmit</p>
                     </div>
                     <div className="shrink-0 px-4 pb-8 pt-3 border-t border-white/5 flex items-center gap-3">
-                        <input type="text" value={driverChatInput} onChange={(e) => setDriverChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendDriverTextMessage(); }} placeholder="输入文字消息..." className="flex-1 bg-slate-800 rounded-2xl px-6 py-3 text-sm text-white outline-none border border-white/10" />
-                        <button onClick={sendDriverTextMessage} className="w-12 h-12 bg-primary rounded-2xl text-white flex items-center justify-center"><span className="material-icons-round">send</span></button>
+                        <button 
+                            onMouseDown={handlePttDown} 
+                            onMouseUp={handlePttUp} 
+                            onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }} 
+                            onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
+                            disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'}
+                            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 shrink-0 shadow-xl active:scale-90 ${isTransmitting 
+                                ? 'bg-primary text-white animate-pulse ring-4 ring-primary/20' 
+                                : 'bg-slate-800 text-slate-400 border border-white/10 hover:bg-slate-700'
+                            }`}
+                        >
+                            <span className="material-icons-round text-xl">{isTransmitting ? 'mic' : 'mic_none'}</span>
+                        </button>
+                        <div className={`flex-1 flex items-center rounded-2xl px-6 py-3 border transition-all duration-300 gap-3 ${isTransmitting ? 'bg-primary/20 border-primary/40' : 'bg-slate-800 border-white/10'}`}>
+                            <input 
+                                type="text" 
+                                value={driverChatInput} 
+                                onChange={(e) => setDriverChatInput(e.target.value)} 
+                                onKeyDown={(e) => { if (e.key === 'Enter') sendDriverTextMessage(); }} 
+                                placeholder={isTransmitting ? '正在发射 / TRANSMITTING...' : "输入文字消息..."} 
+                                disabled={isTransmitting}
+                                className={`flex-1 bg-transparent text-sm outline-none font-medium ${isTransmitting ? 'text-primary' : 'text-white'}`} 
+                            />
+                        </div>
+                        <button onClick={sendDriverTextMessage} disabled={isTransmitting || !driverChatInput.trim()} className="w-12 h-12 bg-primary disabled:bg-slate-700 rounded-2xl text-white flex items-center justify-center transition-all active:scale-90 shadow-lg shadow-primary/20">
+                            <span className="material-icons-round">send</span>
+                        </button>
                     </div>
                 </div>
             )}

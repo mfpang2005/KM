@@ -170,6 +170,7 @@ export interface AiWarning {
 }
 
 export interface AiSummary {
+    summary?: string;
     today_vs_avg: {
         today: number;
         avg_7d: number;

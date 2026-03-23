@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { supabase } from '../lib/supabase';
 import { UserRole } from '../../types';
 import { NAV_CONFIG } from '../config/navigation';
 
@@ -61,7 +62,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
 
                 <div className="p-4 border-t border-slate-100">
                     <button
-                        onClick={() => navigate('/login')}
+                        onClick={async () => {
+                            await supabase.auth.signOut();
+                            navigate('/login');
+                        }}
                         className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
                     >
                         <span className="material-icons-round">logout</span>

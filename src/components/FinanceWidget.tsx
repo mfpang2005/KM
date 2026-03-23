@@ -133,7 +133,7 @@ const FinanceWidget: React.FC<FinanceWidgetProps> = ({ user }) => {
             </div>
 
             {/* 4. 月度汇总卡片 (Glassmorphism Dark) */}
-            <div className={`relative group overflow-hidden rounded-[3rem] bg-slate-900 p-8 shadow-2xl transition-all duration-500 ${isExpanded ? 'opacity-40 grayscale blur-[1px] pointer-events-none scale-95' : 'opacity-100 hover:shadow-indigo-500/20'}`}>
+            <div className={`relative group overflow-hidden rounded-3xl bg-slate-900 p-6 shadow-2xl transition-all duration-500 ${isExpanded ? 'opacity-40 grayscale blur-[1px] pointer-events-none scale-95' : 'opacity-100 hover:shadow-indigo-500/20'}`}>
                 <div className="absolute top-0 right-0 w-80 h-80 bg-indigo-500/10 rounded-full blur-[100px] group-hover:bg-indigo-500/20 transition-all duration-700" />
                 <div className="absolute -bottom-20 -left-20 w-60 h-60 bg-fuchsia-500/10 rounded-full blur-[80px]" />
 
@@ -142,7 +142,7 @@ const FinanceWidget: React.FC<FinanceWidgetProps> = ({ user }) => {
                         <p className="text-[10px] text-slate-500 font-bold uppercase tracking-[0.4em] mb-4 group-hover:text-indigo-400 transition-colors">Monthly Total</p>
                         <div className="flex items-baseline gap-2 group-hover:translate-x-1 transition-transform duration-500">
                             <span className="text-indigo-400/80 font-bold text-lg">RM</span>
-                            <span className="text-5xl font-black text-white tracking-tighter tabular-nums drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">
+                            <span className="text-4xl font-black text-white tracking-tighter tabular-nums drop-shadow-[0_0_15px_rgba(255,255,255,0.1)]">
                                 {Number(monthly).toLocaleString('en-MY', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                         </div>

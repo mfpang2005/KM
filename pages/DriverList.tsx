@@ -501,7 +501,7 @@ const DriverList: React.FC = () => {
                                                             
                                                             <div className="grid grid-cols-3 gap-2">
                                                                 <button 
-                                                                    onClick={() => navigate(`/orders/${o.id}`)}
+                                                                    onClick={() => navigate(`/orders/${encodeURIComponent(o.id)}`)}
                                                                     className="py-2.5 bg-emerald-500 text-white rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-emerald-600 transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-500/20"
                                                                 >
                                                                     <span className="material-icons-round text-sm">info</span>

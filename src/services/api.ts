@@ -36,7 +36,7 @@ export const OrderService = {
         return response.data;
     },
     getById: async (id: string): Promise<Order> => {
-        const response = await api.get(`/orders/${id}`);
+        const response = await api.get(`/orders/${encodeURIComponent(id)}`);
         return response.data;
     },
     create: async (order: OrderCreate): Promise<Order> => {
@@ -44,31 +44,35 @@ export const OrderService = {
         return response.data;
     },
     update: async (id: string, order: OrderCreate): Promise<Order> => {
-        const response = await api.put(`/orders/${id}`, order);
+        const response = await api.put(`/orders/${encodeURIComponent(id)}`, order);
         return response.data;
     },
     updateStatus: async (id: string, status: OrderStatus): Promise<Order> => {
-        const response = await api.post(`/orders/${id}/status?status=${status}`);
+        const response = await api.post(`/orders/${encodeURIComponent(id)}/status?status=${status}`);
         return response.data;
     },
     delete: async (id: string): Promise<void> => {
-        await api.delete(`/orders/${id}`);
+        await api.delete(`/orders/${encodeURIComponent(id)}`);
     },
     updateOrderItemStatus: async (itemId: string, status: string): Promise<void> => {
         await api.patch(`/orders/items/${itemId}/status?status=${status}`);
     },
     getOrderItems: async (orderId: string): Promise<any[]> => {
-        const response = await api.get(`/orders/items/${orderId}`);
+        const response = await api.get(`/orders/items/${encodeURIComponent(orderId)}`);
         return response.data;
     },
     markItemPrepared: async (itemId: string, isPrepared: boolean): Promise<void> => {
         await api.patch(`/orders/items/${itemId}/prepared`, { is_prepared: isPrepared });
     },
     kitchenComplete: async (orderId: string): Promise<void> => {
-        await api.post(`/orders/${orderId}/kitchen-complete`);
+        await api.post(`/orders/${encodeURIComponent(orderId)}/kitchen-complete`);
     },
     updateOrderPhotos: async (orderId: string, photoUrls: string[]): Promise<void> => {
-        await api.patch(`/orders/${orderId}/photos`, { delivery_photos: photoUrls });
+        await api.patch(`/orders/${encodeURIComponent(orderId)}/photos`, { delivery_photos: photoUrls });
+    },
+    completeOrder: async (orderId: string, paymentMethod: string): Promise<Order> => {
+        const response = await api.post(`/orders/${encodeURIComponent(orderId)}/complete`, { paymentMethod });
+        return response.data;
     }
 };
 
@@ -152,8 +156,8 @@ export const SuperAdminService = {
         return response.data;
     },
 
-    /** 修改用户角色或状态 */
-    updateUser: async (userId: string, update: { role?: string; name?: string; is_disabled?: boolean }) => {
+    /** 修改用户角色、姓名或状态 */
+    updateUser: async (userId: string, update: { role?: string; name?: string; employee_id?: string; is_disabled?: boolean }) => {
         const response = await api.patch(`/super-admin/users/${userId}`, update);
         return response.data;
     },

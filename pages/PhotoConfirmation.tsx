@@ -86,14 +86,8 @@ const PhotoConfirmation: React.FC = () => {
             const photoUrls = (Object.values(photos) as { localUrl: string; storageUrl: string }[]).map(p => p.storageUrl);
             await OrderService.updateOrderPhotos(orderId, photoUrls);
 
-            // 2. 更新订单状态为 COMPLETED 并记录付款方式
-            const order = await OrderService.getById(orderId);
-            const updated = {
-                ...order,
-                status: OrderStatus.COMPLETED,
-                paymentMethod: selectedPayment as PaymentMethod
-            };
-            await OrderService.update(orderId, updated);
+            // 2. 调用新接口完成订单（允许司机权限）
+            await OrderService.completeOrder(orderId, selectedPayment);
             navigate('/driver');
         } catch (error) {
             console.error("Failed to complete delivery", error);

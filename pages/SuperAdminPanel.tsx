@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { SuperAdminService } from '../src/services/api';
-import { UserRole } from '../types';
+import { UserRole, AiSummary } from '../types';
 
 // ── 类型定义 ──
 
@@ -128,7 +128,7 @@ const OverviewSection: React.FC = () => {
             setLoading(true);
             const [statsData, aiData] = await Promise.all([
                 SuperAdminService.getStats(),
-                SuperAdminService.getAiSummary().catch(() => ({ summary: '' }))
+                SuperAdminService.getAiSummary().catch(() => ({ summary: '' } as AiSummary))
             ]);
             setStats(statsData);
             setAiSummary(aiData.summary || '');
@@ -322,6 +322,8 @@ const UsersSection: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [editingUser, setEditingUser] = useState<string | null>(null);
     const [editRole, setEditRole] = useState('');
+    const [editName, setEditName] = useState('');
+    const [editEmployeeId, setEditEmployeeId] = useState('');
     const [showAddModal, setShowAddModal] = useState(false);
     const [newUserForm, setNewUserForm] = useState({
         email: '',
@@ -379,11 +381,15 @@ const UsersSection: React.FC = () => {
     };
 
     /**
-     * 保存用户角色修改
+     * 保存用户信息修改
      */
-    const handleSaveRole = async (userId: string) => {
+    const handleSaveUser = async (userId: string) => {
         try {
-            await SuperAdminService.updateUser(userId, { role: editRole });
+            await SuperAdminService.updateUser(userId, { 
+                role: editRole,
+                name: editName,
+                employee_id: editEmployeeId
+            });
             setEditingUser(null);
             await loadUsers();
         } catch (error) {
@@ -459,38 +465,67 @@ const UsersSection: React.FC = () => {
 
                         {/* 编辑模式 */}
                         {editingUser === user.id ? (
-                            <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
-                                <select
-                                    value={editRole}
-                                    onChange={(e) => setEditRole(e.target.value)}
-                                    className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/10 outline-none"
-                                >
-                                    <option value="admin">管理员</option>
-                                    <option value="kitchen">后厨</option>
-                                    <option value="driver">司机</option>
-                                    <option value="super_admin">超级管理员</option>
-                                </select>
-                                <button
-                                    onClick={() => handleSaveRole(user.id)}
-                                    className="px-3 py-2 bg-primary text-white rounded-xl text-xs font-bold active:scale-95 transition-transform"
-                                >
-                                    保存
-                                </button>
-                                <button
-                                    onClick={() => setEditingUser(null)}
-                                    className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold active:scale-95 transition-transform"
-                                >
-                                    取消
-                                </button>
+                            <div className="mt-3 pt-3 border-t border-slate-100 flex flex-col gap-3">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">姓名</label>
+                                        <input
+                                            type="text"
+                                            value={editName}
+                                            onChange={(e) => setEditName(e.target.value)}
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/10 outline-none"
+                                            placeholder="姓名"
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest pl-1">工号</label>
+                                        <input
+                                            type="text"
+                                            value={editEmployeeId}
+                                            onChange={(e) => setEditEmployeeId(e.target.value)}
+                                            className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/10 outline-none"
+                                            placeholder="工号"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <select
+                                        value={editRole}
+                                        onChange={(e) => setEditRole(e.target.value)}
+                                        className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/10 outline-none"
+                                    >
+                                        <option value="admin">管理员</option>
+                                        <option value="kitchen">后厨</option>
+                                        <option value="driver">司机</option>
+                                        <option value="super_admin">超级管理员</option>
+                                    </select>
+                                    <button
+                                        onClick={() => handleSaveUser(user.id)}
+                                        className="px-3 py-2 bg-primary text-white rounded-xl text-xs font-bold active:scale-95 transition-transform"
+                                    >
+                                        保存
+                                    </button>
+                                    <button
+                                        onClick={() => setEditingUser(null)}
+                                        className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold active:scale-95 transition-transform"
+                                    >
+                                        取消
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-2">
                                 <button
-                                    onClick={() => { setEditingUser(user.id); setEditRole(user.role); }}
+                                    onClick={() => { 
+                                        setEditingUser(user.id); 
+                                        setEditRole(user.role);
+                                        setEditName(user.name || '');
+                                        setEditEmployeeId((user as any).employee_id || '');
+                                    }}
                                     className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors active:scale-95"
                                 >
                                     <span className="material-icons-round text-sm">edit</span>
-                                    修改角色
+                                    修改资料
                                 </button>
                                 <button
                                     onClick={() => handleDeleteUser(user.id, user.email)}

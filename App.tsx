@@ -21,28 +21,49 @@ import { UserRole } from './types';
 
 const App: React.FC = () => {
     const [user, setUser] = useState<UserRole | null>(null);
+    const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        // NOTE: 启动时检查是否已有有效 session（页面刷新或 OAuth 回调后恢复登录状态）
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user) {
-                const savedRole = session.user.user_metadata?.role as UserRole | undefined;
-                setUser(savedRole ?? UserRole.ADMIN);
+        // NOTE: 启动时检查是否有有效 session（即使刷新页面也能保持登录）
+        const initAuth = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    const role = session.user.user_metadata?.role as UserRole | undefined;
+                    setUser(role ?? UserRole.ADMIN);
+                }
+            } catch (err) {
+                console.error("Auth init error:", err);
+            } finally {
+                setLoading(false);
             }
-        });
+        };
 
-        // NOTE: 监听 Supabase 认证状态变化
+        initAuth();
+
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             if (session?.user) {
-                const savedRole = session.user.user_metadata?.role as UserRole | undefined;
-                setUser(savedRole ?? UserRole.ADMIN);
+                const role = session.user.user_metadata?.role as UserRole | undefined;
+                setUser(role ?? UserRole.ADMIN);
             } else {
                 setUser(null);
             }
+            setLoading(false);
         });
 
         return () => subscription.unsubscribe();
     }, []);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-slate-100 flex items-center justify-center">
+                <div className="flex flex-col items-center">
+                    <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest animate-pulse">正在恢复会话...</p>
+                </div>
+            </div>
+        );
+    }
 
     /**
      * 判断当前用户是否有权访问 admin 级别的页面
@@ -73,7 +94,7 @@ const App: React.FC = () => {
                             <Route path="/admin/kitchen-summary" element={isAdminOrSuper ? <KitchenSummary /> : <Navigate to="/login" />} />
                             <Route path="/admin/notifications" element={isAdminOrSuper ? <NotificationCenter /> : <Navigate to="/login" />} />
                             <Route path="/admin/profile" element={isAdminOrSuper ? <Profile onLogout={() => setUser(null)} /> : <Navigate to="/login" />} />
-                            <Route path="/orders/:id" element={isAdminOrSuper ? <OrderDetail /> : <Navigate to="/login" />} />
+                            <Route path="/orders/:id" element={isAdminOrSuper || user === UserRole.DRIVER ? <OrderDetail /> : <Navigate to="/login" />} />
 
                             {/* Super Admin Routes — 仅 super_admin 可访问 */}
                             <Route path="/super-admin" element={user === UserRole.SUPER_ADMIN ? <SuperAdminPanel /> : <Navigate to="/login" />} />

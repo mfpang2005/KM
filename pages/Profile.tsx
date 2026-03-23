@@ -65,7 +65,8 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
         }
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        await supabase.auth.signOut();
         onLogout();
         navigate('/login');
     };

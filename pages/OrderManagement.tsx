@@ -5,11 +5,7 @@ import { Order, OrderStatus, OrderItem, PaymentMethod } from '../types';
 
 // NOTE: 不再使用 MOCK_PRODUCTS，改用从后端动态获取的真实产品列表
 
-// Mock drivers for assignment (保留，后续替换为真实司机数据)
-const MOCK_DRIVERS = [
-    { id: 'ali', name: 'Ali Ahmad', status: '可选', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDCr1A0UkYD47bPyjINVhOMMiB-pdO6Vk9GkIst7TGBPcENh6mor-beIE0m-zai1jb8ISvg0dfAHur75hz38kljvdLDYDhZL-2ExznnuKSVz_DC0ZJEAL2uTdFO5HUVg3AYRyECUgerFv4RSqf8DUrKNHpID4Dd5JhD0TnTCZbd2A9ZDW4MCHQT65EjZTHjvSdZf_OqT0CAh_1IQOS7JVmm59EG9tT5QDfeexTdpUkUFKHXXnZwE66rkmWOuJ0Q7WWSPtN1nUcxBxRf' },
-    { id: 'tan', name: 'Tan Wei', status: '附近', img: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDLlyYiZxjedNYrM_16MJem_-z8phukD8Y0feARWqrmek1SnFPW4HVi7sm7VddsZtD-UU756Kogt_EUqpzfEUqXDDKMI3s2g6IxxLz3NBeqHkMSSCG0Cf-z3HYu02DWkNOFWb-bA9YVclQyaW35kBs0WTXA2ImEqpPqbRazqVCsx-z2c2OHILM7zBpNigWz9_gIcnizGf9SOcVa0elsIXsnl6J_ZOWF6G9MeORyCWaoUvIAua6w0WMg-Z4HRcPizWY5q-0CMfhjjIz8' }
-];
+
 
 const EQUIPMENTS_LIST = ['汤匙', '叉子', '盘子', '杯子', '垃圾袋', '白钢网', '食物夹子', '红烧桶', '白钢高盖', '篮子', '铁脚架', '装酱碗'];
 
@@ -720,7 +716,19 @@ const OrderManagement: React.FC = () => {
                                             <div className="flex items-center gap-1.5 pl-6">
                                                 <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{order.order_number || order.id}</span>
                                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
-                                                <span className="text-[10px] font-bold text-slate-400">{order.dueTime ? new Date(order.dueTime).toLocaleString('zh-CN', { hour12: false }) : (order as any).created_at ? new Date((order as any).created_at).toLocaleString('zh-CN', { hour12: false }) : '-'}</span>
+                                                <span className="text-[10px] font-bold text-slate-400">
+                                                    {(() => {
+                                                        const d = order.dueTime ? new Date(order.dueTime) : (order as any).created_at ? new Date((order as any).created_at) : null;
+                                                        if (!d || isNaN(d.getTime())) return '-';
+                                                        return d.toLocaleString('zh-CN', { 
+                                                            month: '2-digit',
+                                                            day: '2-digit',
+                                                            hour: '2-digit', 
+                                                            minute: '2-digit',
+                                                            hour12: false 
+                                                        });
+                                                    })()}
+                                                </span>
                                             </div>
                                         </div>
                                         
@@ -740,7 +748,7 @@ const OrderManagement: React.FC = () => {
                                     </div>
 
                                     {/* Items List Snapshot */}
-                                    <div className="bg-[#f8f9fa] p-5 rounded-[24px] space-y-2 border border-slate-50">
+                                    <div className="bg-[#f8f9fa] p-4 rounded-2xl space-y-2 border border-slate-50">
                                         {order.items.slice(0, 3).map((item, idx) => (
                                             <div key={idx} className="flex justify-between items-center text-[13px] font-bold text-slate-700">
                                                 <span className="truncate max-w-[200px]">{item.name}</span>
@@ -755,42 +763,42 @@ const OrderManagement: React.FC = () => {
                                     <div className="flex items-center justify-between mt-auto pt-2">
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1.5">结算总额</span>
-                                            <span className="text-2xl font-black text-primary leading-none tracking-tight">RM {order.amount.toFixed(2)}</span>
+                                            <span className="text-xl font-black text-primary leading-none tracking-tight">RM {order.amount.toFixed(2)}</span>
                                         </div>
                                         <div className="flex gap-2.5">
                                             {/* Lightbox Trigger for Photos */}
                                             {order.delivery_photos && order.delivery_photos.length > 0 && (
                                                 <button
                                                     onClick={() => setLightboxUrl(order.delivery_photos![0])}
-                                                    className="w-11 h-11 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-indigo-500 active:scale-90 transition-all shadow-sm group/btn"
+                                                    className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-indigo-500 active:scale-90 transition-all shadow-sm group/btn"
                                                 >
-                                                    <span className="material-icons-round text-xl group/btn:scale-110 transition-transform">photo_library</span>
+                                                    <span className="material-icons-round text-lg group/btn:scale-110 transition-transform">photo_library</span>
                                                 </button>
                                             )}
                                             
                                             <button
                                                 onClick={() => handleOpenEdit(order)}
-                                                className="w-11 h-11 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"
+                                                className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[20px]">edit</span>
+                                                <span className="material-icons-round text-[18px]">edit</span>
                                             </button>
                                             <button
                                                 onClick={() => handleShareToWhatsApp(order)}
-                                                className="w-11 h-11 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-center text-green-500 active:scale-90 transition-all shadow-sm"
+                                                className="w-10 h-10 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-center text-green-500 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-5 h-5 opacity-80" alt="WA" />
+                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-4.5 h-4.5 opacity-80" alt="WA" />
                                             </button>
                                             <button
                                                 onClick={() => handleDownloadPDF(order)}
-                                                className="w-11 h-11 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-primary active:scale-90 transition-all shadow-sm"
+                                                className="w-10 h-10 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-primary active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[20px]">picture_as_pdf</span>
+                                                <span className="material-icons-round text-[18px]">picture_as_pdf</span>
                                             </button>
                                             <button
                                                 onClick={() => setOrderToDelete(order.id)}
-                                                className="w-11 h-11 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-red-500 active:scale-90 transition-all shadow-sm"
+                                                className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-red-500 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[20px]">delete_outline</span>
+                                                <span className="material-icons-round text-[18px]">delete_outline</span>
                                             </button>
                                         </div>
                                     </div>
@@ -1196,62 +1204,7 @@ const OrderManagement: React.FC = () => {
                                 </div>
                             </section>
 
-                            <section className="space-y-4">
-                                <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">指派/修改配送员</h3>
-                                <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
-                                    {MOCK_DRIVERS.map((driver) => (
-                                        <button
-                                            key={driver.id}
-                                            onClick={() => setEditingOrder({ ...editingOrder, driverId: driver.id })}
-                                            className={`min-w-[120px] p-3 rounded-[32px] border transition-all flex flex-col items-center gap-2 ${editingOrder.driverId === driver.id
-                                                ? 'bg-primary/5 border-primary shadow-md'
-                                                : 'bg-slate-50 border-slate-100 shadow-sm'
-                                                }`}
-                                        >
-                                            <div className="relative">
-                                                <img src={driver.img} className="w-12 h-12 rounded-full border-2 border-white shadow-sm object-cover" alt={driver.name} />
-                                                {editingOrder.driverId === driver.id && (
-                                                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-primary rounded-full flex items-center justify-center border-2 border-white shadow-sm animate-in zoom-in">
-                                                        <span className="material-icons-round text-white text-[12px]">check</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="text-center">
-                                                <p className="text-[10px] font-bold text-slate-800 leading-tight">{driver.name}</p>
-                                                <span className="text-[8px] font-black text-slate-400 uppercase">{driver.status}</span>
-                                            </div>
-                                        </button>
-                                    ))}
-                                    <button
-                                        onClick={() => setEditingOrder({ ...editingOrder, driverId: undefined })}
-                                        className={`min-w-[120px] p-3 rounded-[32px] border transition-all flex flex-col items-center justify-center gap-2 ${!editingOrder.driverId
-                                            ? 'bg-slate-800 text-white border-slate-800 shadow-md'
-                                            : 'bg-slate-50 border-slate-100 text-slate-400 shadow-sm'
-                                            }`}
-                                    >
-                                        <span className="material-icons-round">person_off</span>
-                                        <span className="text-[10px] font-bold">暂不指派</span>
-                                    </button>
-                                </div>
-                            </section>
 
-                            <section className="space-y-4 pb-10">
-                                <h3 className="text-[10px] font-black text-slate-300 uppercase tracking-widest pl-1">订单状态流程</h3>
-                                <div className="grid grid-cols-2 gap-3">
-                                    {Object.values(OrderStatus).map((status) => (
-                                        <button
-                                            key={status}
-                                            onClick={() => setEditingOrder({ ...editingOrder, status })}
-                                            className={`py-4 px-4 rounded-[20px] text-[10px] font-black uppercase tracking-wider border transition-all ${editingOrder.status === status
-                                                ? 'bg-slate-900 border-slate-900 text-white shadow-xl shadow-slate-900/20 scale-105 z-10'
-                                                : 'bg-white text-slate-400 border-slate-100 hover:border-slate-300'
-                                                }`}
-                                        >
-                                            {statusLabels[status]}
-                                        </button>
-                                    ))}
-                                </div>
-                            </section>
                         </main>
 
                         <footer className="p-8 border-t border-slate-50 flex-shrink-0 bg-white/80 backdrop-blur-md shadow-[0_-10px_30px_rgba(0,0,0,0.03)]">
@@ -1270,9 +1223,9 @@ const OrderManagement: React.FC = () => {
             {/* FAB */}
             <button
                 onClick={() => navigate('/admin/create-order')}
-                className="fixed bottom-8 right-6 w-16 h-16 bg-primary text-white rounded-full shadow-2xl shadow-primary/30 flex items-center justify-center active:scale-90 transition-transform z-40 no-print"
+                className="fixed bottom-8 right-6 w-14 h-14 bg-primary text-white rounded-full shadow-2xl shadow-primary/30 flex items-center justify-center active:scale-90 transition-transform z-40 no-print"
             >
-                <span className="material-icons-round text-[36px]">add</span>
+                <span className="material-icons-round text-[32px]">add</span>
             </button>
         </div>
     );

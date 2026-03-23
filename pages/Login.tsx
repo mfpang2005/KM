@@ -21,6 +21,16 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         if (role === UserRole.DRIVER) navigate('/driver');
     };
 
+    // NOTE: 页面加载时检查是否已有有效 session（实现“刷新不登出”）
+    React.useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+                const role = session.user.user_metadata?.role;
+                if (role) navigateByRole(role as UserRole);
+            }
+        });
+    }, [navigate]);
+
     const handleLogin = async () => {
         if (!email || !password) {
             alert('请输入邮箱和密码');
