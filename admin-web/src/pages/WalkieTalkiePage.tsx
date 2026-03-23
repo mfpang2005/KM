@@ -108,7 +108,7 @@ export const WalkieTalkiePage: React.FC = () => {
      * 播放 base64 音频 — 使用 Web Audio API
      * NOTE: 必须在用户交互后才能播放（AudioContext 状态解锁）
      */
-    const playAudio = useCallback(async (base64: string) => {
+    const playAudio = useCallback(async (content: string) => {
         try {
             if (!audioContextRef.current) {
                 audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -116,6 +116,10 @@ export const WalkieTalkiePage: React.FC = () => {
             if (audioContextRef.current.state === 'suspended') {
                 await audioContextRef.current.resume();
             }
+
+            // Handle potential data URI prefix
+            const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
+            
             // 将 base64 转换成 ArrayBuffer
             const binary = atob(base64);
             const buf = new ArrayBuffer(binary.length);

@@ -16,9 +16,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration }) 
     const audioRef = useRef<HTMLAudioElement | null>(null);
 
     useEffect(() => {
-        // Handle potentially missing data URI prefix if it's just raw base64
-        const source = audioUrl.startsWith('data:') ? audioUrl : `data:audio/webm;base64,${audioUrl}`;
-        const audio = new Audio(source);
+        let objectUrl = '';
+        const audio = new Audio();
         audioRef.current = audio;
 
         const setAudioData = () => {
@@ -34,14 +33,45 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration }) 
         audio.addEventListener('timeupdate', setAudioTime);
         audio.addEventListener('ended', handleEnded);
 
-        // Preload to get duration
-        audio.load();
+        const initAudio = async () => {
+            try {
+                // Handle potentially missing data URI prefix if it's just raw base64
+                let source = audioUrl;
+                if (!audioUrl.startsWith('data:') && !audioUrl.startsWith('http')) {
+                    // It's likely raw base64. Convert to Blob for better performance/compatibility
+                    const binary = atob(audioUrl);
+                    const bytes = new Uint8Array(binary.length);
+                    for (let i = 0; i < binary.length; i++) {
+                        bytes[i] = binary.charCodeAt(i);
+                    }
+                    const blob = new Blob([bytes], { type: 'audio/webm' });
+                    objectUrl = URL.createObjectURL(blob);
+                    source = objectUrl;
+                } else if (audioUrl.startsWith('data:')) {
+                    // If it's already a data URI, also convert to blob for consistency
+                    const response = await fetch(audioUrl);
+                    const blob = await response.blob();
+                    objectUrl = URL.createObjectURL(blob);
+                    source = objectUrl;
+                }
+                
+                audio.src = source;
+                audio.load();
+            } catch (err) {
+                console.error('Audio initialization failed', err);
+            }
+        };
+
+        initAudio();
 
         return () => {
             audio.removeEventListener('loadedmetadata', setAudioData);
             audio.removeEventListener('timeupdate', setAudioTime);
             audio.removeEventListener('ended', handleEnded);
             audio.pause();
+            if (objectUrl) {
+                URL.revokeObjectURL(objectUrl);
+            }
         };
     }, [audioUrl]);
 

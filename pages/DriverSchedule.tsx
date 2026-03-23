@@ -77,12 +77,15 @@ const DriverSchedule: React.FC = () => {
         setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     }, []);
 
-    const playAudio = useCallback(async (base64: string) => {
+    const playAudio = useCallback(async (content: string) => {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
         try {
+            // Handle potential data URI prefix
+            const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
+            
             const binary = atob(base64);
             const buf = new ArrayBuffer(binary.length);
             const view = new Uint8Array(buf);
