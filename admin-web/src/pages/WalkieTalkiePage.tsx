@@ -1,44 +1,8 @@
-import React, { useState, useRef, useEffect, useCallback, Component, ErrorInfo, ReactNode } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import GoEasy from 'goeasy';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import AudioPlayer from '../components/AudioPlayer';
-
-// NOTE: 错误边界组件，捕获渲染层崩溃并显示具体错误
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
-    constructor(props: { children: ReactNode }) {
-        super(props);
-        this.state = { hasError: false, error: null };
-    }
-    static getDerivedStateFromError(error: Error) {
-        return { hasError: true, error };
-    }
-    componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        console.error('[WalkieBoundary] Caught error:', error, errorInfo);
-    }
-    render() {
-        if (this.state.hasError) {
-            return (
-                <div className="p-10 bg-red-50 text-red-700 rounded-2xl border-2 border-red-200 m-6">
-                    <h2 className="text-xl font-black mb-4 flex items-center gap-2">
-                        <span className="material-icons-round">error</span>
-                        页面渲染崩溃 (Render Crash)
-                    </h2>
-                    <pre className="text-xs bg-white p-4 rounded-xl border border-red-100 overflow-auto max-h-96">
-                        {this.state.error?.stack || this.state.error?.message}
-                    </pre>
-                    <button 
-                        onClick={() => window.location.reload()}
-                        className="mt-6 px-6 py-2 bg-red-600 text-white rounded-full font-bold hover:bg-red-700"
-                    >
-                        刷新页面重试
-                    </button>
-                </div>
-            );
-        }
-        return this.props.children;
-    }
-}
 
 const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
 const GOEASY_HOST = 'singapore.goeasy.io';
@@ -51,6 +15,7 @@ interface OnlineUser {
     joinedAt: string;
 }
 
+/** 聊天消息数据结构 */
 interface ChatMessage {
     id: string;
     senderId: string;
@@ -80,32 +45,40 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
         reader.readAsDataURL(blob);
     });
 
-const WalkieTalkieContent: React.FC = () => {
+export const WalkieTalkiePage: React.FC = () => {
     const { user } = useAuth();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [goEasyStatus, setGoEasyStatus] = useState<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'>('DISCONNECTED');
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const [chatInput, setChatInput] = useState('');
-    const [selectedReceiver, setSelectedReceiver] = useState<string | null>(null);
+    // NOTE: 恢复原始逻辑，默认选中全局广播
+    const [selectedReceiver, setSelectedReceiver] = useState<string>('GLOBAL');
 
+    // NOTE: 使用 Ref 存储已处理的消息 ID，防止 GoEasy 和 Supabase 重复触发
     const messageIdsRef = useRef<Set<string>>(new Set());
     const [isRecording, setIsRecording] = useState(false);
+    // NOTE: 追踪最新收到的音频消息 ID，用于触发 autoPlay
     const [latestIncomingId, setLatestIncomingId] = useState<string | null>(null);
+    // NOTE: 浏览器自动播放限制 —— 用户需先与页面交互才能解锁
     const [audioUnlocked, setAudioUnlocked] = useState(false);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
-    const goEasyRef = useRef<any>(null); // 使用 any 避免类型定义导致的构建问题
+    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
     const fallbackIdRef = useRef<string>(`superadmin-${Math.random().toString(36).slice(2, 9)}`);
     const recordStartTimeRef = useRef<number | null>(null);
     const chatBottomRef = useRef<HTMLDivElement | null>(null);
     const currentGoEasyIdRef = useRef<string | null>(null);
+    const silentAudioRef = useRef<HTMLAudioElement | null>(null);
 
     const addMessage = useCallback((msg: ChatMessage) => {
-        if (!msg.id) return;
+        if (!msg || !msg.id) return;
+        // 1. 根据 ID 去重
         if (messageIdsRef.current.has(msg.id)) return;
 
-        const fingerprint = `${msg.senderId}:${msg.type}:${(msg.content||'').slice(0, 50)}:${Math.floor(msg.timestamp / 1000)}`;
+        // 2. 根据内容指纹去重（针对同一发送者在极短时间内发送的相同内容）
+        const contentSnippet = (msg.content || '').slice(0, 50);
+        const fingerprint = `${msg.senderId}:${msg.type}:${contentSnippet}:${Math.floor((msg.timestamp || 0) / 1000)}`;
         if (messageIdsRef.current.has(fingerprint)) return;
 
         messageIdsRef.current.add(msg.id);
@@ -113,10 +86,12 @@ const WalkieTalkieContent: React.FC = () => {
         setMessages(prev => [...prev, msg]);
     }, []);
 
+    // 新消息自动滚到底部
     useEffect(() => {
         chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
+    /** 解锁音频播放权限 */
     const unlockAudio = () => {
         const SILENT_WAV = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
         const audio = new Audio(`data:audio/wav;base64,${SILENT_WAV}`);
@@ -124,124 +99,110 @@ const WalkieTalkieContent: React.FC = () => {
         audio.play()
             .then(() => {
                 setAudioUnlocked(true);
-                console.log('[Walkie] Audio unlocked successfully');
+                console.log('[Walkie] Audio context unlocked');
             })
             .catch((e) => {
-                console.warn('[Walkie] Native unlock failed, but proceeding:', e);
+                console.warn('[Walkie] Unlock failed:', e);
                 setAudioUnlocked(true);
             });
+        silentAudioRef.current = audio;
     };
 
-    // ── GoEasy PubSub ──────────────────────────────────────────────
+    // ── GoEasy PubSub Connection ────────────────────────────────────
     useEffect(() => {
         if (!user || user.id === currentGoEasyIdRef.current) return;
+
+        console.log('[GoEasy] Initializing for user:', user.id);
         currentGoEasyIdRef.current = user.id;
 
         const myId = user.id;
         const myLabel = user.email || 'Super Admin';
         const myRole = user.role || 'super_admin';
 
-        let goEasyInstance: any = null;
+        let goEasy: any = null;
 
-        const initGoEasy = () => {
+        const doConnect = () => {
             try {
-                // 兼容不同版本的 GoEasy 导入方式
-                const GoEasyLib = (GoEasy as any).default || GoEasy;
-                if (typeof GoEasyLib.getInstance !== 'function') {
-                    console.error('[GoEasy] getInstance missing on GoEasyLib:', GoEasyLib);
-                    setGoEasyStatus('DISCONNECTED');
-                    return;
+                if (typeof (GoEasy as any).getInstance !== 'function') {
+                    throw new Error('GoEasy.getInstance is not a function.');
                 }
-
-                goEasyInstance = GoEasyLib.getInstance({
+                goEasy = (GoEasy as any).getInstance({
                     host: GOEASY_HOST,
                     appkey: GOEASY_APPKEY,
                     modules: ['pubsub'],
                 });
-
-                goEasyRef.current = goEasyInstance;
+                goEasyRef.current = goEasy;
                 setGoEasyStatus('CONNECTING');
 
-                goEasyInstance.connect({
+                goEasy.connect({
                     id: myId,
                     data: { email: myLabel, role: myRole },
                     onSuccess: () => {
                         setGoEasyStatus('CONNECTED');
-                        goEasyInstance.pubsub.subscribe({
+                        if (!goEasy) return;
+                        // 订阅全局频道
+                        goEasy.pubsub.subscribe({
                             channel: CHANNEL,
-                            onMessage: (message: { content: string }) => {
+                            onMessage: async (message: { content: string }) => {
                                 try {
                                     const payload = JSON.parse(message.content);
                                     if (payload.senderId === myId) return;
 
                                     const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
+                                    const common = {
+                                        id: incomingId,
+                                        senderId: payload.senderId,
+                                        senderLabel: payload.senderLabel || payload.senderId,
+                                        senderRole: payload.senderRole || 'driver',
+                                        timestamp: payload.timestamp || Date.now(),
+                                        isMine: false,
+                                        receiverId: payload.receiverId || 'GLOBAL',
+                                        duration: payload.duration
+                                    };
+
                                     if (payload.type === 'text') {
-                                        addMessage({
-                                            id: incomingId,
-                                            senderId: payload.senderId,
-                                            senderLabel: payload.senderLabel || payload.senderId,
-                                            senderRole: payload.senderRole || 'driver',
-                                            content: payload.content || '',
-                                            timestamp: payload.timestamp || Date.now(),
-                                            isMine: false,
-                                            type: 'text',
-                                            receiverId: payload.receiverId || myId
-                                        });
+                                        addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
                                     } else if (payload.type === 'audio' || payload.audio) {
                                         const audioContent = payload.content || payload.audio;
-                                        if (audioContent) {
-                                            addMessage({
-                                                id: incomingId,
-                                                senderId: payload.senderId,
-                                                senderLabel: payload.senderLabel || payload.senderId,
-                                                senderRole: payload.senderRole || 'driver',
-                                                content: audioContent,
-                                                timestamp: payload.timestamp || Date.now(),
-                                                isMine: false,
-                                                type: 'audio',
-                                                receiverId: payload.receiverId || myId,
-                                                duration: payload.duration
-                                            });
-                                            setLatestIncomingId(incomingId);
-                                        }
+                                        if (!audioContent) return;
+                                        addMessage({ ...common, content: audioContent, type: 'audio' } as ChatMessage);
+                                        setLatestIncomingId(incomingId);
                                     }
-                                } catch (e) { console.error('[GoEasy] Parse error:', e); }
+                                } catch (err) {
+                                    console.error('[GoEasy] Failed to handle message', err);
+                                }
                             },
-                            onSuccess: () => console.log('[GoEasy] Subscribed'),
-                            onFailed: (e: any) => console.error('[GoEasy] Subscribe failed:', e)
                         });
                     },
-                    onFailed: (e: any) => {
-                        console.error('[GoEasy] Connect failed:', e);
+                    onFailed: (err: any) => {
+                        console.error('[GoEasy] Connect failed', err);
                         setGoEasyStatus('DISCONNECTED');
                     },
-                    onDisconnected: () => setGoEasyStatus('DISCONNECTED')
+                    onDisconnected: () => setGoEasyStatus('DISCONNECTED'),
                 });
-            } catch (e) {
-                console.error('[GoEasy] Init exception:', e);
+            } catch (err) {
+                console.error('[GoEasy] SDK init error', err);
                 setGoEasyStatus('DISCONNECTED');
             }
         };
 
-        initGoEasy();
+        doConnect();
 
         return () => {
-            if (goEasyInstance) {
-                try {
-                    goEasyInstance.pubsub.unsubscribe({ channel: CHANNEL });
-                    if (typeof goEasyInstance.disconnect === 'function') goEasyInstance.disconnect();
-                } catch (e) { console.warn('[GoEasy] Cleanup error:', e); }
+            if (goEasy) {
+                goEasy.pubsub.unsubscribe({ channel: CHANNEL });
+                if (typeof goEasy.disconnect === 'function') goEasy.disconnect();
             }
         };
-    }, [user, addMessage]);
+    }, [user?.id, addMessage]);
 
-    // ── Supabase Messages ──────────────────────────────────────────
+    // ── Supabase Messages Realtime Listener ────────────────────────
     useEffect(() => {
-        if (!user) return;
-        const channel = supabase.channel('messages-realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+        const channel = supabase.channel('public:messages')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
                 const msg = payload.new;
-                if (msg.sender_id === user.id) return;
+                if (!msg || msg.sender_id === user?.id) return;
+
                 addMessage({
                     id: msg.id,
                     senderId: msg.sender_id,
@@ -250,79 +211,85 @@ const WalkieTalkieContent: React.FC = () => {
                     content: msg.content || '',
                     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
                     isMine: false,
-                    type: (msg.type as any) || 'text',
-                    receiverId: msg.receiver_id || user.id,
+                    type: msg.type || 'text',
+                    receiverId: msg.receiver_id || 'GLOBAL',
                     duration: msg.duration
                 });
             }).subscribe();
+
         return () => { supabase.removeChannel(channel); };
     }, [user, addMessage]);
 
-    // ── History ───────────────────────────────────────────────────
+    // ── Fetch Historical Messages ──────────────────────────────────
     useEffect(() => {
-        if (!user || !selectedReceiver) {
-            setMessages([]);
-            return;
-        }
+        if (!user) return;
         const fetchHistory = async () => {
             try {
-                const { data, error } = await supabase
-                    .from('messages')
-                    .select('*')
-                    .order('created_at', { ascending: false })
-                    .limit(50)
-                    .or(`and(sender_id.eq.${user.id},receiver_id.eq.${selectedReceiver}),and(sender_id.eq.${selectedReceiver},receiver_id.eq.${user.id})`);
-
+                let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(50);
+                if (selectedReceiver === 'GLOBAL') {
+                    query = query.eq('receiver_id', 'GLOBAL');
+                } else {
+                    // 私聊 + 对方的全局广播
+                    query = query.or(`and(sender_id.eq.${user.id},receiver_id.eq.${selectedReceiver}),and(sender_id.eq.${selectedReceiver},receiver_id.eq.${user.id}),and(sender_id.eq.${selectedReceiver},receiver_id.eq.GLOBAL)`);
+                }
+                const { data, error } = await query;
                 if (error) throw error;
                 if (data) {
-                    messageIdsRef.current = new Set();
                     const history = data
-                        .filter(m => m && m.content)
+                        .filter(msg => msg && msg.content)
                         .reverse()
-                        .map(m => {
-                            messageIdsRef.current.add(m.id);
+                        .map(msg => {
+                            messageIdsRef.current.add(msg.id);
                             return {
-                                id: m.id,
-                                senderId: m.sender_id,
-                                senderLabel: m.sender_label || 'Unknown',
-                                senderRole: m.sender_role || 'guest',
-                                content: m.content || '',
-                                timestamp: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-                                isMine: m.sender_id === user.id,
-                                type: (m.type as any) || 'text',
-                                receiverId: m.receiver_id || '',
-                                duration: m.duration
+                                id: msg.id,
+                                senderId: msg.sender_id,
+                                senderLabel: msg.sender_label || 'Unknown',
+                                senderRole: msg.sender_role || 'guest',
+                                content: msg.content,
+                                timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
+                                isMine: msg.sender_id === user.id,
+                                type: (msg.type as any) || 'text',
+                                receiverId: msg.receiver_id || 'GLOBAL',
+                                duration: msg.duration
                             };
                         });
                     setMessages(history);
                 }
-            } catch (e) { console.error('[Walkie] History failed:', e); }
+            } catch (err) {
+                console.error('Failed to fetch history', err);
+            }
         };
         fetchHistory();
     }, [user, selectedReceiver]);
 
-    // ── Presence ──────────────────────────────────────────────────
+    // ── Supabase Presence ───────────────────────────────────────────
     useEffect(() => {
         if (!user) return;
-        const ch = supabase.channel('presence-room', { config: { presence: { key: user.id } } });
+        const ch = supabase.channel('walkie-talkie-room', {
+            config: { presence: { key: user.id } },
+        });
         ch.on('presence', { event: 'sync' }, () => {
             const state = ch.presenceState<OnlineUser>();
-            const unique = new Map<string, OnlineUser>();
-            Object.values(state).flat().forEach(p => {
-                if (p && p.userId && p.userId !== user.id) unique.set(p.userId, p);
+            const allPresences = Object.values(state).flat();
+            const uniqueUsers: OnlineUser[] = [];
+            const seenIds = new Set<string>();
+            allPresences.forEach(p => {
+                if (p && p.userId && !seenIds.has(p.userId) && p.userId !== user.id) {
+                    seenIds.add(p.userId);
+                    uniqueUsers.push(p);
+                }
             });
-            setOnlineUsers(Array.from(unique.values()));
-        }).subscribe(async (s) => {
-            if (s === 'SUBSCRIBED') {
-                await ch.track({ userId: user.id, email: user.email, role: user.role, joinedAt: new Date().toISOString() });
+            setOnlineUsers(uniqueUsers);
+        }).subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await ch.track({ userId: user.id, email: user.email, role: user.role, joinedAt: new Date().toISOString() } as OnlineUser);
             }
         });
         return () => { supabase.removeChannel(ch); };
     }, [user]);
 
-    // ── Actions ───────────────────────────────────────────────────
+    // ── 录音 ─────────────────────────────────────────────────────────
     const startRecording = async () => {
-        if (!selectedReceiver) return;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mr = new MediaRecorder(stream);
@@ -332,10 +299,7 @@ const WalkieTalkieContent: React.FC = () => {
             mediaRecorderRef.current = mr;
             recordStartTimeRef.current = Date.now();
             setIsRecording(true);
-        } catch (e) { 
-            console.error('[Walkie] Mic error:', e);
-            alert('无法启动麦克风，请检查权限。'); 
-        }
+        } catch { alert('请允许麦克风权限以使用 Walkie-Talkie。'); }
     };
 
     const stopRecording = async () => {
@@ -343,125 +307,175 @@ const WalkieTalkieContent: React.FC = () => {
         setIsRecording(false);
         const mr = mediaRecorderRef.current;
         mr.stop();
-        mr.stream.getTracks().forEach(t => t.stop());
+        mr.stream.getTracks().forEach((t) => t.stop());
         mr.onstop = async () => {
-            if (!goEasyRef.current || goEasyStatus !== 'CONNECTED' || !selectedReceiver) return;
-            const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
-            if (blob.size < 500) return;
+            if (!goEasyRef.current || goEasyStatus !== 'CONNECTED') return;
+            const mimeType = mr.mimeType || 'audio/webm';
+            const blob = new Blob(audioChunksRef.current, { type: mimeType });
+            if (blob.size < 100) return;
             try {
-                const b64 = await blobToBase64(blob);
+                const base64Audio = await blobToBase64(blob);
+                const targetChannel = CHANNEL; // 默认发到大频道
                 const ts = Date.now();
                 const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
                 const msgId = `${user?.id || fallbackIdRef.current}-${ts}`;
 
-                const chatMsg: ChatMessage = {
+                const payload = {
                     id: msgId,
-                    senderId: user?.id || fallbackIdRef.current,
-                    senderLabel: user?.email || 'Super Admin',
-                    senderRole: user?.role || 'super_admin',
-                    content: b64,
+                    type: 'audio',
+                    senderId: user?.id ?? fallbackIdRef.current,
+                    senderLabel: user?.email ?? 'Super Admin',
+                    senderRole: user?.role ?? 'super_admin',
+                    content: base64Audio,
+                    timestamp: ts,
+                    receiverId: selectedReceiver,
+                    duration: dur
+                };
+
+                addMessage({
+                    id: msgId,
+                    senderId: payload.senderId,
+                    senderLabel: payload.senderLabel,
+                    senderRole: payload.senderRole,
+                    content: base64Audio,
                     timestamp: ts,
                     isMine: true,
                     type: 'audio',
                     receiverId: selectedReceiver,
                     duration: dur
-                };
-                addMessage(chatMsg);
-
-                goEasyRef.current.pubsub.publish({
-                    channel: CHANNEL,
-                    message: JSON.stringify(chatMsg),
-                    onSuccess: () => console.log('[GoEasy] Audio sent'),
-                    onFailed: (e: any) => console.error('[GoEasy] Audio push failed:', e)
                 });
 
-                await supabase.from('messages').insert([{
-                    id: msgId,
-                    sender_id: chatMsg.senderId,
-                    sender_label: chatMsg.senderLabel,
-                    sender_role: chatMsg.senderRole,
-                    receiver_id: chatMsg.receiverId,
-                    content: chatMsg.content,
-                    type: 'audio',
-                    duration: dur
-                }]);
-            } catch (e) { console.error('[Walkie] Record process failed:', e); }
+                goEasyRef.current.pubsub.publish({
+                    channel: targetChannel,
+                    message: JSON.stringify(payload),
+                    onSuccess: () => console.log(`[GoEasy] Audio published to ${targetChannel}`),
+                    onFailed: (err: any) => console.error('[GoEasy] Publish failed', err),
+                });
+
+                const insertAudio = async () => {
+                    const { error } = await supabase.from('messages').insert([{
+                        id: msgId,
+                        sender_id: payload.senderId,
+                        sender_label: payload.senderLabel,
+                        sender_role: payload.senderRole,
+                        receiver_id: selectedReceiver,
+                        content: base64Audio,
+                        type: 'audio',
+                        duration: dur
+                    }]);
+                    if (error) console.error('[DB] Audio insert failed:', error);
+                };
+                insertAudio();
+
+            } catch (err) { console.error('[GoEasy] Failed to encode audio', err); }
+            audioChunksRef.current = [];
         };
     };
 
-    const sendTextMessage = async () => {
+    // ── 发送文字消息 ──────────────────────────────────────────────────
+    const sendTextMessage = () => {
         const text = chatInput.trim();
-        if (!text || !goEasyRef.current || goEasyStatus !== 'CONNECTED' || !selectedReceiver) return;
+        if (!text || !goEasyRef.current || goEasyStatus !== 'CONNECTED') return;
 
+        const myId = user?.id ?? fallbackIdRef.current;
+        const myLabel = user?.email ?? 'Super Admin';
+        const myRole = user?.role ?? 'super_admin';
         const ts = Date.now();
-        const msgId = `${user?.id || fallbackIdRef.current}-${ts}`;
-        const chatMsg: ChatMessage = {
+        const msgId = `${myId}-${ts}`;
+
+        addMessage({
             id: msgId,
-            senderId: user?.id || fallbackIdRef.current,
-            senderLabel: user?.email || 'Super Admin',
-            senderRole: user?.role || 'super_admin',
+            senderId: myId,
+            senderLabel: myLabel,
+            senderRole: myRole,
             content: text,
             timestamp: ts,
             isMine: true,
             type: 'text',
             receiverId: selectedReceiver
-        };
-        
-        addMessage(chatMsg);
+        });
         setChatInput('');
 
         goEasyRef.current.pubsub.publish({
             channel: CHANNEL,
-            message: JSON.stringify(chatMsg),
-            onFailed: (e: any) => console.error('[GoEasy] Text push failed:', e)
+            message: JSON.stringify({
+                id: msgId,
+                type: 'text',
+                senderId: myId,
+                senderLabel: myLabel,
+                senderRole: myRole,
+                content: text,
+                timestamp: ts,
+                receiverId: selectedReceiver
+            }),
+            onFailed: (err: any) => console.error('[GoEasy] Text publish failed', err),
         });
 
-        await supabase.from('messages').insert([{
-            id: msgId,
-            sender_id: chatMsg.senderId,
-            sender_label: chatMsg.senderLabel,
-            sender_role: chatMsg.senderRole,
-            receiver_id: chatMsg.receiverId,
-            content: chatMsg.content,
-            type: 'text'
-        }]);
+        const insertText = async () => {
+            await supabase.from('messages').insert([{
+                id: msgId,
+                sender_id: myId,
+                sender_label: myLabel,
+                sender_role: myRole,
+                receiver_id: selectedReceiver,
+                content: text,
+                type: 'text'
+            }]);
+        };
+        insertText();
     };
 
-    const selectedUser = onlineUsers.find(u => u.userId === selectedReceiver);
+    const myRole = user?.role ?? 'super_admin';
+    const myBubble = ROLE_CONFIG[myRole]?.bubble ?? 'bg-slate-500';
 
     return (
         <div className="h-[calc(100vh-140px)] flex gap-6">
+            {/* ── 左侧：在线用户 + 状态 ── */}
             <aside className="w-64 shrink-0 flex flex-col gap-3">
                 <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden flex-1 flex flex-col">
-                    <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between shrink-0">
+                    <div className="px-5 py-4 border-b border-slate-50 flex items-center justify-between">
                         <h3 className="font-black text-slate-700 text-sm flex items-center gap-2">
                             <span className="material-icons-round text-[18px] text-emerald-500">group</span>在线成员
                         </h3>
-                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                            {onlineUsers.length} 在线
+                        <span className="flex items-center gap-1.5 text-xs font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-100">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            {onlineUsers.length}
                         </span>
                     </div>
-                    <div className="divide-y divide-slate-50 overflow-y-auto flex-1">
-                        {onlineUsers.length === 0 ? (
-                            <div className="flex flex-col items-center py-12 text-slate-300">
-                                <span className="material-icons-round text-3xl mb-2">person_off</span>
-                                <p className="text-[10px] font-bold">暂无在线用户</p>
+                    <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
+                        {/* Global Broadcast Selector */}
+                        <div
+                            onClick={() => setSelectedReceiver('GLOBAL')}
+                            className={`flex items-center gap-2.5 px-4 py-3 cursor-pointer transition-colors ${selectedReceiver === 'GLOBAL' ? 'bg-indigo-50 border-r-4 border-indigo-500' : 'hover:bg-slate-50'}`}
+                        >
+                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 shrink-0">
+                                <span className="material-icons-round text-[18px]">public</span>
                             </div>
-                        ) : onlineUsers.map((u) => {
-                            const cfg = ROLE_CONFIG[u.role] || { label: u.role, color: 'bg-slate-100 text-slate-600', icon: 'person' };
+                            <div className="flex-1 min-w-0">
+                                <p className={`text-xs font-bold truncate ${selectedReceiver === 'GLOBAL' ? 'text-indigo-800' : 'text-slate-800'}`}>Global Broadcast</p>
+                                <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full mt-0.5 bg-indigo-100 text-indigo-700">全体频道</span>
+                            </div>
+                        </div>
+
+                        {onlineUsers.map((u) => {
+                            if (!u) return null;
+                            const cfg = ROLE_CONFIG[u.role] || ROLE_CONFIG.guest;
                             const isSelected = selectedReceiver === u.userId;
                             return (
                                 <div
                                     key={u.userId}
                                     onClick={() => setSelectedReceiver(u.userId)}
-                                    className={`flex items-center gap-2.5 px-4 py-3 cursor-pointer transition-all ${isSelected ? 'bg-indigo-50 border-r-4 border-indigo-500' : 'hover:bg-slate-50'}`}
+                                    className={`flex items-center gap-2.5 px-4 py-3 cursor-pointer transition-colors ${isSelected ? 'bg-indigo-50 border-r-4 border-indigo-500' : 'hover:bg-slate-50'}`}
                                 >
-                                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isSelected ? 'bg-indigo-100' : 'bg-slate-100'}`}>
-                                        <span className={`material-icons-round text-[18px] ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>{cfg.icon}</span>
+                                    <div className="relative shrink-0">
+                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isSelected ? 'bg-indigo-100' : 'bg-slate-100'}`}>
+                                            <span className={`material-icons-round text-[18px] ${isSelected ? 'text-indigo-500' : 'text-slate-400'}`}>{cfg.icon}</span>
+                                        </div>
+                                        <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-500 border-2 border-white rounded-full"></span>
                                     </div>
                                     <div className="flex-1 min-w-0">
-                                        <p className={`text-[11px] font-bold truncate ${isSelected ? 'text-indigo-800' : 'text-slate-800'}`}>{u.email}</p>
-                                        <span className={`inline-block text-[8px] font-black px-1.5 py-0.5 rounded mt-0.5 ${cfg.color}`}>{cfg.label}</span>
+                                        <p className={`text-xs font-bold truncate ${isSelected ? 'text-indigo-800' : 'text-slate-800'}`}>{u.email}</p>
+                                        <span className={`inline-block text-[9px] font-black px-2 py-0.5 rounded-full mt-0.5 ${cfg.color}`}>{cfg.label}</span>
                                     </div>
                                 </div>
                             );
@@ -469,85 +483,88 @@ const WalkieTalkieContent: React.FC = () => {
                     </div>
                 </div>
 
+                {/* 音频解锁按钮 */}
                 {!audioUnlocked && (
-                    <button onClick={unlockAudio} className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all active:scale-95">
-                        <span className="material-icons-round text-[18px]">volume_up</span>激活语音播放
+                    <button
+                        onClick={unlockAudio}
+                        className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/30 active:scale-95 transition-all"
+                    >
+                        <span className="material-icons-round text-[18px]">volume_up</span>
+                        点击解锁语音播放
                     </button>
                 )}
-
-                <div className="bg-white rounded-xl shadow-sm border border-slate-100 px-4 py-3 flex items-center gap-2.5 shrink-0">
-                    <span className={`w-2 h-2 rounded-full ${goEasyStatus === 'CONNECTED' ? 'bg-green-500' : goEasyStatus === 'CONNECTING' ? 'bg-yellow-400 animate-pulse' : 'bg-red-400'}`}></span>
-                    <div className="flex-1 min-w-0">
-                        <p className="text-[10px] font-black text-slate-700">GoEasy 状态</p>
-                        <p className="text-[9px] text-slate-400 font-bold truncate">{goEasyStatus}</p>
+                
+                <div className="bg-white rounded-xl shadow-sm border border-slate-100 px-4 py-3 flex items-center gap-2.5">
+                    <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${goEasyStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}></span>
+                    <div>
+                        <p className="text-xs font-black text-slate-700">GoEasy 状态</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">{goEasyStatus}</p>
                     </div>
                 </div>
             </aside>
 
-            <main className="flex-1 bg-white rounded-[24px] shadow-sm border border-slate-100 flex flex-col overflow-hidden">
-                <header className="px-6 py-4 border-b border-slate-100 flex items-center gap-3 shrink-0">
-                    {selectedUser ? (
-                        <>
-                            <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white ${ROLE_CONFIG[selectedUser.role]?.bubble || 'bg-slate-400'}`}>
-                                <span className="material-icons-round text-[18px]">{ROLE_CONFIG[selectedUser.role]?.icon || 'person'}</span>
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-sm font-black text-slate-800">{selectedUser.email}</p>
-                                <p className="text-[10px] text-emerald-500 font-bold">在线私聊</p>
-                            </div>
-                            <button
-                                onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
-                                onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
-                                onMouseLeave={stopRecording}
-                                onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                                onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-                                disabled={goEasyStatus !== 'CONNECTED'}
-                                className={`w-12 h-12 rounded-full flex flex-col items-center justify-center text-white font-black text-[8px] transition-all select-none ${goEasyStatus !== 'CONNECTED' ? 'bg-slate-300' : isRecording ? 'bg-red-600 scale-95 shadow-inner' : 'bg-red-500 hover:bg-red-600 shadow-md'}`}
-                            >
-                                <span className="material-icons-round text-base">{isRecording ? 'mic' : 'mic_none'}</span>
-                                {isRecording ? 'TALK' : 'HOLD'}
-                            </button>
-                        </>
-                    ) : (
-                        <p className="text-sm font-bold text-slate-400 flex items-center gap-2">
-                            <span className="material-icons-round text-[20px]">touch_app</span>
-                            请选择成员
-                        </p>
-                    )}
-                </header>
-
-                <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-                    {!selectedReceiver ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-200 gap-3 italic">
-                            <span className="material-icons-round text-6xl">chat</span>
-                            <p className="text-sm">选中的人会出现在这里</p>
+            {/* ── 右侧：PTT + 聊天 ── */}
+            <div className="flex-1 bg-white rounded-[24px] shadow-sm border border-slate-100 flex flex-col overflow-hidden">
+                {/* 顶部 PTT 区域 */}
+                <div className="py-6 border-b border-slate-100 flex flex-col items-center justify-center gap-4 bg-slate-50/30">
+                    <div className="flex items-center gap-8">
+                        <div className="text-center md:text-left">
+                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 justify-center md:justify-start">
+                                {selectedReceiver === 'GLOBAL' ? 'Global Broadcast' : 'Private Channel'}
+                                <span className={`text-[10px] px-2 py-0.5 rounded-md ${selectedReceiver === 'GLOBAL' ? 'bg-indigo-100 text-indigo-600' : 'bg-teal-100 text-teal-600'}`}>
+                                    {selectedReceiver === 'GLOBAL' ? '全体' : '私聊'}
+                                </span>
+                            </h2>
+                            <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-wider">
+                                {isRecording ? 'Recording your voice...' : 'Hold the button to talk'}
+                            </p>
                         </div>
-                    ) : messages.length === 0 ? (
-                        <div className="h-full flex flex-col items-center justify-center text-slate-200 gap-2">
-                            <p className="text-xs font-bold uppercase tracking-widest">No Message History</p>
+
+                        <button
+                            onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
+                            onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
+                            onMouseLeave={stopRecording}
+                            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+                            disabled={goEasyStatus !== 'CONNECTED'}
+                            className={`w-24 h-24 rounded-full flex flex-col items-center justify-center text-white font-black text-[9px] transition-all duration-200 select-none cursor-pointer outline-none gap-1 shadow-xl active:scale-95 ${goEasyStatus !== 'CONNECTED' ? 'bg-slate-300 cursor-not-allowed' : isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'}`}
+                        >
+                            <span className="material-icons-round text-3xl">{isRecording ? 'mic' : 'mic_none'}</span>
+                            {isRecording ? 'TALKING' : 'PTT'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* 聊天消息区 */}
+                <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+                    {messages.length === 0 ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-3">
+                            <span className="material-icons-round text-5xl">chat_bubble_outline</span>
+                            <p className="text-xs font-bold uppercase tracking-widest">No Messages Yet</p>
                         </div>
                     ) : messages.map((msg) => {
+                        if (!msg) return null;
                         const cfg = ROLE_CONFIG[msg.senderRole] || ROLE_CONFIG.guest;
                         const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                         return (
-                            <div key={msg.id} className={`flex gap-2.5 ${msg.isMine ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${cfg.bubble}`}>
-                                    <span className="material-icons-round text-white text-[14px]">{cfg.icon}</span>
+                            <div key={msg.id} className={`flex gap-3 ${msg.isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+                                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm ${cfg.bubble}`}>
+                                    <span className="material-icons-round text-white text-[16px]">{cfg.icon}</span>
                                 </div>
-                                <div className={`max-w-[75%] ${msg.isMine ? 'items-end' : 'items-start'} flex flex-col gap-0.5`}>
-                                    <div className="flex items-center gap-1.5 px-1">
-                                        {!msg.isMine && <span className="text-[9px] font-black text-slate-400">{msg.senderLabel}</span>}
-                                        <span className="text-[8px] text-slate-300">{time}</span>
+                                <div className={`max-w-[70%] ${msg.isMine ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                                    <div className="flex items-center gap-2">
+                                        {!msg.isMine && <span className="text-[11px] font-black text-slate-600">{msg.senderLabel}</span>}
+                                        <span className="text-[9px] text-slate-300 font-bold">{time}</span>
                                     </div>
-                                    <div className="rounded-2xl shadow-sm text-sm">
+                                    <div className="group relative">
                                         {msg.type === 'audio' ? (
-                                            <AudioPlayer 
-                                                audioUrl={msg.content} 
-                                                initialDuration={msg.duration} 
-                                                autoPlay={audioUnlocked && !msg.isMine && msg.id === latestIncomingId} 
+                                            <AudioPlayer
+                                                audioUrl={msg.content}
+                                                initialDuration={msg.duration}
+                                                autoPlay={audioUnlocked && !msg.isMine && msg.id === latestIncomingId}
                                             />
                                         ) : (
-                                            <div className={`px-4 py-2 rounded-2xl ${msg.isMine ? 'bg-slate-800 text-white rounded-tr-sm' : 'bg-slate-100 text-slate-700 rounded-tl-sm'}`}>
+                                            <div className={`px-4 py-2.5 rounded-2xl text-sm font-medium shadow-sm transition-all ${msg.isMine ? 'bg-slate-800 text-white rounded-tr-none hover:bg-slate-900 border border-slate-700' : 'bg-slate-50 text-slate-800 rounded-tl-none hover:bg-white border border-slate-100'}`}>
                                                 {msg.content}
                                             </div>
                                         )}
@@ -559,35 +576,28 @@ const WalkieTalkieContent: React.FC = () => {
                     <div ref={chatBottomRef} />
                 </div>
 
-                {selectedReceiver && (
-                    <footer className="px-4 py-3 border-t border-slate-100 flex items-center gap-2.5 shrink-0">
-                        <div className={`flex-1 flex items-center rounded-2xl px-4 py-2 bg-slate-50 border border-slate-100 transition-all ${isRecording ? 'bg-red-50 border-red-100' : ''}`}>
-                            <input
-                                type="text"
-                                value={chatInput}
-                                onChange={(e) => setChatInput(e.target.value)}
-                                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }}
-                                placeholder={goEasyStatus === 'CONNECTED' ? "输入消息..." : "正在尝试重连..."}
-                                disabled={goEasyStatus !== 'CONNECTED' || isRecording}
-                                className="flex-1 bg-transparent text-sm outline-none font-medium h-8"
-                            />
-                        </div>
-                        <button
-                            onClick={sendTextMessage}
-                            disabled={goEasyStatus !== 'CONNECTED' || !chatInput.trim()}
-                            className="w-10 h-10 rounded-2xl bg-slate-800 text-white flex items-center justify-center transition-all hover:bg-slate-700 disabled:bg-slate-200 active:scale-90"
-                        >
-                            <span className="material-icons-round text-[18px]">send</span>
-                        </button>
-                    </footer>
-                )}
-            </main>
+                {/* 文字输入区域 */}
+                <div className="px-5 py-4 border-t border-slate-100 bg-white flex items-center gap-3">
+                    <div className="flex-1 bg-slate-50 rounded-2xl border border-slate-200 px-4 py-2.5 flex items-center focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
+                        <input
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }}
+                            placeholder={goEasyStatus === 'CONNECTED' ? 'Type a message...' : 'Connecting...'}
+                            disabled={goEasyStatus !== 'CONNECTED'}
+                            className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none placeholder:text-slate-300 px-1"
+                        />
+                    </div>
+                    <button
+                        onClick={sendTextMessage}
+                        disabled={goEasyStatus !== 'CONNECTED' || !chatInput.trim()}
+                        className="w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white flex items-center justify-center transition-all shadow-md hover:shadow-lg active:scale-95 shrink-0"
+                    >
+                        <span className="material-icons-round">send</span>
+                    </button>
+                </div>
+            </div>
         </div>
     );
 };
-
-export const WalkieTalkiePage: React.FC = () => (
-    <ErrorBoundary>
-        <WalkieTalkieContent />
-    </ErrorBoundary>
-);
