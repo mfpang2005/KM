@@ -310,8 +310,8 @@ export const FleetCenterPage: React.FC = () => {
                                 key={driver.id} 
                                 className={`p-4 border rounded-2xl shadow-sm flex flex-col gap-4 group transition-all ${
                                     driver.activeOrders.length > 0 
-                                        ? 'bg-blue-50/70 border-blue-200' 
-                                        : 'bg-slate-50 border-slate-100'
+                                        ? 'bg-slate-900 text-white border-slate-800' 
+                                        : 'bg-slate-50 text-slate-800 border-slate-100'
                                 } ${selectedOrderForAssignment ? 'ring-2 ring-blue-300' : ''}`}
                             >
                                 <div className="flex items-center gap-3">
@@ -333,19 +333,26 @@ export const FleetCenterPage: React.FC = () => {
                                 </div>
 
                                 <div className="space-y-2">
-                                    {driver.activeOrders.length > 0 ? driver.activeOrders.map(o => (
-                                        <div key={o.id} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100/10 space-y-2">
-                                            <div className="flex justify-between items-center text-[9px]">
-                                                <span className="font-black text-emerald-600 uppercase tracking-tighter">#{o.order_number || o.id.slice(0,6)} • {o.status}</span>
-                                                <div className="flex gap-1.5 text-[14px]">
-                                                    <span onClick={() => navigate(`/orders?search=${o.order_number || o.id}`)} className="material-icons-round text-slate-400 cursor-pointer hover:text-blue-500">info_outline</span>
-                                                    <span onClick={() => handleWhatsAppDeparture(o)} className="material-icons-round text-blue-500 cursor-pointer hover:scale-110">send</span>
-                                                    <span onClick={() => handleUnassignOrder(o.id)} className="material-icons-round text-red-300 cursor-pointer hover:text-red-600">close</span>
-                                                </div>
+                                    {driver.activeOrders.length > 0 ? (
+                                        <div className="flex flex-col gap-2">
+                                            <div className="flex justify-between items-center px-1">
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{driver.activeOrders.length} ORDERS ASSIGNED</span>
                                             </div>
-                                            <p className="text-[10px] font-bold text-slate-700 truncate">{o.customerName}</p>
+                                            {driver.activeOrders.map(o => (
+                                                <div key={o.id} className="p-2.5 rounded-xl bg-white/10 border border-white/5 space-y-2">
+                                                    <div className="flex justify-between items-center text-[9px]">
+                                                        <span className="font-black text-blue-300 uppercase tracking-tighter">#{o.order_number || o.id.slice(0,6)} • {o.status}</span>
+                                                        <div className="flex gap-1.5 text-[14px]">
+                                                            <span onClick={() => navigate(`/orders?search=${o.order_number || o.id}`)} className="material-icons-round text-white/40 cursor-pointer hover:text-blue-400">info_outline</span>
+                                                            <span onClick={() => handleWhatsAppDeparture(o)} className="material-icons-round text-blue-400 cursor-pointer hover:scale-110">send</span>
+                                                            <span onClick={() => handleUnassignOrder(o.id)} className="material-icons-round text-red-400 cursor-pointer hover:text-red-600">close</span>
+                                                        </div>
+                                                    </div>
+                                                    <p className="text-[10px] font-bold text-white/80 truncate leading-none">{o.customerName}</p>
+                                                </div>
+                                            ))}
                                         </div>
-                                    )) : (
+                                    ) : (
                                         <div className="py-2.5 text-center border border-dashed border-slate-200 rounded-xl text-[9px] font-black text-slate-300 uppercase">Standby Area</div>
                                     )}
                                 </div>
@@ -362,7 +369,9 @@ export const FleetCenterPage: React.FC = () => {
                                         </button>
                                     ) : (
                                         <>
-                                            <button onClick={() => setAssigningVehicleTo(driver)} className="flex-1 py-1.5 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase hover:bg-blue-600 transition-all shadow-sm">Car Inventory</button>
+                                            <button onClick={() => setAssigningVehicleTo(driver)} className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm ${
+                                                driver.activeOrders.length > 0 ? 'bg-white text-slate-900 hover:bg-blue-500 hover:text-white' : 'bg-slate-900 text-white hover:bg-blue-600'
+                                            }`}>Car Inventory</button>
                                         </>
                                     )}
                                 </div>
