@@ -135,30 +135,6 @@ export const FleetCenterPage: React.FC = () => {
         }
     };
 
-    const handleUpdateVehicle = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!editingVehicle) return;
-        setIsSubmitting(true);
-        try {
-            await VehicleService.update(editingVehicle.id, editingVehicle);
-            setEditingVehicle(null);
-            loadData();
-        } catch (e: any) {
-            alert(`更新失败: ${e.response?.data?.detail || e.message}`);
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const handleUpdateVehicleStatus = async (vehicleId: string, newStatus: Vehicle['status']) => {
-        try {
-            await VehicleService.update(vehicleId, { status: newStatus });
-            loadData();
-        } catch (e: any) {
-            alert(`更新失败: ${e.response?.data?.detail || e.message}`);
-        }
-    };
-
     const handleAssignOrder = async (driverId: string) => {
         if (!selectedOrderForAssignment) return;
         setIsAssigningOrder(true);
@@ -436,6 +412,22 @@ export const FleetCenterPage: React.FC = () => {
                     </div>
                 </div>
             )}
+
+            {editingVehicle && (
+                <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl w-full max-w-xs p-6 shadow-2xl space-y-4">
+                        <h2 className="text-lg font-black text-slate-800">Edit Vehicle</h2>
+                        <form onSubmit={(e) => { e.preventDefault(); if (editingVehicle) api.patch(`/vehicles/${editingVehicle.id}`, editingVehicle).then(() => { setEditingVehicle(null); loadData(); }); }} className="space-y-3">
+                            <input required placeholder="Plate No" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={editingVehicle.plate_no} onChange={e => setEditingVehicle({...editingVehicle, plate_no: e.target.value})} />
+                            <input placeholder="Model" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={editingVehicle.model || ''} onChange={e => setEditingVehicle({...editingVehicle, model: e.target.value})} />
+                            <button type="submit" className="w-full py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px]">Update</button>
+                            <button type="button" onClick={() => setEditingVehicle(null)} className="w-full py-2 text-slate-400 text-[10px] font-bold uppercase">Cancel</button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {error && <div className="fixed bottom-4 left-4 right-4 bg-red-500 text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase text-center">{error}</div>}
         </div>
     );
 };
