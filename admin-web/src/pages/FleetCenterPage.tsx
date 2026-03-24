@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { FleetService, VehicleService, api } from '../services/api';
 import type { User, Vehicle, DriverAssignment, Order } from '../types';
@@ -11,6 +12,7 @@ interface FleetDriver extends User {
 }
 
 export const FleetCenterPage: React.FC = () => {
+    const navigate = useNavigate();
     const [drivers, setDrivers] = useState<FleetDriver[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
@@ -190,15 +192,6 @@ export const FleetCenterPage: React.FC = () => {
         } catch (e: any) {
             alert(`退回失败: ${e.response?.data?.detail || e.message}`);
         }
-    };
-
-    const handleWhatsAppOrderDetails = (order: Order) => {
-        const cleanPhone = order.customerPhone.replace(/\D/g, '');
-        const itemsList = order.items.map(m => `- ${m.product_name || m.name} (x${m.quantity})`).join('%0A');
-        const message = `[金龙餐饮] 订单详情确认%0A----------------------%0A订单编号: ${order.order_number || order.id.slice(0, 8)}%0A客户姓名: ${order.customerName}%0A配送地址: ${order.address}%0A%0A订购项目:%0A${itemsList}%0A%0A合计金额: RM ${(order.amount || 0).toFixed(2)}%0A----------------------%0A感谢您的订购！如有疑问请联系我们。`;
-        
-        const url = `https://wa.me/60${cleanPhone.replace(/^60/, '').replace(/^0/, '')}?text=${message}`;
-        window.open(url, '_blank');
     };
 
     const handleWhatsAppDeparture = async (order: Order) => {
@@ -505,7 +498,7 @@ export const FleetCenterPage: React.FC = () => {
                                                             
                                                             <div className="grid grid-cols-3 gap-2">
                                                                 <button 
-                                                                    onClick={() => handleWhatsAppOrderDetails(o)}
+                                                                    onClick={() => navigate(`/orders?search=${encodeURIComponent(o.order_number || o.id)}`)}
                                                                     className="py-2 bg-emerald-500/10 text-emerald-500 rounded-xl text-[9px] font-black uppercase tracking-tighter hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center gap-1"
                                                                 >
                                                                     <span className="material-icons-round text-sm">info</span>

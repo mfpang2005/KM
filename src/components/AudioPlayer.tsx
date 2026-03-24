@@ -1,123 +1,131 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 interface AudioPlayerProps {
-    audioUrl: string; // Can be a URL or a base64 data URI
-    initialDuration?: number; // Duration in seconds
+    audioUrl: string;        // raw base64 or data URI or http URL
+    initialDuration?: number; // pre-filled duration in seconds (from DB)
+    autoPlay?: boolean;       // true = auto-play incoming voice messages
 }
 
 /**
- * WhatsApp-style Audio Player using HTML5 Audio API
- * Styled with Tailwind CSS
+ * WhatsApp-style audio player used in the Driver App.
+ *
+ * NOTE: Converts raw base64 to a Blob Object URL so the browser
+ * can read metadata and seek correctly.
  */
-const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration }) => {
+const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, autoPlay }) => {
     const [isPlaying, setIsPlaying] = useState(false);
-    const [duration, setDuration] = useState(initialDuration || 0);
+    const [duration, setDuration] = useState(initialDuration ?? 0);
     const [currentTime, setCurrentTime] = useState(0);
+    const [ready, setReady] = useState(false);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    const objectUrlRef = useRef<string>('');
 
     useEffect(() => {
-        let objectUrl = '';
-        const audio = new Audio();
-        audioRef.current = audio;
+        let cancelled = false;
 
-        const setAudioData = () => {
-            if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
-                setDuration(audio.duration);
+        const setup = async () => {
+            if (objectUrlRef.current) {
+                URL.revokeObjectURL(objectUrlRef.current);
+                objectUrlRef.current = '';
             }
-        };
 
-        const setAudioTime = () => setCurrentTime(audio.currentTime);
-        const handleEnded = () => setIsPlaying(false);
+            const audio = new Audio();
+            audioRef.current = audio;
+            setReady(false);
+            setIsPlaying(false);
+            setCurrentTime(0);
 
-        audio.addEventListener('loadedmetadata', setAudioData);
-        audio.addEventListener('timeupdate', setAudioTime);
-        audio.addEventListener('ended', handleEnded);
-
-        const initAudio = async () => {
-            try {
-                // Handle potentially missing data URI prefix if it's just raw base64
-                let source = audioUrl;
-                if (!audioUrl.startsWith('data:') && !audioUrl.startsWith('http')) {
-                    // It's likely raw base64. Convert to Blob for better performance/compatibility
-                    const binary = atob(audioUrl);
-                    const bytes = new Uint8Array(binary.length);
-                    for (let i = 0; i < binary.length; i++) {
-                        bytes[i] = binary.charCodeAt(i);
-                    }
-                    const blob = new Blob([bytes], { type: 'audio/webm' });
-                    objectUrl = URL.createObjectURL(blob);
-                    source = objectUrl;
-                } else if (audioUrl.startsWith('data:')) {
-                    // If it's already a data URI, also convert to blob for consistency
-                    const response = await fetch(audioUrl);
-                    const blob = await response.blob();
-                    objectUrl = URL.createObjectURL(blob);
-                    source = objectUrl;
+            const onMeta = () => {
+                if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
+                    setDuration(audio.duration);
                 }
-                
-                audio.src = source;
+                setReady(true);
+                if (autoPlay) {
+                    audio.play().catch(() => {});
+                }
+            };
+            const onTime  = () => setCurrentTime(audio.currentTime);
+            const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
+            const onPlay  = () => setIsPlaying(true);
+            const onPause = () => setIsPlaying(false);
+
+            audio.addEventListener('loadedmetadata', onMeta);
+            audio.addEventListener('timeupdate', onTime);
+            audio.addEventListener('ended', onEnded);
+            audio.addEventListener('play', onPlay);
+            audio.addEventListener('pause', onPause);
+
+            try {
+                let blobUrl: string;
+                if (audioUrl.startsWith('http')) {
+                    blobUrl = audioUrl;
+                } else {
+                    const raw = audioUrl.startsWith('data:')
+                        ? await fetch(audioUrl).then(r => r.blob())
+                        : (() => {
+                            const bin = atob(audioUrl);
+                            const bytes = new Uint8Array(bin.length);
+                            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                            return new Blob([bytes], { type: 'audio/webm' });
+                        })();
+                    if (cancelled) return;
+                    blobUrl = URL.createObjectURL(raw);
+                    objectUrlRef.current = blobUrl;
+                }
+                audio.src = blobUrl;
                 audio.load();
             } catch (err) {
-                console.error('Audio initialization failed', err);
+                console.error('[AudioPlayer] Setup error', err);
             }
         };
 
-        initAudio();
+        setup();
 
         return () => {
-            audio.removeEventListener('loadedmetadata', setAudioData);
-            audio.removeEventListener('timeupdate', setAudioTime);
-            audio.removeEventListener('ended', handleEnded);
-            audio.pause();
-            if (objectUrl) {
-                URL.revokeObjectURL(objectUrl);
-            }
+            cancelled = true;
+            const audio = audioRef.current;
+            if (audio) { audio.pause(); audio.src = ''; }
+            if (objectUrlRef.current) { URL.revokeObjectURL(objectUrlRef.current); objectUrlRef.current = ''; }
         };
-    }, [audioUrl]);
-
-    useEffect(() => {
-        if (initialDuration && (!duration || duration === Infinity)) {
-            setDuration(initialDuration);
-        }
-    }, [initialDuration, duration]);
+    }, [audioUrl, autoPlay]);
 
     const togglePlay = () => {
-        if (!audioRef.current) return;
+        const audio = audioRef.current;
+        if (!audio) return;
         if (isPlaying) {
-            audioRef.current.pause();
+            audio.pause();
         } else {
-            audioRef.current.play().catch(e => console.error('Playback failed', e));
+            audio.play().catch(e => console.error('[AudioPlayer] Play failed', e));
         }
-        setIsPlaying(!isPlaying);
     };
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (!audioRef.current) return;
-        const time = parseFloat(e.target.value);
-        audioRef.current.currentTime = time;
-        setCurrentTime(time);
+        const audio = audioRef.current;
+        if (!audio) return;
+        const t = parseFloat(e.target.value);
+        audio.currentTime = t;
+        setCurrentTime(t);
     };
 
-    const formatTime = (time: number) => {
-        if (isNaN(time) || time === Infinity) return "0:00";
-        const mins = Math.floor(time / 60);
-        const secs = Math.floor(time % 60);
-        return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+    const fmt = (t: number) => {
+        if (!t || isNaN(t) || t === Infinity) return '0:00';
+        const m = Math.floor(t / 60);
+        const s = Math.floor(t % 60);
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
     };
 
     return (
         <div className="flex items-center bg-[#202c33] text-white px-3 py-2 rounded-[18px] gap-2.5 min-w-[200px] shadow-sm">
-            {/* 播放/暂停按钮 */}
-            <button 
-                onClick={togglePlay} 
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors shrink-0"
+            <button
+                onClick={togglePlay}
+                disabled={!ready}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors shrink-0 disabled:opacity-40"
             >
                 <span className="material-icons-round text-[22px]">
                     {isPlaying ? 'pause' : 'play_arrow'}
                 </span>
             </button>
 
-            {/* 进度条逻辑 */}
             <div className="flex-1 flex flex-col gap-1.5">
                 <input
                     type="range"
@@ -126,21 +134,18 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration }) 
                     step="0.01"
                     value={currentTime}
                     onChange={handleSeek}
-                    className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-emerald-500"
-                    style={{
-                        accentColor: '#10b981' // emerald-500
-                    }}
+                    className="w-full h-1 bg-gray-600 rounded-lg appearance-none cursor-pointer"
+                    style={{ accentColor: '#10b981' }}
                 />
                 <div className="flex justify-between text-[10px] text-gray-400 font-bold uppercase tracking-tighter">
-                    <span>{formatTime(currentTime)}</span>
-                    <span>{formatTime(duration)}</span>
+                    <span>{fmt(currentTime)}</span>
+                    <span>{fmt(duration)}</span>
                 </div>
             </div>
-            
-            {/* 右侧反馈图标 */}
+
             <div className="shrink-0">
                 <div className="w-7 h-7 rounded-full bg-slate-700/50 flex items-center justify-center">
-                   <span className="material-icons-round text-emerald-500 text-[14px]">mic</span>
+                    <span className="material-icons-round text-emerald-500 text-[14px]">mic</span>
                 </div>
             </div>
         </div>

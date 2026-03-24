@@ -126,6 +126,8 @@ class OrderUpdate(BaseModel):
     billingQuantity: Optional[float] = None
     billingPricePerUnit: Optional[float] = None
     items: Optional[List[OrderItem]] = None
+    automated: Optional[bool] = False
+    start_time: Optional[datetime] = None
 
     @model_validator(mode='after')
     def validate_finance_update(self) -> 'OrderUpdate':

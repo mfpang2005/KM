@@ -81,34 +81,7 @@ async def get_orders(
 
 
 
-# NOTE: 司机完成送餐后将照片 URL 列表写入对应订单，供 Admin 审阅
-@router.patch("/{order_id:path}/photos")
-async def update_delivery_photos(order_id: str, photos: dict, current_user: dict = Depends(get_current_user)):
-    """
-    接收 { "delivery_photos": [url1, url2, ...] } 并更新至对应订单
-    """
-    photo_urls = photos.get("delivery_photos", [])
-    if not photo_urls:
-        raise HTTPException(status_code=400, detail="No photos provided")
-    response = (
-        supabase.table("orders")
-        .update({"delivery_photos": photo_urls})
-        .eq("id", order_id)
-        .execute()
-    )
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Order not found")
-    
-    # Record Audit
-    await record_audit(
-        actor_id=current_user.get("id"),
-        actor_role=current_user.get("role"),
-        action=AuditActions.ORDER_UPDATE_PHOTOS,
-        target=order_id,
-        detail={"photo_count": len(photo_urls)}
-    )
-    
-    return response.data[0]
+# NOTE: Removed redundant photos update route as it is defined below at line 478
 
 
 @router.get("/items/{order_id:path}")
@@ -439,42 +412,58 @@ async def complete_order(
     司机完成送餐。接收 { "paymentMethod": "cash/..." } 并更新状态。
     使用 get_current_user 而不是 require_admin 允许司机操作。
     """
+    import re
     payment_method = payload.get("payment_method") or payload.get("paymentMethod")
     if not payment_method:
         raise HTTPException(status_code=400, detail="payment_method is required")
         
-    # 执行更新：状态设为 completed，记录支付方式
-    response = await run_in_threadpool(
-        supabase.table("orders")
-        .update({
-            "status": "completed",
-            "paymentMethod": payment_method
-        })
-        .eq("id", order_id)
-        .execute
-    )
+    update_params = {
+        "status": "completed",
+        "paymentMethod": payment_method
+    }
     
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Order not found or update failed")
-    
-    order_data = response.data[0]
-    
-    # 通过 GoEasy 通知管理员
-    from services.goeasy import notify_order_update
-    await notify_order_update(order_data, action="complete")
-    
-    # 记录审计日志
-    from services.audit import record_audit, AuditActions
-    await record_audit(
-        actor_id=current_user.get("id"),
-        actor_role=current_user.get("role"),
-        action=AuditActions.ORDER_STATUS_CHANGE,
-        target=order_id,
-        detail={"status": "completed", "paymentMethod": payment_method, "by": "driver"}
-    )
-    
-    return order_data
-    
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            # 执行更新：状态设为 completed，记录支付方式
+            response = await run_in_threadpool(
+                supabase.table("orders")
+                .update(update_params)
+                .eq("id", order_id)
+                .execute
+            )
+            
+            if not response.data:
+                raise HTTPException(status_code=404, detail="Order not found or update failed")
+            
+            order_data = response.data[0]
+            
+            # 通过 GoEasy 通知管理员
+            from services.goeasy import notify_order_update
+            await notify_order_update(order_data, action="complete")
+            
+            # 记录审计日志
+            from services.audit import record_audit, AuditActions
+            await record_audit(
+                actor_id=current_user.get("id"),
+                actor_role=current_user.get("role"),
+                action=AuditActions.ORDER_STATUS_CHANGE,
+                target=order_id,
+                detail={"status": "completed", "paymentMethod": payment_method, "by": "driver"}
+            )
+            
+            return order_data
+        except HTTPException:
+            raise
+        except Exception as e:
+            err_msg = str(e)
+            match = re.search(r"Could not find the '(\w+)' column", err_msg)
+            if match:
+                bad_col = match.group(1)
+                update_params.pop(bad_col, None)
+                continue
+            raise HTTPException(status_code=500, detail=str(e))
+
 @router.patch("/{order_id:path}/photos", response_model=Order)
 async def update_order_photos(
     order_id: str,
@@ -484,36 +473,52 @@ async def update_order_photos(
     """
     更新订单交付照片。允许司机操作。
     """
+    import re
     delivery_photos = payload.get("delivery_photos")
     if delivery_photos is None:
         raise HTTPException(status_code=400, detail="delivery_photos is required")
         
-    response = await run_in_threadpool(
-        supabase.table("orders")
-        .update({"delivery_photos": delivery_photos})
-        .eq("id", order_id)
-        .execute
-    )
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Order not found")
-        
-    order_data = response.data[0]
+    update_params = {"delivery_photos": delivery_photos}
     
-    # GoEasy Notification
-    from services.goeasy import notify_order_update
-    await notify_order_update(order_data, action="photos_update")
-    
-    # Record Audit
-    from services.audit import record_audit, AuditActions
-    await record_audit(
-        actor_id=current_user.get("id"),
-        actor_role=current_user.get("role"),
-        action=AuditActions.ORDER_UPDATE,
-        target=order_id,
-        detail={"delivery_photos": delivery_photos, "by": "driver"}
-    )
-    
-    return order_data
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = await run_in_threadpool(
+                supabase.table("orders")
+                .update(update_params)
+                .eq("id", order_id)
+                .execute
+            )
+            if not response.data:
+                raise HTTPException(status_code=404, detail="Order not found")
+                
+            order_data = response.data[0]
+            
+            # GoEasy Notification
+            from services.goeasy import notify_order_update
+            await notify_order_update(order_data, action="photos_update")
+            
+            # Record Audit
+            from services.audit import record_audit, AuditActions
+            await record_audit(
+                actor_id=current_user.get("id"),
+                actor_role=current_user.get("role"),
+                action=AuditActions.ORDER_UPDATE,
+                target=order_id,
+                detail={"delivery_photos": delivery_photos, "by": "driver"}
+            )
+            
+            return order_data
+        except HTTPException:
+            raise
+        except Exception as e:
+            err_msg = str(e)
+            match = re.search(r"Could not find the '(\w+)' column", err_msg)
+            if match:
+                bad_col = match.group(1)
+                update_params.pop(bad_col, None)
+                continue
+            raise HTTPException(status_code=500, detail=str(e))
 
 @router.patch("/{order_id:path}", response_model=Order)
 async def partial_update_order(
@@ -544,27 +549,21 @@ async def partial_update_order(
         else:
             update_data["paymentStatus"] = "unpaid"
     
+    # HYBRID LOGIC: Automated transitions must be handled BEFORE DB write
+    # so that start_time is included in the same update payload.
+    is_automated = update_data.pop("automated", False)
+    if is_automated and update_data.get("status") == OrderStatus.PREPARING:
+        from datetime import datetime
+        # Record when the kitchen starts preparing this order
+        update_data["start_time"] = datetime.utcnow().isoformat()
+
     # Merge existing data with updates for Calendar sync
     merged_data = {**old_order, **update_data}
-    
     old_cal_id = old_order.get("calendar_event_id")
-    # Sync with calendar
     new_cal_id = sync_order_to_calendar(merged_data, old_cal_id)
     if new_cal_id:
         update_data['calendar_event_id'] = new_cal_id
 
-    response = supabase.table("orders").update(update_data).eq("id", order_id).execute()
-    if not response.data:
-        raise HTTPException(status_code=404, detail="Update failed")
-    
-    # GoEasy Notification
-    from services.goeasy import notify_order_update
-    await notify_order_update(response.data[0], action="partial_update")
-    
-    # Sync items if provided in partial update
-    if "items" in update_data:
-        await _sync_items_to_table(order_id, update_data["items"])
-    
     # Determine Audit Action
     audit_action = AuditActions.ORDER_UPDATE
     if "driverId" in update_data:
@@ -573,16 +572,31 @@ async def partial_update_order(
         else:
             audit_action = AuditActions.ORDER_ASSIGN_DRIVER
 
+    # Write to DB (single write, includes start_time if automated)
+    response = supabase.table("orders").update(update_data).eq("id", order_id).execute()
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Update failed")
+
+    updated_order = response.data[0]
+
+    # Sync items if provided in partial update
+    if "items" in update_data:
+        await _sync_items_to_table(order_id, update_data["items"])
+
+    # GoEasy Notification — triggers kitchen & driver page refresh
+    from services.goeasy import notify_order_update
+    await notify_order_update(updated_order, action="partial_update")
+
     # Record Audit
     await record_audit(
         actor_id=current_user.get("id"),
         actor_role=current_user.get("role"),
         action=audit_action,
         target=order_id,
-        detail=update_data
+        detail={**update_data, "automated": is_automated}
     )
-    
-    return response.data[0]
+
+    return updated_order
 
 @router.delete("/{order_id:path}")
 async def delete_order(

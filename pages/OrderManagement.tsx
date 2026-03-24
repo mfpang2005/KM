@@ -180,10 +180,17 @@ const OrderManagement: React.FC = () => {
         handleShareToWhatsApp(order);
     };
 
-    const handleUpdateStatus = async (id: string, newStatus: OrderStatus) => {
+    const handleUpdateStatus = async (id: string, newStatus: OrderStatus, options: { automated?: boolean } = {}) => {
+        // Confirmation for critical status change
+        if (newStatus === OrderStatus.COMPLETED) {
+            const confirmed = window.confirm(`确认将订单 ${id} 标记为已完成？这通常由司机交付后确认。`);
+            if (!confirmed) return;
+        }
+
         try {
-            await OrderService.updateStatus(id, newStatus);
+            await OrderService.updateStatus(id, newStatus, options);
             setOrders(prev => prev.map(o => o.id === id ? { ...o, status: newStatus } : o));
+            // Success notification or sound could be added here
         } catch (error) {
             console.error("Failed to update status", error);
             alert("更新状态失败");
@@ -776,6 +783,26 @@ const OrderManagement: React.FC = () => {
                                                 </button>
                                             )}
                                             
+                                            {/* Quick Actions */}
+                                            {order.status === OrderStatus.PENDING && (
+                                                <button
+                                                    onClick={() => handleUpdateStatus(order.id, OrderStatus.PREPARING, { automated: true })}
+                                                    className="w-10 h-10 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-center text-green-500 active:scale-90 transition-all shadow-sm group/btn"
+                                                    title="一键接单 (开始准备)"
+                                                >
+                                                    <span className="material-icons-round text-lg group/btn:scale-110 transition-transform">check_circle</span>
+                                                </button>
+                                            )}
+                                            {order.status === OrderStatus.PREPARING && (
+                                                <button
+                                                    onClick={() => handleUpdateStatus(order.id, OrderStatus.READY, { automated: true })}
+                                                    className="w-10 h-10 bg-orange-50 border border-orange-100 rounded-2xl flex items-center justify-center text-orange-500 active:scale-90 transition-all shadow-sm group/btn"
+                                                    title="厨房完成 (出餐就绪)"
+                                                >
+                                                    <span className="material-icons-round text-lg group/btn:scale-110 transition-transform">restaurant</span>
+                                                </button>
+                                            )}
+
                                             <button
                                                 onClick={() => handleOpenEdit(order)}
                                                 className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"

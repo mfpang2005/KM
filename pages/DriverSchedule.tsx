@@ -53,6 +53,8 @@ const DriverSchedule: React.FC = () => {
     // NOTE: 聊天消息状态
     const [driverChatMessages, setDriverChatMessages] = useState<DriverChatMsg[]>([]);
     const [driverChatInput, setDriverChatInput] = useState('');
+    // NOTE: 追踪最新收到的语音消息 ID，用于触发 AudioPlayer autoPlay
+    const [latestIncomingId, setLatestIncomingId] = useState<string | null>(null);
 
     const audioContextRef = useRef<AudioContext | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -403,8 +405,8 @@ const DriverSchedule: React.FC = () => {
                                         type: 'audio',
                                         duration: payload.duration
                                     });
-                                    // NOTE: 自动播放收到的语音消息
-                                    await playAudio(audioContent);
+                                    // NOTE: 通知最新收到的音频 ID，让 AudioPlayer 自动播放
+                                    setLatestIncomingId(msgId);
                                 }
                             } catch (err) {
                                 console.error('[GoEasy PTT] Failed to handle message', err);
@@ -900,7 +902,13 @@ const DriverSchedule: React.FC = () => {
                                     <div className={`max-w-[70%] flex flex-col gap-0.5 ${msg.isMine ? 'items-end' : 'items-start'}`}>
                                         <div className="flex items-center gap-1.5">{!msg.isMine && <span className="text-[9px] font-black text-slate-400">{msg.senderLabel}</span>}<span className="text-[9px] text-slate-600">{time}</span></div>
                                         <div className={`rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-transparent' : 'bg-transparent'}`}>
-                                            {msg.type === 'audio' ? <AudioPlayer audioUrl={msg.content} initialDuration={msg.duration} /> : (
+                                            {msg.type === 'audio'
+                                                ? <AudioPlayer
+                                                    audioUrl={msg.content}
+                                                    initialDuration={msg.duration}
+                                                    autoPlay={!msg.isMine && msg.id === latestIncomingId}
+                                                  />
+                                                : (
                                                 <div className={`px-3.5 py-2 rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-slate-700/80 text-slate-100 rounded-tl-sm'}`}>
                                                     {msg.content}
                                                 </div>

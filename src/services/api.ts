@@ -47,7 +47,12 @@ export const OrderService = {
         const response = await api.put(`/orders/${encodeURIComponent(id)}`, order);
         return response.data;
     },
-    updateStatus: async (id: string, status: OrderStatus): Promise<Order> => {
+    updateStatus: async (id: string, status: OrderStatus, options: { automated?: boolean } = {}): Promise<Order> => {
+        // If automated, use PATCH endpoint to trigger side effects
+        if (options.automated) {
+            const response = await api.patch(`/orders/${encodeURIComponent(id)}`, { status, automated: true });
+            return response.data;
+        }
         const response = await api.post(`/orders/${encodeURIComponent(id)}/status?status=${status}`);
         return response.data;
     },

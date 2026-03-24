@@ -89,9 +89,10 @@ const PhotoConfirmation: React.FC = () => {
             // 2. 调用新接口完成订单（允许司机权限）
             await OrderService.completeOrder(orderId, selectedPayment);
             navigate('/driver');
-        } catch (error) {
+        } catch (error: any) {
             console.error("Failed to complete delivery", error);
-            alert("交付确认失败，请重试");
+            const detail = error.response?.data?.detail || error.message || "Unknown error";
+            alert(`交付确认失败: ${detail}\n请确保已运行最新的数据库脚本并重启后端。`);
             setIsSubmitting(false);
         }
     };
