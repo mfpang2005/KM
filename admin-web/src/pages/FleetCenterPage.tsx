@@ -135,6 +135,18 @@ export const FleetCenterPage: React.FC = () => {
         }
     };
 
+    const handleUpdateVehicleStatus = async (vehicleId: string, newStatus: string) => {
+        setIsAssigning(true);
+        try {
+            await api.patch(`/vehicles/${vehicleId}`, { status: newStatus });
+            loadData();
+        } catch (e: any) {
+            alert(`状态更新失败: ${e.response?.data?.detail || e.message}`);
+        } finally {
+            setIsAssigning(false);
+        }
+    };
+
     const handleAssignOrder = async (driverId: string) => {
         if (!selectedOrderForAssignment) return;
         setIsAssigningOrder(true);
@@ -358,7 +370,22 @@ export const FleetCenterPage: React.FC = () => {
                     {filteredVehicles.map(v => (
                         <div key={v.id} className="bg-white border border-slate-100 p-3 rounded-xl shadow-sm hover:shadow transition-all group">
                             <div className="flex justify-between items-start mb-2">
-                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded border ${v.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 'bg-red-50 text-red-400 border-red-100'}`}>{v.status === 'available' ? 'RDY' : 'OUT'}</span>
+                                <div className={`relative px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border transition-colors shadow-sm ${
+                                    v.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                                    'bg-red-50 text-red-600 border-red-100'
+                                }`}>
+                                    {v.status === 'available' ? 'RDY' : 'OUT'}
+                                    <select 
+                                        disabled={isAssigning}
+                                        className={`opacity-0 absolute inset-0 cursor-pointer w-full h-full ${isAssigning ? 'cursor-wait' : ''}`}
+                                        value={v.status}
+                                        onChange={(e) => handleUpdateVehicleStatus(v.id, e.target.value)}
+                                    >
+                                        <option value="available">Ready (RDY)</option>
+                                        <option value="busy">Out (OUT)</option>
+                                        <option value="repair">Repair (RP)</option>
+                                    </select>
+                                </div>
                                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button onClick={() => setEditingVehicle(v)} className="material-icons-round text-sm text-slate-300 hover:text-blue-500">edit</button>
                                     <button onClick={() => handleDeleteVehicle(v.id)} className="material-icons-round text-sm text-slate-300 hover:text-red-500">delete</button>
