@@ -252,7 +252,7 @@ export const FleetCenterPage: React.FC = () => {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 px-1">
                 <div className="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
                     <button onClick={() => setViewMode('fleet')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'fleet' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'}`}>Fleet</button>
-                    <button onClick={() => setViewMode('inventory')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'inventory' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'}`}>Assets</button>
+                    <button onClick={() => setViewMode('inventory')} className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${viewMode === 'inventory' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-400'}`}>Car Inventory</button>
                 </div>
                 <div className="relative w-full sm:w-64">
                     <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-sm">search</span>
@@ -367,7 +367,7 @@ export const FleetCenterPage: React.FC = () => {
                                         </button>
                                     ) : (
                                         <>
-                                            <button onClick={() => setAssigningVehicleTo(driver)} className="flex-1 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase hover:bg-blue-50 hover:text-blue-600 transition-all">Swap Asset</button>
+                                            <button onClick={() => setAssigningVehicleTo(driver)} className="flex-1 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase hover:bg-blue-50 hover:text-blue-600 transition-all">Car Inventory</button>
                                             <button className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all"><span className="material-icons-round text-sm">settings</span></button>
                                         </>
                                     )}
@@ -401,7 +401,7 @@ export const FleetCenterPage: React.FC = () => {
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
                         <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                            <h3 className="text-sm font-black text-slate-800 uppercase italic">Swap Asset</h3>
+                            <h3 className="text-sm font-black text-slate-800 uppercase italic">Car Inventory</h3>
                             <button onClick={() => setAssigningVehicleTo(null)} className="material-icons-round text-slate-300">close</button>
                         </div>
                         <div className="p-3 max-h-[60vh] overflow-y-auto space-y-2">
