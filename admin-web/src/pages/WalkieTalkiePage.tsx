@@ -51,8 +51,8 @@ export const WalkieTalkiePage: React.FC = () => {
     const [goEasyStatus, setGoEasyStatus] = useState<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'>('DISCONNECTED');
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const [chatInput, setChatInput] = useState('');
-    // NOTE: 恢复原始逻辑，默认选中全局广播
-    const [selectedReceiver, setSelectedReceiver] = useState<string>('GLOBAL');
+    // NOTE: 私聊模式：selectedReceiver 为选中用户的 userId，null 表示未选择
+    const [selectedReceiver, setSelectedReceiver] = useState<string | null>(null);
 
     // NOTE: 使用 Ref 存储已处理的消息 ID，防止 GoEasy 和 Supabase 重复触发
     const messageIdsRef = useRef<Set<string>>(new Set());
@@ -91,7 +91,7 @@ export const WalkieTalkiePage: React.FC = () => {
         chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages]);
 
-    /** 解锁音频播放权限 */
+    /** 用户交互解锁音频权限 */
     const unlockAudio = () => {
         const SILENT_WAV = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
         const audio = new Audio(`data:audio/wav;base64,${SILENT_WAV}`);
@@ -140,13 +140,16 @@ export const WalkieTalkiePage: React.FC = () => {
                     onSuccess: () => {
                         setGoEasyStatus('CONNECTED');
                         if (!goEasy) return;
-                        // 订阅全局频道
+                        // 订阅固定频道以监听所有发给我的消息（接收端过滤）
                         goEasy.pubsub.subscribe({
                             channel: CHANNEL,
                             onMessage: async (message: { content: string }) => {
                                 try {
                                     const payload = JSON.parse(message.content);
                                     if (payload.senderId === myId) return;
+
+                                    // 只处理发给我的私聊消息
+                                    if (payload.receiverId !== myId) return;
 
                                     const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
                                     const common = {
@@ -156,7 +159,7 @@ export const WalkieTalkiePage: React.FC = () => {
                                         senderRole: payload.senderRole || 'driver',
                                         timestamp: payload.timestamp || Date.now(),
                                         isMine: false,
-                                        receiverId: payload.receiverId || 'GLOBAL',
+                                        receiverId: myId,
                                         duration: payload.duration
                                     };
 
@@ -203,6 +206,9 @@ export const WalkieTalkiePage: React.FC = () => {
                 const msg = payload.new;
                 if (!msg || msg.sender_id === user?.id) return;
 
+                // 只处理发给我的私聊消息
+                if (msg.receiver_id !== user?.id) return;
+
                 addMessage({
                     id: msg.id,
                     senderId: msg.sender_id,
@@ -212,7 +218,7 @@ export const WalkieTalkiePage: React.FC = () => {
                     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
                     isMine: false,
                     type: msg.type || 'text',
-                    receiverId: msg.receiver_id || 'GLOBAL',
+                    receiverId: user?.id || '',
                     duration: msg.duration
                 });
             }).subscribe();
@@ -222,19 +228,23 @@ export const WalkieTalkiePage: React.FC = () => {
 
     // ── Fetch Historical Messages ──────────────────────────────────
     useEffect(() => {
-        if (!user) return;
+        if (!user || !selectedReceiver) {
+            setMessages([]);
+            return;
+        }
         const fetchHistory = async () => {
             try {
-                let query = supabase.from('messages').select('*').order('created_at', { ascending: false }).limit(50);
-                if (selectedReceiver === 'GLOBAL') {
-                    query = query.eq('receiver_id', 'GLOBAL');
-                } else {
-                    // 私聊 + 对方的全局广播
-                    query = query.or(`and(sender_id.eq.${user.id},receiver_id.eq.${selectedReceiver}),and(sender_id.eq.${selectedReceiver},receiver_id.eq.${user.id}),and(sender_id.eq.${selectedReceiver},receiver_id.eq.GLOBAL)`);
-                }
-                const { data, error } = await query;
+                // 查询与选中用户的纯私聊记录
+                const { data, error } = await supabase
+                    .from('messages')
+                    .select('*')
+                    .order('created_at', { ascending: false })
+                    .limit(50)
+                    .or(`and(sender_id.eq.${user.id},receiver_id.eq.${selectedReceiver}),and(sender_id.eq.${selectedReceiver},receiver_id.eq.${user.id})`);
+
                 if (error) throw error;
                 if (data) {
+                    messageIdsRef.current = new Set();
                     const history = data
                         .filter(msg => msg && msg.content)
                         .reverse()
@@ -249,7 +259,7 @@ export const WalkieTalkiePage: React.FC = () => {
                                 timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
                                 isMine: msg.sender_id === user.id,
                                 type: (msg.type as any) || 'text',
-                                receiverId: msg.receiver_id || 'GLOBAL',
+                                receiverId: msg.receiver_id || '',
                                 duration: msg.duration
                             };
                         });
@@ -290,6 +300,7 @@ export const WalkieTalkiePage: React.FC = () => {
 
     // ── 录音 ─────────────────────────────────────────────────────────
     const startRecording = async () => {
+        if (!selectedReceiver) return;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             const mr = new MediaRecorder(stream);
@@ -309,13 +320,12 @@ export const WalkieTalkiePage: React.FC = () => {
         mr.stop();
         mr.stream.getTracks().forEach((t) => t.stop());
         mr.onstop = async () => {
-            if (!goEasyRef.current || goEasyStatus !== 'CONNECTED') return;
+            if (!goEasyRef.current || goEasyStatus !== 'CONNECTED' || !selectedReceiver) return;
             const mimeType = mr.mimeType || 'audio/webm';
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             if (blob.size < 100) return;
             try {
                 const base64Audio = await blobToBase64(blob);
-                const targetChannel = CHANNEL; // 默认发到大频道
                 const ts = Date.now();
                 const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
                 const msgId = `${user?.id || fallbackIdRef.current}-${ts}`;
@@ -346,14 +356,14 @@ export const WalkieTalkiePage: React.FC = () => {
                 });
 
                 goEasyRef.current.pubsub.publish({
-                    channel: targetChannel,
+                    channel: CHANNEL,
                     message: JSON.stringify(payload),
-                    onSuccess: () => console.log(`[GoEasy] Audio published to ${targetChannel}`),
+                    onSuccess: () => console.log(`[GoEasy] Audio sent to ${selectedReceiver}`),
                     onFailed: (err: any) => console.error('[GoEasy] Publish failed', err),
                 });
 
                 const insertAudio = async () => {
-                    const { error } = await supabase.from('messages').insert([{
+                    await supabase.from('messages').insert([{
                         id: msgId,
                         sender_id: payload.senderId,
                         sender_label: payload.senderLabel,
@@ -363,7 +373,6 @@ export const WalkieTalkiePage: React.FC = () => {
                         type: 'audio',
                         duration: dur
                     }]);
-                    if (error) console.error('[DB] Audio insert failed:', error);
                 };
                 insertAudio();
 
@@ -375,7 +384,7 @@ export const WalkieTalkiePage: React.FC = () => {
     // ── 发送文字消息 ──────────────────────────────────────────────────
     const sendTextMessage = () => {
         const text = chatInput.trim();
-        if (!text || !goEasyRef.current || goEasyStatus !== 'CONNECTED') return;
+        if (!text || !goEasyRef.current || goEasyStatus !== 'CONNECTED' || !selectedReceiver) return;
 
         const myId = user?.id ?? fallbackIdRef.current;
         const myLabel = user?.email ?? 'Super Admin';
@@ -427,6 +436,7 @@ export const WalkieTalkiePage: React.FC = () => {
 
     const myRole = user?.role ?? 'super_admin';
     const myBubble = ROLE_CONFIG[myRole]?.bubble ?? 'bg-slate-500';
+    const selectedUser = onlineUsers.find(u => u.userId === selectedReceiver);
 
     return (
         <div className="h-[calc(100vh-140px)] flex gap-6">
@@ -443,21 +453,12 @@ export const WalkieTalkiePage: React.FC = () => {
                         </span>
                     </div>
                     <div className="flex-1 overflow-y-auto divide-y divide-slate-50">
-                        {/* Global Broadcast Selector */}
-                        <div
-                            onClick={() => setSelectedReceiver('GLOBAL')}
-                            className={`flex items-center gap-2.5 px-4 py-3 cursor-pointer transition-colors ${selectedReceiver === 'GLOBAL' ? 'bg-indigo-50 border-r-4 border-indigo-500' : 'hover:bg-slate-50'}`}
-                        >
-                            <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-500 shrink-0">
-                                <span className="material-icons-round text-[18px]">public</span>
+                        {onlineUsers.length === 0 ? (
+                            <div className="flex flex-col items-center py-12 text-slate-300">
+                                <span className="material-icons-round text-4xl mb-2">person_off</span>
+                                <p className="text-xs font-bold uppercase">No one online</p>
                             </div>
-                            <div className="flex-1 min-w-0">
-                                <p className={`text-xs font-bold truncate ${selectedReceiver === 'GLOBAL' ? 'text-indigo-800' : 'text-slate-800'}`}>Global Broadcast</p>
-                                <span className="inline-block text-[9px] font-black px-2 py-0.5 rounded-full mt-0.5 bg-indigo-100 text-indigo-700">全体频道</span>
-                            </div>
-                        </div>
-
-                        {onlineUsers.map((u) => {
+                        ) : onlineUsers.map((u) => {
                             if (!u) return null;
                             const cfg = ROLE_CONFIG[u.role] || ROLE_CONFIG.guest;
                             const isSelected = selectedReceiver === u.userId;
@@ -493,7 +494,7 @@ export const WalkieTalkiePage: React.FC = () => {
                         点击解锁语音播放
                     </button>
                 )}
-                
+
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 px-4 py-3 flex items-center gap-2.5">
                     <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${goEasyStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}></span>
                     <div>
@@ -503,44 +504,54 @@ export const WalkieTalkiePage: React.FC = () => {
                 </div>
             </aside>
 
-            {/* ── 右侧：PTT + 聊天 ── */}
+            {/* ── 右侧：聊天区域 ── */}
             <div className="flex-1 bg-white rounded-[24px] shadow-sm border border-slate-100 flex flex-col overflow-hidden">
-                {/* 顶部 PTT 区域 */}
-                <div className="py-6 border-b border-slate-100 flex flex-col items-center justify-center gap-4 bg-slate-50/30">
-                    <div className="flex items-center gap-8">
-                        <div className="text-center md:text-left">
-                            <h2 className="text-xl font-black text-slate-800 flex items-center gap-2 justify-center md:justify-start">
-                                {selectedReceiver === 'GLOBAL' ? 'Global Broadcast' : 'Private Channel'}
-                                <span className={`text-[10px] px-2 py-0.5 rounded-md ${selectedReceiver === 'GLOBAL' ? 'bg-indigo-100 text-indigo-600' : 'bg-teal-100 text-teal-600'}`}>
-                                    {selectedReceiver === 'GLOBAL' ? '全体' : '私聊'}
-                                </span>
-                            </h2>
-                            <p className="text-xs text-slate-400 font-bold mt-1 uppercase tracking-wider">
-                                {isRecording ? 'Recording your voice...' : 'Hold the button to talk'}
-                            </p>
+                {/* 顶部标题栏 */}
+                <div className="px-6 py-4 border-b border-slate-100 flex items-center gap-3 bg-slate-50/20">
+                    {selectedUser ? (
+                        <>
+                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-sm ${ROLE_CONFIG[selectedUser.role]?.bubble ?? 'bg-slate-400'}`}>
+                                <span className="material-icons-round text-[20px]">{ROLE_CONFIG[selectedUser.role]?.icon ?? 'person'}</span>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <h2 className="text-sm font-black text-slate-800 truncate">{selectedUser.email}</h2>
+                                <p className="text-[10px] text-emerald-500 font-black flex items-center gap-1">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                                    ONLINE · {ROLE_CONFIG[selectedUser.role]?.label || 'Driver'}
+                                </p>
+                            </div>
+                            <button
+                                onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
+                                onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
+                                onMouseLeave={stopRecording}
+                                onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                                onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+                                disabled={goEasyStatus !== 'CONNECTED'}
+                                className={`w-14 h-14 rounded-full flex flex-col items-center justify-center text-white font-black text-[9px] transition-all duration-200 select-none cursor-pointer outline-none gap-0.5 shadow-lg active:scale-95 ${goEasyStatus !== 'CONNECTED' ? 'bg-slate-300 cursor-not-allowed' : isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'}`}
+                            >
+                                <span className="material-icons-round text-2xl">{isRecording ? 'mic' : 'mic_none'}</span>
+                                {isRecording ? 'PTT' : 'HOLD'}
+                            </button>
+                        </>
+                    ) : (
+                        <div className="flex items-center gap-2 py-2 text-slate-400 font-bold">
+                            <span className="material-icons-round">touch_app</span>
+                            <p className="text-sm">Please select a member to start private chat</p>
                         </div>
-
-                        <button
-                            onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
-                            onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
-                            onMouseLeave={stopRecording}
-                            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-                            disabled={goEasyStatus !== 'CONNECTED'}
-                            className={`w-24 h-24 rounded-full flex flex-col items-center justify-center text-white font-black text-[9px] transition-all duration-200 select-none cursor-pointer outline-none gap-1 shadow-xl active:scale-95 ${goEasyStatus !== 'CONNECTED' ? 'bg-slate-300 cursor-not-allowed' : isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'}`}
-                        >
-                            <span className="material-icons-round text-3xl">{isRecording ? 'mic' : 'mic_none'}</span>
-                            {isRecording ? 'TALKING' : 'PTT'}
-                        </button>
-                    </div>
+                    )}
                 </div>
 
                 {/* 聊天消息区 */}
                 <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                    {messages.length === 0 ? (
+                    {!selectedReceiver ? (
+                        <div className="h-full flex flex-col items-center justify-center text-slate-200 gap-4">
+                            <span className="material-icons-round text-7xl">chat_bubble</span>
+                            <p className="text-sm font-black uppercase tracking-widest">Select someone to talk</p>
+                        </div>
+                    ) : messages.length === 0 ? (
                         <div className="h-full flex flex-col items-center justify-center text-slate-300 gap-3">
                             <span className="material-icons-round text-5xl">chat_bubble_outline</span>
-                            <p className="text-xs font-bold uppercase tracking-widest">No Messages Yet</p>
+                            <p className="text-xs font-bold uppercase tracking-widest">No private messages</p>
                         </div>
                     ) : messages.map((msg) => {
                         if (!msg) return null;
@@ -551,7 +562,7 @@ export const WalkieTalkiePage: React.FC = () => {
                                 <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm ${cfg.bubble}`}>
                                     <span className="material-icons-round text-white text-[16px]">{cfg.icon}</span>
                                 </div>
-                                <div className={`max-w-[70%] ${msg.isMine ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                                <div className={`max-w-[75%] ${msg.isMine ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
                                     <div className="flex items-center gap-2">
                                         {!msg.isMine && <span className="text-[11px] font-black text-slate-600">{msg.senderLabel}</span>}
                                         <span className="text-[9px] text-slate-300 font-bold">{time}</span>
@@ -576,27 +587,43 @@ export const WalkieTalkiePage: React.FC = () => {
                     <div ref={chatBottomRef} />
                 </div>
 
-                {/* 文字输入区域 */}
-                <div className="px-5 py-4 border-t border-slate-100 bg-white flex items-center gap-3">
-                    <div className="flex-1 bg-slate-50 rounded-2xl border border-slate-200 px-4 py-2.5 flex items-center focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:border-indigo-500 transition-all">
-                        <input
-                            type="text"
-                            value={chatInput}
-                            onChange={(e) => setChatInput(e.target.value)}
-                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }}
-                            placeholder={goEasyStatus === 'CONNECTED' ? 'Type a message...' : 'Connecting...'}
+                {/* 底部输入框区域 */}
+                {selectedReceiver && (
+                    <div className="px-5 py-4 border-t border-slate-100 bg-white flex items-center gap-3">
+                        {/* 录音 PTT 按钮 (左侧) */}
+                        <button
+                            onMouseDown={startRecording}
+                            onMouseUp={stopRecording}
+                            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
                             disabled={goEasyStatus !== 'CONNECTED'}
-                            className="flex-1 bg-transparent text-sm font-bold text-slate-700 outline-none placeholder:text-slate-300 px-1"
-                        />
+                            className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all shadow-md active:scale-90 shrink-0 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'}`}
+                            title="Hold to Record"
+                        >
+                            <span className="material-icons-round">{isRecording ? 'mic' : 'mic_none'}</span>
+                        </button>
+                        
+                        <div className={`flex-1 flex items-center rounded-2xl px-4 py-2.5 border transition-all duration-300 gap-2 ${isRecording ? 'bg-red-50 border-red-200' : 'bg-slate-50 border-slate-200'}`}>
+                            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRecording ? 'bg-red-500 animate-ping' : myBubble}`}></span>
+                            <input
+                                type="text"
+                                value={chatInput}
+                                onChange={(e) => setChatInput(e.target.value)}
+                                onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendTextMessage(); } }}
+                                placeholder={isRecording ? 'Recording...' : 'Type a message...'}
+                                disabled={goEasyStatus !== 'CONNECTED' || isRecording}
+                                className={`flex-1 bg-transparent text-sm font-bold outline-none ${isRecording ? 'text-red-500 placeholder:text-red-300' : 'text-slate-700 placeholder:text-slate-300'}`}
+                            />
+                        </div>
+                        <button
+                            onClick={sendTextMessage}
+                            disabled={goEasyStatus !== 'CONNECTED' || !chatInput.trim()}
+                            className="w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white flex items-center justify-center transition-all shadow-md hover:shadow-lg active:scale-95 shrink-0"
+                        >
+                            <span className="material-icons-round">send</span>
+                        </button>
                     </div>
-                    <button
-                        onClick={sendTextMessage}
-                        disabled={goEasyStatus !== 'CONNECTED' || !chatInput.trim()}
-                        className="w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white flex items-center justify-center transition-all shadow-md hover:shadow-lg active:scale-95 shrink-0"
-                    >
-                        <span className="material-icons-round">send</span>
-                    </button>
-                </div>
+                )}
             </div>
         </div>
     );

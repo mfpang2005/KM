@@ -8,9 +8,7 @@ interface AudioPlayerProps {
 
 /**
  * WhatsApp-style audio player.
- *
- * NOTE: Uses a Blob Object URL internally so the browser can read metadata
- * and seek correctly — raw base64 strings don't support seeking in Chrome.
+ * Optimized: click anywhere on the bubble to play/pause.
  */
 const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, autoPlay }) => {
     const [isPlaying, setIsPlaying] = useState(false);
@@ -38,7 +36,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
 
             const audio = new Audio();
             audioRef.current = audio;
-            // NOTE: 确保音量正确，防止因外部因素导致静音
             audio.volume = 1.0;
             audio.muted = false;
             setReady(false);
@@ -50,13 +47,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
                     setDuration(audio.duration);
                 }
                 setReady(true);
-                console.log('[AudioPlayer] Metadata loaded, duration:', audio.duration, 'autoPlay:', autoPlay);
                 // Auto-play incoming messages right after metadata is ready
                 if (autoPlay) {
                     audio.play()
                         .then(() => console.log('[AudioPlayer] Auto-play started'))
                         .catch((e) => {
-                            // Browser blocked auto-play — user must click manually
                             console.warn('[AudioPlayer] Auto-play blocked by browser:', e.message);
                         });
                 }
@@ -79,12 +74,9 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
 
             try {
                 let blobUrl: string;
-
                 if (audioUrl.startsWith('http')) {
-                    // Plain HTTP URL — use directly
                     blobUrl = audioUrl;
                 } else {
-                    // Convert base64 (with or without data-URI prefix) to Blob URL
                     const raw = audioUrl.startsWith('data:')
                         ? await fetch(audioUrl).then(r => r.blob())
                         : (() => {
@@ -97,7 +89,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
                     blobUrl = URL.createObjectURL(raw);
                     objectUrlRef.current = blobUrl;
                 }
-
                 audio.src = blobUrl;
                 audio.load();
             } catch (err) {
@@ -121,9 +112,12 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
         };
     }, [audioUrl, autoPlay]);
 
-    const togglePlay = () => {
+    const togglePlay = (e?: React.MouseEvent) => {
+        // Prevent toggling if user is actually dragging the seeker
+        if (e && (e.target as HTMLElement).tagName === 'INPUT') return;
+        
         const audio = audioRef.current;
-        if (!audio) return;
+        if (!audio || !ready) return;
         if (isPlaying) {
             audio.pause();
         } else {
@@ -147,20 +141,19 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
     };
 
     return (
-        <div className="flex items-center bg-[#202c33] text-white px-3 py-2 rounded-[18px] gap-2.5 min-w-[200px] shadow-sm">
-            {/* Play / Pause */}
-            <button
-                onClick={togglePlay}
-                disabled={!ready}
-                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors shrink-0 disabled:opacity-40"
-            >
+        <div 
+            onClick={togglePlay}
+            className="flex items-center bg-[#202c33] text-white px-3 py-2 rounded-[18px] gap-2.5 min-w-[200px] shadow-sm cursor-pointer hover:bg-[#2a3942] transition-colors select-none group"
+        >
+            {/* Play / Pause Icon (Decorative) */}
+            <div className={`w-8 h-8 flex items-center justify-center rounded-full shrink-0 transition-opacity ${!ready ? 'opacity-40' : 'opacity-100'}`}>
                 <span className="material-icons-round text-[22px]">
                     {isPlaying ? 'pause' : 'play_arrow'}
                 </span>
-            </button>
+            </div>
 
             {/* Progress */}
-            <div className="flex-1 flex flex-col gap-1.5">
+            <div className="flex-1 flex flex-col gap-1.5" onClick={(e) => e.stopPropagation()}>
                 <input
                     type="range"
                     min="0"
@@ -178,7 +171,7 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
             </div>
 
             {/* Mic icon */}
-            <div className="shrink-0">
+            <div className="shrink-0 group-hover:scale-110 transition-transform">
                 <div className="w-7 h-7 rounded-full bg-slate-700/50 flex items-center justify-center">
                     <span className="material-icons-round text-emerald-500 text-[14px]">mic</span>
                 </div>
