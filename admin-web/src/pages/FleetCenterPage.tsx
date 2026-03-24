@@ -306,7 +306,14 @@ export const FleetCenterPage: React.FC = () => {
                     {/* Fleet List - Multi-column density */}
                     <div id="fleet-list" className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 pb-8">
                         {filteredDrivers.map(driver => (
-                            <div key={driver.id} className={`p-4 bg-white border rounded-2xl shadow-sm flex flex-col gap-4 group transition-all ${selectedOrderForAssignment ? 'border-blue-300 ring-2 ring-blue-50' : 'border-slate-100'}`}>
+                            <div 
+                                key={driver.id} 
+                                className={`p-4 border rounded-2xl shadow-sm flex flex-col gap-4 group transition-all ${
+                                    driver.activeOrders.length > 0 
+                                        ? 'bg-blue-50/70 border-blue-200' 
+                                        : 'bg-slate-50 border-slate-100'
+                                } ${selectedOrderForAssignment ? 'ring-2 ring-blue-300' : ''}`}
+                            >
                                 <div className="flex items-center gap-3">
                                     <div className="relative">
                                         <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-300 overflow-hidden font-black">
@@ -355,8 +362,7 @@ export const FleetCenterPage: React.FC = () => {
                                         </button>
                                     ) : (
                                         <>
-                                            <button onClick={() => setAssigningVehicleTo(driver)} className="flex-1 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[9px] font-black uppercase hover:bg-blue-50 hover:text-blue-600 transition-all">Car Inventory</button>
-                                            <button className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 hover:text-slate-600 transition-all"><span className="material-icons-round text-sm">settings</span></button>
+                                            <button onClick={() => setAssigningVehicleTo(driver)} className="flex-1 py-1.5 bg-slate-900 text-white rounded-lg text-[9px] font-black uppercase hover:bg-blue-600 transition-all shadow-sm">Car Inventory</button>
                                         </>
                                     )}
                                 </div>
