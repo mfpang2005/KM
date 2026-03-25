@@ -75,7 +75,7 @@ export const SuperAdminService = {
     },
 
     /** 获取财务汇总（今日/本月已完成订单总额），range 传 today/month/all */
-    getFinanceSummary: async (range: 'today' | 'month' | 'all' = 'month'): Promise<{
+    getFinanceSummary: async (range: 'today' | 'month' | 'all' = 'month', eventDate?: string): Promise<{
         periodRevenue: number;
         periodOrders: number;
         todayRevenue: number;
@@ -83,7 +83,12 @@ export const SuperAdminService = {
         totalUnpaidBalance: number;
         collections: Array<{ method: string; amount: number; count: number }>;
     }> => {
-        const response = await api.get(`/super-admin/financials?range=${range}`);
+        const response = await api.get('/super-admin/financials', {
+            params: {
+                range,
+                event_date: eventDate || undefined
+            }
+        });
         return response.data;
     },
 
@@ -119,7 +124,7 @@ export const SuperAdminService = {
 
 // 后续扩展 Order 接口
 export const AdminOrderService = {
-    getAll: async (params?: { status?: string; sort_by?: string; order?: string }): Promise<Order[]> => {
+    getAll: async (params?: { status?: string; sort_by?: string; order?: string; event_date?: string }): Promise<Order[]> => {
         const response = await api.get('/orders', { params });
         return response.data;
     },
@@ -162,8 +167,14 @@ export const AdminOrderService = {
     /**
      * 厨房完成整张订单 — 将 orders.status 更新为 ready 并触发 GoEasy 通知
      */
-    kitchenComplete: async (orderId: string): Promise<void> => {
-        await api.post(`/orders/${orderId}/kitchen-complete`);
+    kitchenComplete: async (order_id: string): Promise<void> => {
+        await api.post(`/orders/${order_id}/kitchen-complete`);
+    },
+    /**
+     * 将订单从已准备/已完成状态撤回至生产中
+     */
+    revertOrder: async (order_id: string): Promise<void> => {
+        await api.post(`/orders/${order_id}/revert`);
     },
     /**
      * 注意：Admin 首页已统一使用 SuperAdminService.getFinanceSummary 以获取更详尽的数据。

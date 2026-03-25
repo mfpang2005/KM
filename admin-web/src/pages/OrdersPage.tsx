@@ -1,25 +1,29 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { api, SuperAdminService, ProductService } from '../services/api';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import { api } from '../services/api';
 import { supabase } from '../lib/supabase';
-import type { Order, Product } from '../types';
+import type { Order } from '../types';
 import { OrderStatus } from '../types';
 import { PageHeader } from '../components/PageHeader';
 import { NotificationBell } from '../components/NotificationBell';
 
 export const OrdersPage: React.FC = () => {
     const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
     const [orders, setOrders] = useState<Order[]>([]);
     const [loading, setLoading] = useState(true);
     const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all');
     const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
     const [dateFilter, setDateFilter] = useState<string>(searchParams.get('date') || 'all');
+    const [eventDate, setEventDate] = useState<string>(searchParams.get('eventDate') || '');
+    const [isHeaderCompact, setIsHeaderCompact] = useState(false);
 
     // Sync state with URL parameters when they change
     useEffect(() => {
         const status = searchParams.get('status');
         const search = searchParams.get('search');
         const date = searchParams.get('date');
+        const eDate = searchParams.get('eventDate');
         const isReset = searchParams.get('reset') === 'true';
         const isCreate = searchParams.get('create') === 'true';
 
@@ -27,18 +31,20 @@ export const OrdersPage: React.FC = () => {
             setStatusFilter('all');
             setSearchQuery('');
             setDateFilter('all');
+            setEventDate('');
         } else if (isCreate) {
-            setShowCreateModal(true);
+            navigate('/create-order');
         } else {
             if (status) setStatusFilter(status);
             if (search !== null) setSearchQuery(search);
             if (date) setDateFilter(date);
+            if (eDate !== null) setEventDate(eDate || '');
         }
     }, [searchParams]);
 
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
+    const [flashOrderId, setFlashOrderId] = useState<string | null>(null);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
-    const [editingOrder, setEditingOrder] = useState<Order | null>(null);
     const [selectedPrintOrder, setSelectedPrintOrder] = useState<Order | null>(null);
 
     // Pagination State
@@ -51,64 +57,41 @@ export const OrdersPage: React.FC = () => {
     const [deleteStep, setDeleteStep] = useState<1 | 2>(1);
     const [isDeleting, setIsDeleting] = useState(false);
 
-    // Create Order Modal state
-    const [showCreateModal, setShowCreateModal] = useState(false);
-    const [products, setProducts] = useState<Product[]>([]);
-    const [productSearchQuery, setProductSearchQuery] = useState('');
-    const [newOrder, setNewOrder] = useState({
-        id: '',
-        customerName: '',
-        customerPhone: '',
-        address: '',
-        type: 'delivery' as 'dine-in' | 'takeaway' | 'delivery',
-        remark: '',
-        payment_received: 0,
-        eventDate: '',
-        eventTime: '',
-        billingUnit: 'PAX' as 'PAX' | 'SET' | 'PACKET',
-        billingQuantity: 0,
-        billingPricePerUnit: 0,
-        items: [] as { product: Product, quantity: number, priceOverride?: number }[],
-        equipments: {} as Record<string, number>
-    });
-    const [customPrices, setCustomPrices] = useState<Record<string, number>>({});
-    const EQUIPMENTS_LIST = ['汤匙', '叉子', '盘子', '杯子', '垃圾袋', '烤鸡网', 'Food Tong', '红烧桶', '高盖', '篮子', '铁脚架', '装酱碗'];
-    const [customEquipments, setCustomEquipments] = useState<string[]>([]);
-    const [isAddingCustom, setIsAddingCustom] = useState(false);
-    const [newCustomName, setNewCustomName] = useState('');
-    const [isSubmitting, setIsSubmitting] = useState(false);
-
     const loadOrders = useCallback(async () => {
         try {
-            const response = await api.get(`/orders${statusFilter !== 'all' ? `?status=${statusFilter}` : ''}`);
+            const params: any = {};
+            if (statusFilter !== 'all') params.status = statusFilter;
+            if (eventDate) params.event_date = eventDate;
+            
+            const response = await api.get('/orders', { params });
             setOrders(Array.isArray(response.data) ? response.data : []);
         } catch (error) {
             console.error('Failed to load orders', error);
         } finally {
             setLoading(false);
         }
-    }, [statusFilter]);
+    }, [statusFilter, eventDate]);
 
-    const fetchProducts = useCallback(async () => {
-        try {
-            const data = await ProductService.getAll();
-            const productsData = Array.isArray(data) ? data : [];
-            setProducts(productsData);
+    useEffect(() => {
+        const findScrollContainer = () => {
+            let el = document.querySelector('main .overflow-y-auto');
+            if (!el) el = document.querySelector('.overflow-y-auto');
+            return el;
+        };
 
-            const prices: Record<string, number> = {};
-            productsData.forEach(p => {
-                prices[p.id] = p.price || 0;
-            });
-            setCustomPrices(prices);
-        } catch (error) {
-            console.error('Failed to load products', error);
-        }
+        const scrollContainer = findScrollContainer();
+        if (!scrollContainer) return;
+
+        const handleScroll = () => {
+            setIsHeaderCompact(scrollContainer.scrollTop > 80);
+        };
+
+        scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+        return () => scrollContainer.removeEventListener('scroll', handleScroll);
     }, []);
-
 
     useEffect(() => {
         loadOrders();
-        fetchProducts();
 
         let timeoutId: ReturnType<typeof setTimeout>;
 
@@ -132,191 +115,75 @@ export const OrdersPage: React.FC = () => {
             clearTimeout(timeoutId);
             supabase.removeChannel(channel);
         };
-    }, [loadOrders, fetchProducts]);
+    }, [loadOrders]);
+
+    const filteredOrders = orders.filter(o => {
+        const id = String(o.id || '');
+        const name = String(o.customerName || '');
+        const phone = String(o.customerPhone || '');
+        const search = String(searchQuery || '').toLowerCase();
+
+        const matchesSearch =
+            id.toLowerCase().includes(search) ||
+            name.toLowerCase().includes(search) ||
+            phone.includes(searchQuery);
+
+        const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
+
+        let matchesDate = true;
+        if (dateFilter === 'today') {
+            const today = new Date().toDateString();
+            const orderDateValue = o.dueTime || o.created_at;
+            if (orderDateValue) {
+                const orderDate = new Date(orderDateValue).toDateString();
+                matchesDate = today === orderDate;
+            } else {
+                matchesDate = false;
+            }
+        }
+
+        return matchesSearch && matchesStatus && matchesDate;
+    });
+
+    // Handle Drill-down Highlighting and Auto-scroll
+    useEffect(() => {
+        const highlightId = searchParams.get('highlightOrder');
+        if (!highlightId || loading || orders.length === 0) return;
+
+        const orderIndex = filteredOrders.findIndex(o => (o.id === highlightId) || (o.order_number === highlightId));
+        if (orderIndex === -1) return;
+
+        const targetPage = Math.ceil((orderIndex + 1) / pageSize);
+        if (currentPage !== targetPage) {
+            setCurrentPage(targetPage);
+            return;
+        }
+
+        setFlashOrderId(highlightId);
+        
+        const scrollTimer = setTimeout(() => {
+            const element = document.getElementById(`order-row-${highlightId}`);
+            if (element) {
+                element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 600);
+
+        const timer = setTimeout(() => {
+            setFlashOrderId(null);
+            const newParams = new URLSearchParams(searchParams);
+            newParams.delete('highlightOrder');
+            const searchStr = newParams.toString();
+            navigate(`/orders${searchStr ? `?${searchStr}` : ''}`, { replace: true });
+        }, 5000);
+
+        return () => {
+            clearTimeout(scrollTimer);
+            clearTimeout(timer);
+        };
+    }, [searchParams, loading, orders.length, currentPage, filteredOrders.length]);
 
     const handleEditClick = (order: Order) => {
-        const prices: Record<string, number> = { ...customPrices };
-
-        const preparedItems = (order.items || []).map((i: any) => {
-            const product = products.find(p => p.id === i.id) || { id: i.id, name: i.name, price: i.price, code: '' } as Product;
-            if (i.price !== undefined) {
-                prices[i.id] = Number(i.price);
-            }
-            return {
-                product,
-                quantity: i.quantity,
-                priceOverride: i.price !== undefined ? Number(i.price) : undefined
-            };
-        });
-
-        setCustomPrices(prices);
-
-        const dueDate = order.dueTime ? new Date(order.dueTime) : new Date();
-        const eventDate = order.dueTime ? `${dueDate.getFullYear()}-${String(dueDate.getMonth() + 1).padStart(2, '0')}-${String(dueDate.getDate()).padStart(2, '0')}` : '';
-        const eventTime = order.dueTime ? `${String(dueDate.getHours()).padStart(2, '0')}:${String(dueDate.getMinutes()).padStart(2, '0')}` : '';
-
-        setNewOrder({
-            id: order.id,
-            customerName: order.customerName || '',
-            customerPhone: order.customerPhone || '',
-            address: order.address || '',
-            type: order.type as any,
-            remark: order.remark || '',
-            payment_received: order.payment_received || 0,
-            billingUnit: order.billingUnit || 'PAX',
-            billingQuantity: order.billingQuantity || 0,
-            billingPricePerUnit: order.billingPricePerUnit || 0,
-            items: preparedItems,
-            equipments: order.equipments || {},
-            eventDate,
-            eventTime
-        });
-        setEditingOrder(order);
-        setShowCreateModal(true);
-    };
-
-    const handleCreateOrder = async (e: React.FormEvent) => {
-        e.preventDefault();
-
-        if (!newOrder.customerName.trim() || !newOrder.customerPhone.trim() || !newOrder.address.trim() || !newOrder.eventDate.trim() || !newOrder.eventTime.trim()) {
-            alert('请填写完整客户姓名、电话、地址、活动日期和时间');
-            return;
-        }
-
-        if (newOrder.items.length === 0) {
-            alert("Please add at least one item to the order.");
-            return;
-        }
-
-        try {
-            setIsSubmitting(true);
-            const amount = newOrder.billingQuantity * newOrder.billingPricePerUnit;
-
-            const itemsPayload = newOrder.items.map(i => ({
-                id: i.product.id,
-                name: i.product.name,
-                price: i.priceOverride ?? i.product.price,
-                original_price: i.product.price,
-                quantity: i.quantity,
-                note: (i as any).note
-            }));
-
-            let dueTime = editingOrder ? editingOrder.dueTime : new Date(Date.now() + 30 * 60000).toISOString();
-            if (newOrder.eventDate && newOrder.eventTime) {
-                try {
-                    dueTime = new Date(`${newOrder.eventDate}T${newOrder.eventTime}:00`).toISOString();
-                } catch (e) {
-                    console.warn('Invalid custom date/time provided, falling back');
-                }
-            }
-
-            const payload = {
-                id: editingOrder ? editingOrder.id : undefined,
-                items: itemsPayload,
-                amount,
-                customerName: newOrder.customerName,
-                customerPhone: newOrder.customerPhone,
-                address: newOrder.address,
-                type: newOrder.type,
-                remark: newOrder.remark,
-                payment_received: newOrder.payment_received,
-                billingUnit: newOrder.billingUnit,
-                billingQuantity: newOrder.billingQuantity,
-                billingPricePerUnit: newOrder.billingPricePerUnit,
-                dueTime,
-                status: editingOrder ? editingOrder.status : OrderStatus.PENDING,
-                equipments: newOrder.equipments
-            };
-
-            if (editingOrder) {
-                await api.put(`/orders/${editingOrder.id}`, payload);
-            } else {
-                await SuperAdminService.create(payload as any);
-            }
-
-            await loadOrders();
-            setShowCreateModal(false);
-            setEditingOrder(null);
-            setProductSearchQuery('');
-            setNewOrder({
-                id: '',
-                customerName: '',
-                customerPhone: '',
-                address: '',
-                type: 'delivery',
-                remark: '',
-                payment_received: 0,
-                billingUnit: 'PAX',
-                billingQuantity: 0,
-                billingPricePerUnit: 0,
-                eventDate: '',
-                eventTime: '',
-                items: [],
-                equipments: {}
-            });
-        } catch (error) {
-            console.error('Failed to save order', error);
-            alert('Failed to save order.');
-        } finally {
-            setIsSubmitting(false);
-        }
-    };
-
-    const toggleOrderItem = (productId: string) => {
-        const exists = newOrder.items.find(i => i.product.id === productId);
-        if (exists) {
-            setNewOrder({ ...newOrder, items: newOrder.items.filter(i => i.product.id !== productId) });
-        } else {
-            const product = products.find(p => p.id === productId);
-            if (product) {
-                const price = customPrices[productId] ?? product.price;
-                setNewOrder({ ...newOrder, items: [...newOrder.items, { product, quantity: 1, priceOverride: price }] });
-            }
-        }
-    };
-
-    const handlePriceChange = (productId: string, price: string) => {
-        const num = parseFloat(price) || 0;
-        setCustomPrices(prev => ({ ...prev, [productId]: num }));
-        setNewOrder(prev => ({
-            ...prev,
-            items: prev.items.map(item =>
-                item.product.id === productId ? { ...item, priceOverride: num } : item
-            )
-        }));
-    };
-
-    const updateItemQuantity = (productId: string, delta: number) => {
-        setNewOrder({
-            ...newOrder,
-            items: newOrder.items.map(item => {
-                if (item.product.id === productId) {
-                    return { ...item, quantity: Math.max(1, item.quantity + delta) };
-                }
-                return item;
-            })
-        });
-    };
-
-    const setItemQuantity = (productId: string, value: string) => {
-        const val = parseInt(value) || 0;
-        setNewOrder({
-            ...newOrder,
-            items: newOrder.items.map(item => {
-                if (item.product.id === productId) {
-                    return { ...item, quantity: val };
-                }
-                return item;
-            })
-        });
-    };
-
-    const handleEquipQuantityChange = (name: string, val: string) => {
-        const num = parseInt(val) || 0;
-        setNewOrder(prev => ({
-            ...prev,
-            equipments: { ...prev.equipments, [name]: num }
-        }));
+        navigate(`/create-order?id=${order.id}`);
     };
 
     const handleApprove = async (orderId: string) => {
@@ -358,8 +225,6 @@ export const OrdersPage: React.FC = () => {
         }
     };
 
-
-
     const handleInlineStatusChange = async (orderId: string, newStatus: string) => {
         try {
             await api.post(`/orders/${orderId}/status?status=${newStatus}`);
@@ -380,41 +245,12 @@ export const OrdersPage: React.FC = () => {
         delayed: 'bg-red-50 text-red-600 border border-red-200',
     };
 
-    const filteredOrders = orders.filter(o => {
-        const id = String(o.id || '');
-        const name = String(o.customerName || '');
-        const phone = String(o.customerPhone || '');
-        const search = String(searchQuery || '').toLowerCase();
-
-        const matchesSearch =
-            id.toLowerCase().includes(search) ||
-            name.toLowerCase().includes(search) ||
-            phone.includes(searchQuery);
-
-        const matchesStatus = statusFilter === 'all' || o.status === statusFilter;
-
-        let matchesDate = true;
-        if (dateFilter === 'today') {
-            const today = new Date().toDateString();
-            const orderDateValue = o.dueTime || o.created_at;
-            if (orderDateValue) {
-                const orderDate = new Date(orderDateValue).toDateString();
-                matchesDate = today === orderDate;
-            } else {
-                matchesDate = false;
-            }
-        }
-
-        return matchesSearch && matchesStatus && matchesDate;
-    });
-
     const totalPages = Math.ceil(filteredOrders.length / pageSize);
     const paginatedOrders = filteredOrders.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-    // Reset pagination when search or filter changes
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, statusFilter, dateFilter]);
+    }, [searchQuery, statusFilter, dateFilter, eventDate]);
 
     return (
         <div className="pb-20">
@@ -426,7 +262,7 @@ export const OrdersPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                         <div className="flex items-center gap-2">
                             <button
-                                onClick={() => setShowCreateModal(true)}
+                                onClick={() => navigate('/create-order')}
                                 className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold text-sm hover:shadow-lg transition-all flex items-center gap-2"
                             >
                                 <span className="material-icons-round text-[18px]">add</span>
@@ -448,17 +284,38 @@ export const OrdersPage: React.FC = () => {
                                 <option value={OrderStatus.COMPLETED}>Completed</option>
                             </select>
 
-                            <div className="relative w-48 lg:w-64">
-                                <span className="material-icons-round absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
-                                <input
-                                    id="order-search"
-                                    name="order-search"
-                                    type="text"
-                                    placeholder="Search orders..."
-                                    value={searchQuery}
-                                    onChange={e => setSearchQuery(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white/50 backdrop-blur text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                                />
+                            <div className="relative w-48 lg:w-64 flex items-center gap-2">
+                                <div className="relative flex-1">
+                                    <span className="material-icons-round absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
+                                    <input
+                                        id="order-search"
+                                        name="order-search"
+                                        type="text"
+                                        placeholder="Search name/ID..."
+                                        value={searchQuery}
+                                        onChange={e => setSearchQuery(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white/50 backdrop-blur text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-bold"
+                                    />
+                                </div>
+                                
+                                <div className="relative flex items-center bg-white/50 backdrop-blur border border-slate-200 rounded-xl px-3 py-2 group focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
+                                    <span className="material-icons-round text-slate-400 text-[16px] mr-2">event</span>
+                                    <input
+                                        type="date"
+                                        value={eventDate}
+                                        onChange={(e) => setEventDate(e.target.value)}
+                                        className="bg-transparent border-none p-0 text-sm font-bold text-slate-600 focus:ring-0 outline-none uppercase tracking-tighter"
+                                        title="Filter by Event Date"
+                                    />
+                                    {eventDate && (
+                                        <button 
+                                            onClick={() => setEventDate('')} 
+                                            className="ml-2 text-slate-300 hover:text-red-500 transition-colors"
+                                        >
+                                            <span className="material-icons-round text-[16px]">cancel</span>
+                                        </button>
+                                    )}
+                                </div>
                             </div>
 
                             <NotificationBell />
@@ -468,16 +325,16 @@ export const OrdersPage: React.FC = () => {
             />
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm relative">
-                {/* 锁定高度与固定表头加固 - 增加高度以展现更多“资讯” */}
-                <div className="h-[75vh] min-h-[500px] overflow-y-auto custom-scrollbar scroll-smooth">
+                <div className="h-[75vh] min-h-[500px] overflow-y-auto custom-scrollbar scroll-smooth relative">
                     <table className="w-full text-left border-collapse min-w-max table-auto">
-                        <thead className="sticky top-0 z-20 bg-slate-50/95 backdrop-blur-md shadow-sm border-b border-slate-200">
+                        <thead className={`sticky z-20 bg-slate-50/95 backdrop-blur-md shadow-sm border-b border-slate-200 transition-all duration-300 ${isHeaderCompact ? 'top-[-1px]' : 'top-0'}`}>
                             <tr className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">
                                 <th className="px-6 py-4 whitespace-nowrap">Order ID</th>
                                 <th className="px-6 py-4">Customer</th>
                                 <th className="px-6 py-4">Total Amount</th>
                                 <th className="px-6 py-4">Status</th>
-                                <th className="px-6 py-4">Date</th>
+                                <th className="px-6 py-4">Event Date</th>
+                                <th className="px-6 py-4">Created At</th>
                                 <th className="px-6 py-4">Photos</th>
                                 <th className="px-6 py-4 text-right">Actions</th>
                             </tr>
@@ -485,18 +342,21 @@ export const OrdersPage: React.FC = () => {
                         <tbody className="divide-y divide-slate-100 bg-white">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">
+                                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400">
                                         <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
                                     </td>
                                 </tr>
                             ) : paginatedOrders.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-6 py-12 text-center text-slate-400">No matching orders found.</td>
+                                    <td colSpan={8} className="px-6 py-12 text-center text-slate-400">No matching orders found.</td>
                                 </tr>
                             ) : (
                                 paginatedOrders.map(order => (
                                     <React.Fragment key={order.id}>
-                                        <tr className="hover:bg-slate-50 transition-colors group">
+                                        <tr 
+                                            id={`order-row-${order.id}`}
+                                            className={`hover:bg-slate-50 transition-all duration-500 group ${flashOrderId === order.id ? 'highlight-order-row' : ''}`}
+                                        >
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <p className="font-mono font-bold text-slate-800">{order.order_number || order.id}</p>
                                                 <p className="text-xs text-slate-500 uppercase">{order.type}</p>
@@ -522,10 +382,32 @@ export const OrdersPage: React.FC = () => {
                                                     <option value={OrderStatus.COMPLETED}>COMPLETED</option>
                                                 </select>
                                             </td>
-                                            <td className="px-6 py-4 text-xs text-slate-500">
-                                                {order.created_at ? new Date(order.created_at).toLocaleString() : '-'}
+                                            <td className="px-6 py-4 text-xs font-bold text-indigo-600 whitespace-nowrap">
+                                                {order.eventDate ? (
+                                                    <div className="flex flex-col">
+                                                        <span>{order.eventDate}</span>
+                                                        <span className="text-[10px] text-indigo-400">{order.eventTime || ''}</span>
+                                                    </div>
+                                                ) : order.dueTime ? (
+                                                    new Date(order.dueTime).toLocaleString('en-MY', { 
+                                                        year: 'numeric', 
+                                                        month: 'numeric', 
+                                                        day: 'numeric', 
+                                                        hour: '2-digit', 
+                                                        minute: '2-digit', 
+                                                        hour12: false 
+                                                    })
+                                                ) : <span className="text-slate-300">—</span>}
                                             </td>
-                                            {/* Photos column */}
+                                            <td className="px-6 py-4 text-xs text-slate-400 whitespace-nowrap">
+                                                {order.created_at ? new Date(order.created_at).toLocaleString('en-MY', {
+                                                    month: 'numeric',
+                                                    day: 'numeric',
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                    hour12: false
+                                                }) : '-'}
+                                            </td>
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 {order.delivery_photos && order.delivery_photos.length > 0 ? (
                                                     <button
@@ -576,7 +458,6 @@ export const OrdersPage: React.FC = () => {
                                                 </button>
                                             </td>
                                         </tr>
-                                        {/* 照片展开子行 */}
                                         {expandedOrderId === order.id && order.delivery_photos && order.delivery_photos.length > 0 && (
                                             <tr>
                                                 <td colSpan={8} className="pb-5 bg-indigo-50/30 border-b border-indigo-100">
@@ -611,7 +492,6 @@ export const OrdersPage: React.FC = () => {
                     </table>
                 </div>
 
-                {/* Table Summary Footer - Showing key "Information" (资讯) */}
                 <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between text-xs font-black uppercase tracking-widest text-slate-500">
                     <div className="flex items-center gap-4">
                         <span>Total Items: {filteredOrders.length}</span>
@@ -622,7 +502,6 @@ export const OrdersPage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Pagination Controls */}
                 {totalPages > 1 && (
                     <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
                         <span className="text-xs font-bold text-slate-500">
@@ -651,7 +530,6 @@ export const OrdersPage: React.FC = () => {
                 )}
             </div>
 
-            {/* Lightbox 全屏图片查看 */}
             {lightboxUrl && (
                 <div
                     className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center p-4 animate-in fade-in"
@@ -670,411 +548,6 @@ export const OrdersPage: React.FC = () => {
                 </div>
             )}
 
-            {/* Create Order Modal */}
-            {showCreateModal && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center p-2 sm:p-4 bg-slate-900/80 backdrop-blur-md animate-in fade-in transition-all duration-300">
-                    <div className="bg-white rounded-[2rem] shadow-[0_32px_128px_-16px_rgba(0,0,0,0.5)] w-[96%] max-w-5xl h-[88vh] flex flex-col overflow-hidden relative border border-white/20 shadow-indigo-500/10 my-4">
-                        <div className="p-6 border-b border-slate-100 flex justify-between items-center shrink-0 bg-white z-10">
-                            <div>
-                                <h2 className="text-xl font-black text-slate-800 tracking-tight">{editingOrder ? 'Edit Order' : 'Create New Order'}</h2>
-                                <p className="text-sm font-medium text-slate-500 mt-1">{editingOrder ? 'Modify existing order details' : 'Manually dispatch a POS point order'}</p>
-                            </div>
-                            <button
-                                onClick={() => { setShowCreateModal(false); setEditingOrder(null); setProductSearchQuery(''); }}
-                                className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 transition-colors"
-                            >
-                                <span className="material-icons-round">close</span>
-                            </button>
-                        </div>
-
-                        <div className="flex-1 overflow-hidden flex flex-col md:flex-row bg-slate-50/50">
-                            {/* Left: Menu Selection */}
-                            <div className="flex-1 border-r border-slate-200 p-6 overflow-y-auto flex flex-col h-full bg-slate-50/50">
-                                <div className="shrink-0 mb-4 space-y-3">
-                                    <h3 className="font-black text-slate-700 tracking-tight uppercase text-sm">Select Items</h3>
-                                    {/* 红色部分要求：产品搜索栏 */}
-                                    <div className="relative">
-                                        <span className="material-icons-round absolute left-3 top-2.5 text-slate-400">search</span>
-                                        <input
-                                            type="text"
-                                            placeholder="Search products..."
-                                            value={productSearchQuery}
-                                            onChange={(e) => setProductSearchQuery(e.target.value)}
-                                            className="w-full pl-10 pr-4 py-2 border border-red-500/30 rounded-xl bg-white text-sm outline-none focus:ring-2 focus:ring-red-500/50 focus:border-red-500 transition-all shadow-sm"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto custom-scrollbar pb-6 pr-2">
-                                    {products
-                                        .filter(p =>
-                                            (p.name || '').toLowerCase().includes((productSearchQuery || '').toLowerCase()) ||
-                                            (p.code && p.code.toLowerCase().includes((productSearchQuery || '').toLowerCase()))
-                                        )
-                                        .map(p => {
-                                            const selected = newOrder.items.find(i => i.product.id === p.id);
-                                            return (
-                                                <div
-                                                    key={p.id}
-                                                    onClick={() => toggleOrderItem(p.id)}
-                                                    className={`p-3 rounded-xl border-2 cursor-pointer transition-all ${selected ? 'border-red-500 bg-red-50/30' : 'border-transparent bg-white shadow-sm hover:shadow-md'}`}
-                                                >
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-12 h-12 bg-slate-100 rounded-lg shrink-0 overflow-hidden flex items-center justify-center">
-                                                            {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : <span className="material-icons-round text-slate-300">fastfood</span>}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-bold text-sm text-slate-800 line-clamp-1">{p.name}</p>
-                                                            <div className="flex items-center gap-1 text-red-500 group/price relative mt-1">
-                                                                <span className="text-[10px] font-black">RM</span>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    value={customPrices[p.id] !== undefined ? customPrices[p.id] : (p.price || 0)}
-                                                                    onChange={(e) => handlePriceChange(p.id, e.target.value)}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="w-16 bg-transparent border-none p-0 text-xs font-black outline-none focus:ring-0"
-                                                                />
-                                                                <span className="material-icons-round text-[10px] opacity-0 group-hover/price:opacity-100 transition-opacity">edit</span>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                </div>
-                            </div>
-
-                            {/* Right: Order Details Form */}
-                            <div className="w-full md:w-96 flex flex-col bg-white shrink-0">
-                                <div className="p-6 flex-1 overflow-y-auto min-h-0 space-y-5 pb-32 custom-scrollbar scroll-smooth">
-                                    <h3 className="font-black text-slate-700 flex items-center gap-2 text-sm uppercase tracking-wider">
-                                        <span className="material-icons-round text-indigo-500 text-lg">assignment</span>
-                                        Order Details
-                                    </h3>
-
-                                    <div className="space-y-3">
-                                        <div className="bg-slate-50 border border-slate-100 px-4 py-2 rounded-xl text-xs text-slate-400 font-bold">
-                                            Order ID: (Auto-generated by System)
-                                        </div>
-                                        <div className="flex gap-2">
-                                            <div className="flex-1">
-                                                <label className="block text-xs text-slate-500 mb-1 ml-1">Event Date (活动日期)</label>
-                                                <input
-                                                    type="date"
-                                                    value={newOrder.eventDate} onChange={e => setNewOrder({ ...newOrder, eventDate: e.target.value })}
-                                                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20"
-                                                />
-                                            </div>
-                                            <div className="flex-1">
-                                                <label className="block text-xs text-slate-500 mb-1 ml-1">Event Time (活动时间)</label>
-                                                <input
-                                                    type="time"
-                                                    value={newOrder.eventTime} onChange={e => setNewOrder({ ...newOrder, eventTime: e.target.value })}
-                                                    className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <input
-                                            type="text" placeholder="Customer Name *"
-                                            value={newOrder.customerName} onChange={e => setNewOrder({ ...newOrder, customerName: e.target.value })}
-                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20"
-                                            required
-                                        />
-                                        <input
-                                            type="text" placeholder="Phone Number *"
-                                            value={newOrder.customerPhone} onChange={e => setNewOrder({ ...newOrder, customerPhone: e.target.value })}
-                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20"
-                                            required
-                                        />
-                                        <textarea
-                                            placeholder="Delivery Address *" required
-                                            value={newOrder.address} onChange={e => setNewOrder({ ...newOrder, address: e.target.value })}
-                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20 resize-none h-20"
-                                        />
-                                        <textarea
-                                            placeholder="Remark (Optional)"
-                                            value={newOrder.remark} onChange={e => setNewOrder({ ...newOrder, remark: e.target.value })}
-                                            className="w-full px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20 resize-none h-20"
-                                        />
-                                    </div>
-
-                                    <hr className="border-slate-100" />
-
-                                    {/* 计费模块 (Billing Module) */}
-                                    <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 space-y-4">
-                                        <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                            <span className="material-icons-round text-sm">payments</span>
-                                            计费详情 (Billing Details)
-                                        </h4>
-                                        <div className="grid grid-cols-12 gap-3 items-end">
-                                            <div className="col-span-3">
-                                                <p className="text-[9px] font-bold text-slate-400 mb-1">单位 (Unit)</p>
-                                                <select
-                                                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                                    value={newOrder.billingUnit}
-                                                    onChange={(e) => {
-                                                        const unit = e.target.value as 'PAX' | 'SET' | 'PACKET';
-                                                        const updates: any = { billingUnit: unit };
-                                                        if (unit === 'PAX' && newOrder.billingQuantity > 0) {
-                                                            const autoQty = newOrder.billingQuantity * 2;
-                                                            updates.equipments = {
-                                                                ...newOrder.equipments,
-                                                                '盘子': autoQty,
-                                                                '汤匙': autoQty,
-                                                                '叉子': autoQty,
-                                                                '杯子': autoQty
-                                                            };
-                                                        }
-                                                        setNewOrder({ ...newOrder, ...updates });
-                                                    }}
-                                                >
-                                                    <option value="PAX">PAX</option>
-                                                    <option value="SET">SET</option>
-                                                    <option value="PACKET">PACKET</option>
-                                                </select>
-                                            </div>
-                                            <div className="col-span-3">
-                                                <p className="text-[9px] font-bold text-slate-400 mb-1">数量 (Qty)</p>
-                                                <input
-                                                    type="number"
-                                                    placeholder="0"
-                                                    className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                                    value={newOrder.billingQuantity || ''}
-                                                    onChange={(e) => {
-                                                        const qty = parseFloat(e.target.value) || 0;
-                                                        const updates: any = { billingQuantity: qty };
-                                                        if (newOrder.billingUnit === 'PAX' && qty > 0) {
-                                                            const autoQty = qty * 2;
-                                                            updates.equipments = {
-                                                                ...newOrder.equipments,
-                                                                '盘子': autoQty,
-                                                                '汤匙': autoQty,
-                                                                '叉子': autoQty,
-                                                                '杯子': autoQty
-                                                            };
-                                                        }
-                                                        setNewOrder({ ...newOrder, ...updates });
-                                                    }}
-                                                />
-                                            </div>
-                                            <div className="col-span-3">
-                                                <p className="text-[9px] font-bold text-slate-400 mb-1">单价 (RM)</p>
-                                                <div className="relative">
-                                                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">RM</span>
-                                                    <input
-                                                        type="number"
-                                                        step="0.01"
-                                                        placeholder="0.00"
-                                                        className="w-full pl-7 pr-2 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-primary/20 outline-none"
-                                                        value={newOrder.billingPricePerUnit || ''}
-                                                        onChange={(e) => setNewOrder({ ...newOrder, billingPricePerUnit: parseFloat(e.target.value) || 0 })}
-                                                    />
-                                                </div>
-                                            </div>
-                                            <div className="col-span-3">
-                                                <p className="text-[9px] font-bold text-slate-400 mb-1">小计 (Subtotal)</p>
-                                                <div className="w-full p-2 bg-slate-100 border border-transparent rounded-xl text-xs font-black text-slate-700 font-mono">
-                                                    RM {(newOrder.billingQuantity * newOrder.billingPricePerUnit).toFixed(2)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <div className="flex justify-between items-center mb-1">
-                                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">定金 Deposit (RM)</p>
-                                            <p className="text-[10px] font-black text-red-500 italic">
-                                                * 待收余款 Balance Due: RM {Math.max(0, (newOrder.billingQuantity * newOrder.billingPricePerUnit) - newOrder.payment_received).toFixed(2)}
-                                            </p>
-                                        </div>
-                                        <div className="relative group">
-                                            <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">payments</span>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                className="w-full pl-12 pr-4 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-lg font-black text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/20 placeholder:text-slate-300"
-                                                placeholder="0.00"
-                                                value={newOrder.payment_received || ''}
-                                                onChange={(e) => setNewOrder({ ...newOrder, payment_received: parseFloat(e.target.value) || 0 })}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-bold text-xs text-slate-500 mb-3 uppercase tracking-wider">Cart Items</h4>
-                                        {newOrder.items.length === 0 ? (
-                                            <div className="text-center py-6 text-slate-400 text-sm">No items selected</div>
-                                        ) : (
-                                            <div className="space-y-3">
-                                                {newOrder.items.map(item => (
-                                                    <div key={item.product.id} className="flex items-center justify-between text-sm">
-                                                        <div className="flex-1 overflow-hidden pr-2">
-                                                            <p className="font-bold text-slate-800 truncate">{item.product.name}</p>
-                                                            <div className="flex items-center gap-1.5 px-3 py-1 bg-red-50 text-red-600 rounded-lg border border-red-100/50 mt-1">
-                                                                <span className="text-[10px] font-black">RM</span>
-                                                                <input
-                                                                    type="number"
-                                                                    step="0.01"
-                                                                    min="0"
-                                                                    value={item.priceOverride ?? item.product.price}
-                                                                    onChange={(e) => handlePriceChange(item.product.id, e.target.value)}
-                                                                    className="w-16 bg-transparent border-none p-0 text-xs font-black outline-none focus:ring-0"
-                                                                />
-                                                            </div>
-                                                            {item.priceOverride !== undefined && item.priceOverride !== item.product.price && (
-                                                                <p className="text-[9px] text-slate-400 line-through mt-0.5 ml-1">
-                                                                    Original: RM {(item.product.price || 0).toFixed(2)}
-                                                                </p>
-                                                            )}
-                                                        </div>
-                                                        <div className="flex items-center gap-3 bg-slate-100 px-2 py-1 rounded-lg">
-                                                            <button onClick={() => updateItemQuantity(item.product.id, -1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors">
-                                                                <span className="material-icons-round text-[16px]">remove</span>
-                                                            </button>
-                                                            <input 
-                                                                type="number"
-                                                                className="w-8 bg-transparent border-none text-xs font-bold text-center outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                                value={item.quantity}
-                                                                onChange={(e) => setItemQuantity(item.product.id, e.target.value)}
-                                                            />
-                                                            <button onClick={() => updateItemQuantity(item.product.id, 1)} className="w-6 h-6 flex items-center justify-center text-slate-500 hover:text-blue-500 transition-colors">
-                                                                <span className="material-icons-round text-[16px]">add</span>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <hr className="border-slate-100" />
-
-                                    <div>
-                                        <h4 className="font-bold text-xs text-slate-500 mb-3 uppercase tracking-wider">包含设备 (Equipments)</h4>
-                                        <div className="grid grid-cols-2 gap-2">
-                                            {[...EQUIPMENTS_LIST, ...customEquipments].map((eq) => (
-                                                <div
-                                                    key={eq}
-                                                    className={`bg-slate-50 rounded-xl p-2 border transition-all flex flex-col gap-2 shadow-sm ${(newOrder.equipments[eq] || 0) > 0 ? 'border-primary/50 bg-primary/5' : 'border-slate-100'
-                                                        }`}
-                                                >
-                                                    <span className="text-[10px] font-bold text-slate-700 uppercase">{eq}</span>
-                                                    <div className="relative">
-                                                        <span className="material-icons-round absolute left-2 top-1/2 -translate-y-1/2 text-slate-300 text-[10px]">edit</span>
-                                                        <input
-                                                            type="number"
-                                                            placeholder="0"
-                                                            disabled={newOrder.billingUnit === 'PAX' && newOrder.billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq)}
-                                                            className={`w-full bg-white border border-slate-200 rounded-lg py-1.5 pl-6 pr-2 text-xs font-bold text-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:bg-slate-100 disabled:text-slate-400`}
-                                                            value={newOrder.equipments[eq] || ''}
-                                                            onChange={(e) => handleEquipQuantityChange(eq, e.target.value)}
-                                                        />
-                                                    </div>
-                                                    {newOrder.billingUnit === 'PAX' && newOrder.billingQuantity > 0 && ['盘子', '汤匙', '叉子', '杯子'].includes(eq) && (
-                                                        <span className="text-[8px] font-bold text-primary italic opacity-70">
-                                                            Auto-locked: PAX x 2
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            ))}
-
-                                            {/* Add Custom Equipment Card */}
-                                            <div
-                                                className={`border-2 border-dashed rounded-xl p-2 flex flex-col items-center justify-center min-h-[70px] transition-all cursor-pointer ${isAddingCustom ? 'border-primary bg-primary/5' : 'border-slate-200 hover:border-primary/50 hover:bg-slate-50'}`}
-                                                onClick={() => !isAddingCustom && setIsAddingCustom(true)}
-                                            >
-                                                {isAddingCustom ? (
-                                                    <div className="w-full space-y-2">
-                                                        <input
-                                                            autoFocus
-                                                            type="text"
-                                                            placeholder="设备名称..."
-                                                            className="w-full bg-white border border-slate-200 rounded-lg py-1 px-2 text-[10px] font-bold outline-none focus:ring-1 focus:ring-primary/20"
-                                                            value={newCustomName}
-                                                            onChange={(e) => setNewCustomName(e.target.value)}
-                                                            onKeyDown={(e) => {
-                                                                if (e.key === 'Enter') {
-                                                                    if (newCustomName.trim()) {
-                                                                        setCustomEquipments(prev => [...prev, newCustomName.trim()]);
-                                                                        setNewCustomName('');
-                                                                        setIsAddingCustom(false);
-                                                                    }
-                                                                } else if (e.key === 'Escape') {
-                                                                    setIsAddingCustom(false);
-                                                                    setNewCustomName('');
-                                                                }
-                                                            }}
-                                                        />
-                                                        <div className="flex justify-between items-center px-1">
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setIsAddingCustom(false);
-                                                                    setNewCustomName('');
-                                                                }}
-                                                                className="text-slate-400 hover:text-red-500 transition-colors"
-                                                            >
-                                                                <span className="material-icons-round text-sm">close</span>
-                                                            </button>
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    if (newCustomName.trim()) {
-                                                                        setCustomEquipments(prev => [...prev, newCustomName.trim()]);
-                                                                        setNewCustomName('');
-                                                                        setIsAddingCustom(false);
-                                                                    }
-                                                                }}
-                                                                className="text-primary hover:text-primary-dark transition-colors"
-                                                            >
-                                                                <span className="material-icons-round text-sm">check_circle</span>
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex flex-col items-center gap-1 text-slate-400 group-hover:text-primary transition-colors">
-                                                        <span className="material-icons-round text-sm">add</span>
-                                                        <span className="text-[9px] font-black uppercase tracking-wider">Add Custom</span>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                </div>
-                                
-                                {/* 悬浮底部统计与提交 - 增加玻璃拟态效果以强调层级 */}
-                                <div className="p-6 bg-white/80 backdrop-blur-md border-t border-slate-100 shrink-0 relative z-20 shadow-[0_-8px_32px_rgba(0,0,0,0.05)]">
-                                    <div className="flex items-center justify-between mb-4">
-                                        <span className="font-bold text-slate-400 text-xs uppercase tracking-widest">Total Amount</span>
-                                        <span className="text-3xl font-black text-red-600 transition-all font-mono">
-                                            <span className="text-sm mr-1">RM</span>
-                                            {(newOrder.billingQuantity * newOrder.billingPricePerUnit).toFixed(2)}
-                                        </span>
-                                    </div>
-                                    <button
-                                        onClick={handleCreateOrder}
-                                        disabled={isSubmitting || newOrder.items.length === 0}
-                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white rounded-2xl font-black text-sm shadow-xl shadow-red-500/30 transition-all active:scale-[0.98] disabled:opacity-50 disabled:grayscale disabled:shadow-none flex items-center justify-center gap-2 group"
-                                    >
-                                        {isSubmitting ? (
-                                            <span className="material-icons-round animate-spin">autorenew</span>
-                                        ) : (
-                                            <span className="material-icons-round group-hover:rotate-12 transition-transform">check_circle</span>
-                                        )}
-                                        {isSubmitting ? 'Processing...' : (editingOrder ? 'Update Order' : 'Place Order')}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-
-            {/* Delete Confirmation Modal */}
             {showDeleteModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md animate-in fade-in">
                     <div className="bg-white rounded-[2.5rem] shadow-2xl w-full max-w-sm overflow-hidden relative border border-slate-100">
@@ -1084,11 +557,9 @@ export const OrdersPage: React.FC = () => {
                                     {deleteStep === 1 ? 'delete_sweep' : 'report_problem'}
                                 </span>
                             </div>
-
                             <h3 className="text-2xl font-black text-slate-800 mb-2">
                                 {deleteStep === 1 ? 'Delete Order?' : 'Final Warning!'}
                             </h3>
-
                             <p className="text-slate-500 font-bold leading-relaxed mb-8 px-4 text-sm">
                                 {deleteStep === 1 ? (
                                     <>Are you sure you want to delete order <span className="text-slate-900 font-black">"{deleteOrderId}"</span>?</>
@@ -1096,7 +567,6 @@ export const OrdersPage: React.FC = () => {
                                     <span className="text-red-500 font-black">This will permanently remove the order, its preparation status, and GoEasy notifications. Data recovery is NOT possible.</span>
                                 )}
                             </p>
-
                             <div className="flex flex-col gap-3">
                                 {deleteStep === 1 ? (
                                     <button
@@ -1115,7 +585,6 @@ export const OrdersPage: React.FC = () => {
                                         Confirm Final Delete
                                     </button>
                                 )}
-
                                 <button
                                     onClick={handleRejectDelete}
                                     disabled={isDeleting}
@@ -1128,64 +597,21 @@ export const OrdersPage: React.FC = () => {
                     </div>
                 </div>
             )}
-            {/* View Bill / Print Receipt Modal */}
+
             {selectedPrintOrder && (
                 <div className="fixed inset-0 z-[80] flex items-start justify-center p-4 sm:items-center bg-slate-900/50 backdrop-blur-sm animate-in fade-in print:bg-white print:p-0 print:items-start print:justify-start">
-                    {/* 打印模式样式 — A4 纸张适配，尽量单页完成 */}
                     <style>{`
-                        @page {
-                            size: A4 portrait;
-                            margin: 10mm;
-                        }
+                        @page { size: A4 portrait; margin: 10mm; }
                         @media print {
-                            /* 1. 隐藏页面上的所有元素 */
-                            body * {
-                                visibility: hidden;
-                            }
-                            
-                            /* 2. 只显示我们的模态框以及模态框里的所有子元素 */
-                            #printable-order-wrapper, 
-                            #printable-order-wrapper * {
-                                visibility: visible;
-                            }
-
-                            /* 3. 把模态框强行拉到页面的最左上角，脱离原本的文档流 */
-                            #printable-order-wrapper {
-                                position: absolute !important;
-                                left: 0 !important;
-                                top: 0 !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
-                                width: 100% !important;
-                                max-height: none !important;
-                                overflow: visible !important;
-                                /* 取消任何滚动条和多余背景 */
-                                background: white !important;
-                            }
-
-                            /* 4. 清理模态框自身的样式，确保它在白纸上能占满全宽 */
-                            #printable-order {
-                                width: 100% !important;
-                                max-width: 100% !important;
-                                box-shadow: none !important;
-                                border: none !important;
-                                border-radius: 0 !important;
-                                margin: 0 !important;
-                                padding: 0 !important;
-                            }
-
-                            /* 5. 隐藏一些特定的不该被打印的元素 (例如关闭按钮和打印按钮) */
-                            .no-print-area, .no-print-area * {
-                                display: none !important;
-                            }
-
-                            /* 6. 防止表格内容被硬切断 */
+                            body * { visibility: hidden; }
+                            #printable-order-wrapper, #printable-order-wrapper * { visibility: visible; }
+                            #printable-order-wrapper { position: absolute !important; left: 0 !important; top: 0 !important; margin: 0 !important; padding: 0 !important; width: 100% !important; max-height: none !important; overflow: visible !important; background: white !important; }
+                            #printable-order { width: 100% !important; max-width: 100% !important; box-shadow: none !important; border: none !important; border-radius: 0 !important; margin: 0 !important; padding: 0 !important; }
+                            .no-print-area, .no-print-area * { display: none !important; }
                             table { page-break-inside: auto; }
                             tr { page-break-inside: avoid; page-break-after: auto; }
                             thead { display: table-header-group; }
                             tfoot { display: table-footer-group; }
-                            
-                            /* 7. 强制开启背景色打印 (很多浏览器默认忽略 CSS 背景色) */
                             .bg-slate-50 { background-color: #f8fafc !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                             .bg-blue-50 { background-color: #eff6ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                             .bg-violet-50 { background-color: #f5f3ff !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
@@ -1194,16 +620,9 @@ export const OrdersPage: React.FC = () => {
                     `}</style>
                     <div id="printable-order-wrapper" className="w-full max-w-2xl max-h-[90vh] overflow-y-auto custom-scrollbar bg-transparent print:max-h-none print:overflow-visible">
                         <div className="bg-white rounded-[32px] shadow-xl border border-slate-100 overflow-hidden relative mx-auto print:rounded-none print:shadow-none print:border-none" id="printable-order">
-
-                            {/* 关闭按钮 (不可打印) */}
-                            <button
-                                onClick={() => setSelectedPrintOrder(null)}
-                                className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors z-10 no-print-area"
-                            >
+                            <button onClick={() => setSelectedPrintOrder(null)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/40 text-white transition-colors z-10 no-print-area">
                                 <span className="material-icons-round text-[18px]">close</span>
                             </button>
-
-                            {/* 标题 */}
                             <div className="bg-gradient-to-r from-blue-500 to-indigo-500 p-6 text-white text-center no-print-area">
                                 <div className="w-14 h-14 rounded-full bg-white/20 flex items-center justify-center mx-auto mb-3">
                                     <span className="material-icons-round text-3xl">receipt_long</span>
@@ -1211,19 +630,9 @@ export const OrdersPage: React.FC = () => {
                                 <h2 className="text-xl font-black">Order Details</h2>
                                 <p className="text-blue-100 text-xs mt-1 font-bold uppercase tracking-widest">Receipt</p>
                             </div>
-
                             <div className="p-8 print:p-0 space-y-6 print:space-y-4 max-w-3xl mx-auto font-sans">
-                                {/* 收据公司标头（打印时显示）*/}
                                 <div className="text-center pb-6 border-b-2 border-slate-800 flex flex-col items-center">
-                                    {/* 公司 Logo */}
-                                    <img
-                                        src="/print-logo.png"
-                                        alt="Kim Long Logo"
-                                        className="w-48 h-auto print:w-40 mb-3 shadow-sm"
-                                        onError={(e) => {
-                                            (e.target as HTMLImageElement).style.display = 'none';
-                                        }}
-                                    />
+                                    <img src="/print-logo.png" alt="Kim Long Logo" className="w-48 h-auto print:w-40 mb-3 shadow-sm" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                     <h1 className="text-2xl print:text-xl font-black text-slate-900 tracking-tight">KIM LONG CATERING SDN BHD</h1>
                                     <p className="text-sm print:text-xs text-slate-600 font-bold mt-1">1519675-T</p>
                                     <div className="text-sm print:text-[11px] text-slate-500 font-medium leading-tight mt-2 space-y-0.5">
@@ -1233,52 +642,35 @@ export const OrdersPage: React.FC = () => {
                                     </div>
                                     <p className="text-xs print:text-[10px] text-blue-600 font-black tracking-widest mt-4 uppercase bg-blue-50 px-3 py-1 rounded-md">CUSTOMER BILL</p>
                                 </div>
-
-                                {/* 订单基础信息 & 客户信息 */}
                                 <div className="flex flex-col md:flex-row justify-between gap-6 print:gap-4 pb-4">
-                                    {/* 左侧：客户信息 */}
                                     <div className="flex-1 space-y-2">
                                         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">Billed To</h3>
                                         <div className="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1 text-sm print:text-xs">
                                             <span className="text-slate-500 font-medium">Name:</span>
                                             <span className="font-bold text-slate-900">{selectedPrintOrder.customerName || '-'}</span>
-
                                             <span className="text-slate-500 font-medium">Phone:</span>
                                             <span className="font-bold text-slate-900 font-mono">{selectedPrintOrder.customerPhone || '-'}</span>
-
                                             <span className="text-slate-500 font-medium">Address:</span>
                                             <span className="font-bold text-slate-900 leading-snug">{selectedPrintOrder.address || 'Self Pickup'}</span>
                                         </div>
                                     </div>
-
-                                    {/* 右侧：订单信息 & QR */}
                                     <div className="flex gap-4 sm:justify-end">
                                         <div className="space-y-2 flex-grow sm:flex-grow-0 min-w-[200px]">
                                             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2 text-right">Order Details</h3>
                                             <div className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-sm print:text-xs text-right">
                                                 <span className="text-slate-500 font-medium">Order Ref:</span>
                                                 <span className="font-black text-slate-900 font-mono">{selectedPrintOrder.id}</span>
-
                                                 <span className="text-slate-500 font-medium">Created:</span>
                                                 <span className="font-bold text-slate-700">{selectedPrintOrder.created_at ? new Date(selectedPrintOrder.created_at).toLocaleString('en-MY', { hour12: false }) : '-'}</span>
-
                                                 <span className="text-slate-500 font-medium">Event Time:</span>
                                                 <span className="font-bold text-slate-900">{selectedPrintOrder.dueTime ? new Date(selectedPrintOrder.dueTime).toLocaleString('en-MY', { hour12: false }) : '-'}</span>
                                             </div>
                                         </div>
-
                                         <div className="shrink-0 pt-1">
-                                            <img
-                                                src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(selectedPrintOrder.id)}&bgcolor=ffffff&color=0f172a&margin=0`}
-                                                alt="Order QR Code"
-                                                className="w-16 h-16 border border-slate-200 p-1"
-                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                                            />
+                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(selectedPrintOrder.id)}&bgcolor=ffffff&color=0f172a&margin=0`} alt="Order QR Code" className="w-16 h-16 border border-slate-200 p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                         </div>
                                     </div>
                                 </div>
-
-                                {/* 商品明细 */}
                                 <div>
                                     <table className="w-full text-sm print:text-xs border-collapse">
                                         <thead>
@@ -1297,15 +689,10 @@ export const OrdersPage: React.FC = () => {
                                                         {item.code && <p className="text-xs text-slate-500 font-mono mt-0.5">Item Code: {item.code}</p>}
                                                         {item.note && <p className="text-xs text-slate-500 italic mt-0.5">Note: {item.note}</p>}
                                                     </td>
-                                                    <td className="py-3 px-2 text-center align-top">
-                                                        <span className="font-black text-slate-900">{item.quantity}</span>
-                                                    </td>
+                                                    <td className="py-3 px-2 text-center align-top"><span className="font-black text-slate-900">{item.quantity}</span></td>
                                                     <td className="py-3 px-2 text-right text-slate-600 font-mono align-top">
                                                         <div className="flex flex-col items-end">
                                                             <span className="font-bold text-slate-900">RM {item.price ? Number(item.price).toFixed(2) : '-'}</span>
-                                                            {item.original_price && Number(item.price) !== Number(item.original_price) && (
-                                                                <span className="text-[9px] text-slate-400 line-through">市场价: RM {Number(item.original_price).toFixed(2)}</span>
-                                                            )}
                                                         </div>
                                                     </td>
                                                     <td className="py-3 pl-2 text-right font-black text-slate-900 font-mono align-top">RM {item.price ? (Number(item.price) * item.quantity).toFixed(2) : '-'}</td>
@@ -1314,91 +701,49 @@ export const OrdersPage: React.FC = () => {
                                         </tbody>
                                     </table>
                                 </div>
-                            </div>
-
-                            {/* 设备 / 物资 */}
-                            {selectedPrintOrder.equipments && Object.keys(selectedPrintOrder.equipments).length > 0 && (
-                                <div className="pt-2">
-                                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">Equipments / Materials</h3>
-                                    <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                        {Object.entries(selectedPrintOrder.equipments)
-                                            .filter(([_, qty]) => Number(qty) > 0)
-                                            .map(([name, qty]) => (
-                                                <span key={name} className="text-sm print:text-xs font-bold text-slate-700 flex items-center gap-1.5">
-                                                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                                                    {name}
-                                                    <span className="text-slate-500 font-normal ml-1">× {qty}</span>
-                                                </span>
+                                {selectedPrintOrder.equipments && Object.keys(selectedPrintOrder.equipments).length > 0 && (
+                                    <div className="pt-2">
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">Equipments / Materials</h3>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                            {Object.entries(selectedPrintOrder.equipments).filter(([_, qty]) => Number(qty) > 0).map(([name, qty]) => (
+                                                <span key={name} className="text-sm print:text-xs font-bold text-slate-700 flex items-center gap-1.5"><span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>{name}<span className="text-slate-500 font-normal ml-1">× {qty}</span></span>
                                             ))}
+                                        </div>
+                                    </div>
+                                )}
+                                <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-6 border-t border-slate-200 mt-6 page-break-avoid">
+                                    <div className="flex-1 space-y-3 w-full sm:w-auto">
+                                        <div className="grid grid-cols-[100px_1fr] gap-y-1.5 text-sm print:text-xs">
+                                            <span className="text-slate-500 font-medium">Payment:</span>
+                                            <span className="font-bold text-slate-900 uppercase">{selectedPrintOrder.paymentMethod || 'Cash'}</span>
+                                            <span className="text-slate-500 font-medium">Status:</span>
+                                            <span className="font-bold text-slate-900 uppercase tracking-wider">{selectedPrintOrder.status}</span>
+                                        </div>
+                                        {(selectedPrintOrder as any).remark && (
+                                            <div className="mt-6 border-t border-slate-100 pt-6">
+                                                <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Remarks</span>
+                                                <p className="text-sm print:text-xs font-medium text-slate-800">{(selectedPrintOrder as any).remark}</p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="w-full sm:w-64 shrink-0">
+                                        <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
+                                            <div className="flex justify-between items-center text-sm print:text-xs text-slate-600"><span>Subtotal</span><span className="font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span></div>
+                                            <div className="flex justify-between items-center text-sm print:text-xs text-slate-600"><span>Tax (0%)</span><span className="font-mono">RM 0.00</span></div>
+                                            <div className="pt-2 border-t border-slate-200 flex justify-between items-center"><span className="text-sm print:text-xs font-black text-slate-900 uppercase tracking-wider">Total</span><span className="text-2xl print:text-xl font-black text-slate-900 font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span></div>
+                                        </div>
                                     </div>
                                 </div>
-                            )}
-
-                            {/* 底部附加信息 & 金额总计 */}
-                            <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-6 border-t border-slate-200 mt-6 page-break-avoid">
-                                {/* 左侧：其他杂项信息 */}
-                                <div className="flex-1 space-y-3 w-full sm:w-auto">
-                                    <div className="grid grid-cols-[100px_1fr] gap-y-1.5 text-sm print:text-xs">
-                                        <span className="text-slate-500 font-medium">Payment:</span>
-                                        <span className="font-bold text-slate-900 uppercase">
-                                            {selectedPrintOrder.paymentMethod === 'cash' ? 'Cash' :
-                                                selectedPrintOrder.paymentMethod === 'bank_transfer' ? 'Bank Transfer' :
-                                                    selectedPrintOrder.paymentMethod === 'ewallet' ? 'E-Wallet' :
-                                                        selectedPrintOrder.paymentMethod === 'cheque' ? 'Cheque' :
-                                                            (selectedPrintOrder.paymentMethod || 'Cash')}
-                                        </span>
-
-                                        <span className="text-slate-500 font-medium">Status:</span>
-                                        <span className="font-bold text-slate-900 uppercase tracking-wider">{selectedPrintOrder.status}</span>
-                                    </div>
-
-                                    {(selectedPrintOrder as any).remark && (
-                                        <div className="mt-6 border-t border-slate-100 pt-6">
-                                            <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Remarks</span>
-                                            <p className="text-sm print:text-xs font-medium text-slate-800">{(selectedPrintOrder as any).remark}</p>
-                                        </div>
-                                    )}
+                                <div className="flex gap-3 no-print-area mt-8">
+                                    <button onClick={() => window.print()} className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30">
+                                        <span className="material-icons-round text-[18px]">print</span>Print Customer Bill
+                                    </button>
                                 </div>
-
-                                {/* 右侧：总合计 */}
-                                <div className="w-full sm:w-64 shrink-0">
-                                    <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
-                                        <div className="flex justify-between items-center text-sm print:text-xs text-slate-600">
-                                            <span>Subtotal</span>
-                                            <span className="font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span>
-                                        </div>
-                                        <div className="flex justify-between items-center text-sm print:text-xs text-slate-600">
-                                            <span>Tax (0%)</span>
-                                            <span className="font-mono">RM 0.00</span>
-                                        </div>
-                                        <div className="pt-2 border-t border-slate-200 flex justify-between items-center">
-                                            <span className="text-sm print:text-xs font-black text-slate-900 uppercase tracking-wider">Total</span>
-                                            <span className="text-2xl print:text-xl font-black text-slate-900 font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="text-center mt-6 text-[10px] text-slate-400 space-y-1">
-                                        <p>Thank you for choosing Kim Long.</p>
-                                        <p>This is a computer-generated document. No signature is required.</p>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* 操作按钮 (不打印) */}
-                            <div className="flex gap-3 no-print-area mt-8">
-                                <button
-                                    onClick={() => window.print()}
-                                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30"
-                                >
-                                    <span className="material-icons-round text-[18px]">print</span>
-                                    Print Customer Bill
-                                </button>
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-
         </div>
     );
 };

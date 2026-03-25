@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { FleetService, VehicleService, api } from '../services/api';
+import { FleetService, VehicleService, api, AdminOrderService } from '../services/api';
 import type { User, Vehicle, DriverAssignment, Order } from '../types';
 import { OrderStatus } from '../types';
 
@@ -22,6 +22,15 @@ export const FleetCenterPage: React.FC = () => {
     const [isAssigning, setIsAssigning] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rtStatus, setRtStatus] = useState<string>('CONNECTING');
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    const scroll = (direction: 'left' | 'right') => {
+        if (scrollRef.current) {
+            const { scrollLeft, clientWidth } = scrollRef.current;
+            const scrollTo = direction === 'left' ? scrollLeft - clientWidth / 2 : scrollLeft + clientWidth / 2;
+            scrollRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
+        }
+    };
 
     const [showAddVehicle, setShowAddVehicle] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -138,7 +147,7 @@ export const FleetCenterPage: React.FC = () => {
     const handleUpdateVehicleStatus = async (vehicleId: string, newStatus: string) => {
         setIsAssigning(true);
         try {
-            await api.patch(`/vehicles/${vehicleId}`, { status: newStatus });
+            await api.put(`/vehicles/${vehicleId}`, { status: newStatus });
             loadData();
         } catch (e: any) {
             alert(`状态更新失败: ${e.response?.data?.detail || e.message}`);
@@ -199,6 +208,41 @@ export const FleetCenterPage: React.FC = () => {
         );
     }, [vehicles, vehicleSearchQuery]);
 
+    const formatOrderTime = (order: Order) => {
+        let date = order.dueTime ? new Date(order.dueTime) : null;
+        
+        // 1. 如果 dueTime 无效，尝试 eventDate + eventTime
+        if (!date || isNaN(date.getTime())) {
+            if (order.eventDate && order.eventTime) {
+                // 尝试处理 DD/MM/YYYY 或 DD/MM/YY 这种非标准格式
+                let dateStr = order.eventDate;
+                if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    if (parts.length === 3) {
+                        // 假设为 DD/MM/YY(YY)
+                        const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+                        dateStr = `${year}-${parts[1]}-${parts[0]}`;
+                    }
+                }
+                date = new Date(`${dateStr}T${order.eventTime}`);
+            }
+        }
+        
+        // 2. 如果仍然无效，使用 created_at 作为保底
+        if (!date || isNaN(date.getTime())) {
+            date = order.created_at ? new Date(order.created_at) : null;
+        }
+
+        // 3. 最终检查
+        if (!date || isNaN(date.getTime())) return '--:--';
+        
+        return date.toLocaleTimeString('en-MY', { 
+            hour: '2-digit', 
+            minute: '2-digit', 
+            hour12: false 
+        });
+    };
+
     if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50/10"><div className="w-10 h-10 border-2 border-blue-500 border-t-transparent animate-spin rounded-full"></div></div>;
 
     return (
@@ -226,13 +270,15 @@ export const FleetCenterPage: React.FC = () => {
                             <span className="text-[8px] font-black text-slate-400 uppercase">IDLE</span>
                         </div>
                     </div>
-                    <button 
-                        onClick={() => setShowAddVehicle(true)}
-                        className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-600 transition-all flex items-center gap-2"
-                    >
-                        <span className="material-icons-round text-sm">add</span>
-                        New Vehicle
-                    </button>
+                    {viewMode === 'inventory' && (
+                        <button 
+                            onClick={() => setShowAddVehicle(true)}
+                            className="px-4 py-2 bg-slate-900 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-blue-600 transition-all flex items-center gap-2"
+                        >
+                            <span className="material-icons-round text-sm">add</span>
+                            New Vehicle
+                        </button>
+                    )}
                 </div>
             </div>
 
@@ -259,14 +305,33 @@ export const FleetCenterPage: React.FC = () => {
                     {/* Mission Pool - Ultra Compact View for 20-25 orders */}
                     <div className="space-y-3">
                         <div className="flex items-center justify-between px-1">
-                            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                                <span className="w-1 h-1 rounded-full bg-blue-600"></span>
-                                Mission Pool <span className="bg-blue-600 text-white px-1.5 rounded-md ml-1">{pendingOrders.length}</span>
-                            </h2>
+                            <div className="flex items-center gap-2">
+                                <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
+                                    <span className="w-1 h-1 rounded-full bg-blue-600"></span>
+                                    Mission Pool <span className="bg-blue-600 text-white px-1.5 rounded-md ml-1">{pendingOrders.length}</span>
+                                </h2>
+                                <div className="flex gap-1 ml-4 no-print-area">
+                                    <button 
+                                        onClick={() => scroll('left')}
+                                        className="w-6 h-6 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-100 transition-all shadow-sm"
+                                    >
+                                        <span className="material-icons-round text-sm">chevron_left</span>
+                                    </button>
+                                    <button 
+                                        onClick={() => scroll('right')}
+                                        className="w-6 h-6 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-100 transition-all shadow-sm"
+                                    >
+                                        <span className="material-icons-round text-sm">chevron_right</span>
+                                    </button>
+                                </div>
+                            </div>
                             <div className="h-px flex-1 mx-4 bg-slate-100"></div>
                         </div>
 
-                        <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2">
+                        <div 
+                            ref={scrollRef}
+                            className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2 scroll-smooth"
+                        >
                             {pendingOrders.map(order => (
                                 <div 
                                     key={order.id} 
@@ -281,7 +346,7 @@ export const FleetCenterPage: React.FC = () => {
                                         </div>
                                         <div className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
                                             <p className="text-[9px] font-black text-slate-700 font-mono italic">
-                                                {order.dueTime ? new Date(order.dueTime).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
+                                                {formatOrderTime(order)}
                                             </p>
                                         </div>
                                     </div>
@@ -296,7 +361,7 @@ export const FleetCenterPage: React.FC = () => {
                                         }`}
                                     >
                                         <span className="material-icons-round text-[12px]">{selectedOrderForAssignment?.id === order.id ? 'close' : 'assignment'}</span>
-                                        {selectedOrderForAssignment?.id === order.id ? 'Unsel' : 'Assign'}
+                                        {selectedOrderForAssignment?.id === order.id ? 'Cancel' : 'Assign'}
                                     </button>
                                 </div>
                             ))}
@@ -304,48 +369,56 @@ export const FleetCenterPage: React.FC = () => {
                     </div>
 
                     {/* Fleet List - Multi-column density */}
-                    <div id="fleet-list" className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-4 pb-8">
+                    <div id="fleet-list" className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-8 pb-12">
                         {filteredDrivers.map(driver => (
                             <div 
                                 key={driver.id} 
-                                className={`p-4 border rounded-2xl shadow-sm flex flex-col gap-4 group transition-all ${
+                                className={`p-8 border rounded-[2rem] shadow-sm flex flex-col gap-8 group transition-all ${
                                     driver.activeOrders.length > 0 
                                         ? 'bg-slate-900 text-white border-slate-800' 
                                         : 'bg-slate-50 text-slate-800 border-slate-100'
-                                } ${selectedOrderForAssignment ? 'ring-2 ring-blue-300' : ''}`}
+                                } ${selectedOrderForAssignment ? 'ring-4 ring-blue-300' : ''}`}
                             >
                                 <div className="flex items-center gap-3">
-                                    <div className="relative">
-                                        <div className="w-10 h-10 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-300 overflow-hidden font-black">
-                                            {driver.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover" /> : <span>DR</span>}
-                                        </div>
-                                        <div className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white flex items-center justify-center ${driver.activeOrders.length > 0 ? 'bg-emerald-500' : 'bg-slate-300'}`}>
-                                            <span className="material-icons-round text-white text-[8px]">{driver.activeOrders.length > 0 ? 'bolt' : 'bedtime'}</span>
-                                        </div>
-                                    </div>
                                     <div className="flex-1 min-w-0">
                                         <h3 className="text-sm font-black text-slate-800 truncate">{driver.name}</h3>
                                         <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{driver.activeAssignment?.vehicle?.plate_no || 'No Vehicle'}</p>
                                     </div>
                                     <div className="text-right">
-                                        <p className="text-[14px] font-black text-slate-400 font-mono italic">{driver.completedToday}<span className="text-[8px] uppercase not-italic ml-0.5">OK</span></p>
+                                        <p className="text-[24px] font-black text-cyan-400 font-mono italic">{driver.completedToday}</p>
                                     </div>
                                 </div>
 
-                                <div className="space-y-2">
+                                <div className="space-y-6">
                                     {driver.activeOrders.length > 0 ? (
-                                        <div className="flex flex-col gap-2">
+                                        <div className="flex flex-col gap-4">
                                             <div className="flex justify-between items-center px-1">
                                                 <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{driver.activeOrders.length} ORDERS ASSIGNED</span>
                                             </div>
                                             {driver.activeOrders.map(o => (
-                                                <div key={o.id} className="p-2.5 rounded-xl bg-white/10 border border-white/5 space-y-2">
-                                                    <div className="flex justify-between items-center text-[9px]">
+                                                <div key={o.id} className="p-5 rounded-2xl bg-white/10 border border-white/5 space-y-3">
+                                                    <div className="flex justify-between items-center text-[10px]">
                                                         <span className="font-black text-blue-300 uppercase tracking-tighter">#{o.order_number || o.id.slice(0,6)} • {o.status}</span>
                                                         <div className="flex gap-1.5 text-[14px]">
-                                                            <span onClick={() => navigate(`/orders?search=${o.order_number || o.id}`)} className="material-icons-round text-white/40 cursor-pointer hover:text-blue-400">info_outline</span>
-                                                            <span onClick={() => handleWhatsAppDeparture(o)} className="material-icons-round text-blue-400 cursor-pointer hover:scale-110">send</span>
-                                                            <span onClick={() => handleUnassignOrder(o.id)} className="material-icons-round text-red-400 cursor-pointer hover:text-red-600">close</span>
+                                                            <span onClick={() => navigate(`/orders?search=${o.order_number || o.id}`)} className="material-icons-round text-white/40 cursor-pointer hover:text-blue-400" title="Order Details">info_outline</span>
+                                                            <span onClick={() => handleWhatsAppDeparture(o)} className="material-icons-round text-blue-400 cursor-pointer hover:scale-110" title="WhatsApp Delivery Notice">send</span>
+                                                            <span 
+                                                                onClick={async () => {
+                                                                    if (window.confirm('确定要将此订单退回生产线吗？')) {
+                                                                        try {
+                                                                            await AdminOrderService.revertOrder(o.id);
+                                                                            loadData();
+                                                                        } catch (e) {
+                                                                            alert('操作失败');
+                                                                        }
+                                                                    }
+                                                                }} 
+                                                                className="material-icons-round text-orange-400 cursor-pointer hover:text-orange-600" 
+                                                                title="Revert to Production"
+                                                            >
+                                                                undo
+                                                            </span>
+                                                            <span onClick={() => handleUnassignOrder(o.id)} className="material-icons-round text-red-400 cursor-pointer hover:text-red-600" title="Unassign Driver">close</span>
                                                         </div>
                                                     </div>
                                                     <p className="text-[10px] font-bold text-white/80 truncate leading-none">{o.customerName}</p>
@@ -385,14 +458,15 @@ export const FleetCenterPage: React.FC = () => {
                     {filteredVehicles.map(v => (
                         <div key={v.id} className="bg-white border border-slate-100 p-3 rounded-xl shadow-sm hover:shadow transition-all group">
                             <div className="flex justify-between items-start mb-2">
-                                <div className={`relative px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest border transition-colors shadow-sm ${
-                                    v.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                                    'bg-red-50 text-red-600 border-red-100'
+                                <div className={`relative px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border-2 transition-colors shadow-sm ${
+                                    v.status === 'available' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                                    v.status === 'repair' ? 'bg-orange-50 text-orange-700 border-orange-200' :
+                                    'bg-red-50 text-red-700 border-red-200'
                                 }`}>
-                                    {v.status === 'available' ? 'RDY' : 'OUT'}
+                                    {v.status === 'available' ? 'RDY' : v.status === 'repair' ? 'RP' : 'OUT'}
                                     <select 
                                         disabled={isAssigning}
-                                        className={`opacity-0 absolute inset-0 cursor-pointer w-full h-full ${isAssigning ? 'cursor-wait' : ''}`}
+                                        className={`opacity-0 absolute inset-0 cursor-pointer w-full h-full text-slate-900 ${isAssigning ? 'cursor-wait' : ''}`}
                                         value={v.status}
                                         onChange={(e) => handleUpdateVehicleStatus(v.id, e.target.value)}
                                     >
@@ -445,9 +519,12 @@ export const FleetCenterPage: React.FC = () => {
                             <input required placeholder="Plate No" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={newVehicle.plate_no} onChange={e => setNewVehicle({...newVehicle, plate_no: e.target.value})} />
                             <input placeholder="Model" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} />
                             <select className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={newVehicle.type} onChange={e => setNewVehicle({...newVehicle, type: e.target.value})}>
-                                <option value="Van">Van</option><option value="Truck">Truck</option><option value="Motorcycle">Motorcycle</option><option value="Car">Car</option>
+                                <option value="Van">Van</option><option value="Truck">Truck</option><option value="Car">Car</option>
                             </select>
-                            <input type="date" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={newVehicle.road_tax_expiry} onChange={e => setNewVehicle({...newVehicle, road_tax_expiry: e.target.value})} />
+                            <div className="space-y-1">
+                                <p className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">路税到期 Road Tax Expiry</p>
+                                <input type="date" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={newVehicle.road_tax_expiry} onChange={e => setNewVehicle({...newVehicle, road_tax_expiry: e.target.value})} />
+                            </div>
                             <button disabled={isSubmitting} type="submit" className="w-full py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px]">{isSubmitting ? 'Wait...' : 'Create'}</button>
                             <button type="button" onClick={() => setShowAddVehicle(false)} className="w-full py-2 text-slate-400 text-[10px] font-bold uppercase">Cancel</button>
                         </form>
@@ -459,9 +536,13 @@ export const FleetCenterPage: React.FC = () => {
                 <div className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-sm">
                     <div className="bg-white rounded-2xl w-full max-w-xs p-6 shadow-2xl space-y-4">
                         <h2 className="text-lg font-black text-slate-800">Edit Vehicle</h2>
-                        <form onSubmit={(e) => { e.preventDefault(); if (editingVehicle) api.patch(`/vehicles/${editingVehicle.id}`, editingVehicle).then(() => { setEditingVehicle(null); loadData(); }); }} className="space-y-3">
+                        <form onSubmit={(e) => { e.preventDefault(); if (editingVehicle) api.put(`/vehicles/${editingVehicle.id}`, editingVehicle).then(() => { setEditingVehicle(null); loadData(); }); }} className="space-y-3">
                             <input required placeholder="Plate No" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={editingVehicle.plate_no} onChange={e => setEditingVehicle({...editingVehicle, plate_no: e.target.value})} />
                             <input placeholder="Model" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={editingVehicle.model || ''} onChange={e => setEditingVehicle({...editingVehicle, model: e.target.value})} />
+                            <div className="space-y-1">
+                                <p className="text-[9px] font-black text-slate-400 uppercase ml-1 tracking-widest">路税到期 Road Tax Expiry</p>
+                                <input type="date" className="w-full px-4 py-2 bg-slate-50 border rounded-xl text-xs font-bold" value={editingVehicle.road_tax_expiry} onChange={e => setEditingVehicle({...editingVehicle, road_tax_expiry: e.target.value})} />
+                            </div>
                             <button type="submit" className="w-full py-3 bg-slate-900 text-white rounded-xl font-black uppercase text-[10px]">Update</button>
                             <button type="button" onClick={() => setEditingVehicle(null)} className="w-full py-2 text-slate-400 text-[10px] font-bold uppercase">Cancel</button>
                         </form>

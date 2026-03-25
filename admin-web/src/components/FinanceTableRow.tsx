@@ -18,12 +18,26 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
     return (
         <tr className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${!isPaid && balance > 0 ? 'bg-red-50/5' : ''}`}>
             <td className="px-4 py-3 align-middle font-mono-finance text-[11px] text-indigo-600 font-bold tracking-tight relative">
-                <span className="text-indigo-600 font-bold font-mono-finance">
+                <button 
+                    onClick={() => {
+                        // Use window.location.href or inject navigate via props if we want to be pure,
+                        // but since navigate is common in pages using this component, let's see if we can use a link or window.location.
+                        // Actually, I'll use a direct link or look at how other components handle navigation.
+                        // In this project, FinancePage uses useNavigate. Let's add navigate to FinanceTableRow props.
+                        window.location.href = `/orders?highlightOrder=${order.id}`;
+                    }}
+                    title="View in Order Status"
+                    className="text-indigo-600 font-bold font-mono-finance hover:underline decoration-2 underline-offset-4 flex items-center gap-1 group/btn"
+                >
                     {order.order_number || order.id}
-                </span>
+                    <span className="material-icons-round text-[14px] opacity-0 group-hover/btn:opacity-100 transition-opacity">open_in_new</span>
+                </button>
             </td>
-            <td className="px-4 py-3 align-middle font-mono-finance text-[10px] text-slate-500">
+            <td className="px-3 py-3 align-middle font-mono-finance text-[10px] text-slate-400">
                 {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '-'}
+            </td>
+            <td className="px-3 py-3 align-middle font-mono-finance text-[10px] text-slate-600 font-bold">
+                {order.dueTime ? new Date(order.dueTime).toLocaleDateString('en-GB') : (order.eventDate || '-')}
             </td>
             <td className="px-6 py-3 align-middle">
                 <p className="text-xs font-bold text-slate-800 tracking-tight">{order.customerName || 'Walk-in'}</p>

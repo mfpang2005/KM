@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List
 from database import supabase
 from models import User, UserRole, UserStatus, UserUpdate, UserCreateInternal
@@ -128,7 +128,7 @@ async def create_internal_user(
 @router.patch("/{user_id}/status", response_model=User)
 async def update_user_status(
     user_id: str,
-    status: UserStatus,
+    status: UserStatus = Query(...),
     current_user: dict = Depends(require_admin)
 ):
     """

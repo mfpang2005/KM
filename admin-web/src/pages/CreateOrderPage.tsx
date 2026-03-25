@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import { ProductService, AdminOrderService, CustomerService, type Customer } from '../services/api';
 import { supabase } from '../lib/supabase';
 import { OrderStatus, PaymentMethod } from '../types';
@@ -50,6 +51,9 @@ const EQUIPMENT_LIST = [
 ];
 
 export const CreateOrderPage: React.FC = () => {
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
+    const editingOrderId = searchParams.get('id');
     const [products, setProducts] = useState<Product[]>([]);
     const [productsLoading, setProductsLoading] = useState(true);
     const [cart, setCart] = useState<CartItem[]>([]);
@@ -68,7 +72,14 @@ export const CreateOrderPage: React.FC = () => {
     const [billingPricePerUnit, setBillingPricePerUnit] = useState<number>(0);
     const [paymentReceived, setPaymentReceived] = useState<number>(0);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    
+    // 状态、编号和司机信息（编辑模式所需）
+    const [orderStatus, setOrderStatus] = useState<OrderStatus>(OrderStatus.PENDING);
+    const [existingOrderNumber, setExistingOrderNumber] = useState<string | undefined>(undefined);
+    const [existingDriverId, setExistingDriverId] = useState<string | undefined>(undefined);
+    
     const [confirmedOrder, setConfirmedOrder] = useState<ConfirmedOrderSnapshot | null>(null);
+
     const orderRef = useRef(generateOrderRef());
 
     const [equipments, setEquipments] = useState<Record<string, number>>(
@@ -83,25 +94,96 @@ export const CreateOrderPage: React.FC = () => {
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
 
-    // 加载产品
     useEffect(() => {
         ProductService.getAll()
             .then((productsData) => {
                 const data = Array.isArray(productsData) ? productsData : [];
                 setProducts(data);
 
-                // 初始化自定义价格映射
+                // Initialize custom prices mapping
                 const prices: Record<string, number> = {};
                 data.forEach(p => {
                     prices[p.id] = p.price || 0;
                 });
                 setCustomPrices(prices);
+
+                // If editing, fetch order details AFTER products are loaded
+                if (editingOrderId) {
+                    AdminOrderService.getById(editingOrderId)
+                        .then(order => {
+                            setCustomerName(order.customerName || '');
+                            setCustomerPhone(order.customerPhone || '');
+                            setAddress(order.address || '');
+                            setRemarks(order.remark || '');
+                            
+                            if (order.eventDate) {
+                                setEventDate(order.eventDate);
+                            } else if (order.dueTime) {
+                                const dt = new Date(order.dueTime);
+                                setEventDate(dt.toISOString().split('T')[0]);
+                            }
+
+                            if (order.eventTime) {
+                                setEventTime(order.eventTime);
+                            } else if (order.dueTime) {
+                                const dt = new Date(order.dueTime);
+                                setEventTime(dt.toTimeString().slice(0, 5));
+                            }
+
+                            setBillingUnit(order.billingUnit as any || 'PAX');
+                            setBillingQuantity(order.billingQuantity || 0);
+                            setBillingPricePerUnit(order.billingPricePerUnit || 0);
+                            setPaymentReceived(order.payment_received || 0);
+
+                            // 保存状态和属性以便编辑后保留
+                            setOrderStatus(order.status || OrderStatus.PENDING);
+                            setExistingOrderNumber(order.order_number);
+                            setExistingDriverId(order.driverId);
+
+                            // Map items back to cart
+                            const cartItems: CartItem[] = (order.items || []).map((item: any) => {
+                                const product = data.find(p => p.id === item.id) || {
+                                    id: item.id,
+                                    name: item.name,
+                                    price: item.original_price || item.price,
+                                    category: 'Unknown'
+                                } as Product;
+                                
+                                return {
+                                    product,
+                                    quantity: item.quantity,
+                                    note: item.note || '',
+                                    priceOverride: item.price
+                                };
+                            });
+                            setCart(cartItems);
+
+                            // Map equipments
+                            if (order.equipments) {
+                                setEquipments(prev => ({
+                                    ...prev,
+                                    ...order.equipments
+                                }));
+                                
+                                // Check for custom equipments
+                                const standardKeys = new Set(EQUIPMENT_LIST);
+                                const custom = Object.keys(order.equipments).filter(k => !standardKeys.has(k));
+                                if (custom.length > 0) {
+                                    setCustomEquipments(custom);
+                                }
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Failed to load order for editing', err);
+                            alert('Failed to load order data');
+                        });
+                }
             })
             .catch(err => console.error('Failed to load data', err))
             .finally(() => {
                 setProductsLoading(false);
             });
-    }, []);
+    }, [editingOrderId]);
 
     // NOTE: Supabase Realtime 监听 orders 表变化，确保管理员下单后 App 端可实时收到推送
     useEffect(() => {
@@ -243,17 +325,17 @@ export const CreateOrderPage: React.FC = () => {
                     quantity: i.quantity,
                     note: i.note || undefined,
                 })),
-                status: OrderStatus.PENDING,
+                status: editingOrderId ? orderStatus : OrderStatus.PENDING,
                 dueTime: new Date(`${eventDate.trim()}T${eventTime.trim()}:00`).toISOString(),
                 amount: totalAmount,
                 type: address.trim() ? 'delivery' : 'takeaway',
-                paymentMethod: PaymentMethod.CASH, // Default to cash, finalized in Financials
+                paymentMethod: PaymentMethod.CASH, // Default to cash
                 payment_received: paymentReceived,
                 billingUnit,
                 billingQuantity,
                 billingPricePerUnit,
-                order_number: undefined, // Let backend generate initial DD/NNN
-                driverId: undefined, // 強制不指派司机
+                order_number: editingOrderId ? existingOrderNumber : undefined,
+                driverId: editingOrderId ? existingDriverId : undefined,
                 equipments: Object.keys(activeEquipments).length > 0 ? activeEquipments : undefined,
                 eventDate: eventDate.trim(),
                 eventTime: eventTime.trim(),
@@ -261,10 +343,16 @@ export const CreateOrderPage: React.FC = () => {
                 remarks: remarks.trim(),
             };
 
-            const order = await AdminOrderService.create(payload);
+            let order;
+            if (editingOrderId) {
+                order = await AdminOrderService.update(editingOrderId, payload);
+            } else {
+                order = await AdminOrderService.create(payload);
+            }
+
             setConfirmedOrder({
                 orderId: order.id,
-                orderRef: orderRef.current,
+                orderRef: order.order_number || orderRef.current,
                 total: totalAmount,
                 customerName: customerName.trim(),
                 customerPhone: customerPhone.trim(),
@@ -282,28 +370,13 @@ export const CreateOrderPage: React.FC = () => {
                 payment: '待财务确认',
             });
         } catch (err) {
-            console.error('Failed to create order', err);
-            alert('下单失败，请检查后端服务是否运行');
+            console.error('Failed to save order', err);
+            alert('保存失败，请检查后端服务是否运行');
         } finally {
             setIsSubmitting(false);
         }
     };
 
-    /** 重置表单，再次下单 */
-    const handleReset = () => {
-        setCart([]);
-        setCustomerName('');
-        setCustomerPhone('');
-        setAddress('');
-        setMapsLink('');
-        setRemarks('');
-        setEventDate('');
-        setEventTime('');
-        setPaymentReceived(0);
-        setEquipments(EQUIPMENT_LIST.reduce((acc, eq) => ({ ...acc, [eq]: 0 }), {}));
-        setConfirmedOrder(null);
-        orderRef.current = generateOrderRef();
-    };
 
     // ─── 订单确认成功界面 —— 全部明细 + 可打印收据─────────────────────
     if (confirmedOrder) {
@@ -570,18 +643,11 @@ export const CreateOrderPage: React.FC = () => {
                         {/* 操作按钮 */}
                         <div className="flex flex-col sm:flex-row gap-3 no-print-area mt-4">
                             <button
-                                onClick={() => window.location.href = '/orders'}
-                                className="flex-1 py-3 bg-white border border-slate-200 text-slate-600 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors"
+                                onClick={() => navigate("/orders")}
+                                className="w-full py-4 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-2xl font-black text-base shadow-xl shadow-indigo-500/20 hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2"
                             >
-                                <span className="material-icons-round text-[18px]">list_alt</span>
+                                <span className="material-icons-round text-[20px]">list_alt</span>
                                 查看订单 (Orders)
-                            </button>
-                            <button
-                                onClick={handleReset}
-                                className="flex-1 py-3 bg-gradient-to-r from-indigo-600 to-blue-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-indigo-500/20 transition-all"
-                            >
-                                <span className="material-icons-round text-[18px]">add_shopping_cart</span>
-                                再次下单 (Next)
                             </button>
                         </div>
                     </div>
@@ -921,7 +987,6 @@ export const CreateOrderPage: React.FC = () => {
                                             >
                                                 <div>
                                                     <p className="text-xs font-black text-slate-800">{c.name}</p>
-                                                    <p className="text-[10px] text-slate-400 font-mono italic">{c.phone}</p>
                                                 </div>
                                                 <span className="material-icons-round text-indigo-500 text-sm">history</span>
                                             </button>
@@ -1055,44 +1120,47 @@ export const CreateOrderPage: React.FC = () => {
                                 </div>
                             </div>
 
-                            {/* 计费模块 (Billing Module) */}
-                            <div className="bg-slate-50/50 p-4 rounded-3xl border border-slate-100 space-y-4">
-                                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                                    <span className="material-icons-round text-sm">payments</span>
-                                    计费详情 (Billing Details)
+                            {/* 计费模块 (Billing Module) - ENLARGED */}
+                            <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
+                                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-2">
+                                    <span className="material-icons-round text-base">payments</span>
+                                    计费详情 (BILLING DETAILS)
                                 </h4>
-                                <div className="grid grid-cols-12 gap-3 items-end">
-                                    <div className="col-span-3">
-                                        <p className="text-[9px] font-bold text-slate-400 mb-1">单位 (Unit)</p>
-                                        <select
-                                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
-                                            value={billingUnit}
-                                            onChange={(e) => {
-                                                const unit = e.target.value as 'PAX' | 'SET' | 'PACKET';
-                                                setBillingUnit(unit);
-                                                if (unit === 'PAX' && billingQuantity > 0) {
-                                                    const autoQty = billingQuantity * 2;
-                                                    setEquipments(prev => ({
-                                                        ...prev,
-                                                        '盘子': autoQty,
-                                                        '汤匙': autoQty,
-                                                        '叉子': autoQty,
-                                                        '杯子': autoQty
-                                                    }));
-                                                }
-                                            }}
-                                        >
-                                            <option value="PAX">PAX</option>
-                                            <option value="SET">SET</option>
-                                            <option value="PACKET">PACKET</option>
-                                        </select>
+                                <div className="grid grid-cols-3 gap-4 items-end">
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-black text-slate-400 uppercase ml-1">单位 (UNIT)</p>
+                                        <div className="relative">
+                                            <select
+                                                className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-lg font-black text-slate-800 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm appearance-none pr-10"
+                                                value={billingUnit}
+                                                onChange={(e) => {
+                                                    const unit = e.target.value as 'PAX' | 'SET' | 'PACKET';
+                                                    setBillingUnit(unit);
+                                                    if (unit === 'PAX' && billingQuantity > 0) {
+                                                        const autoQty = billingQuantity * 2;
+                                                        setEquipments(prev => ({
+                                                            ...prev,
+                                                            '盘子': autoQty,
+                                                            '汤匙': autoQty,
+                                                            '叉子': autoQty,
+                                                            '杯子': autoQty
+                                                        }));
+                                                    }
+                                                }}
+                                            >
+                                                <option value="PAX">PAX</option>
+                                                <option value="SET">SET</option>
+                                                <option value="PACKET">PACKET</option>
+                                            </select>
+                                            <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
+                                        </div>
                                     </div>
-                                    <div className="col-span-3">
-                                        <p className="text-[9px] font-bold text-slate-400 mb-1">数量 (Qty)</p>
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-black text-slate-400 uppercase ml-1">数量 (QTY)</p>
                                         <input
                                             type="number"
                                             placeholder="0"
-                                            className="w-full p-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                            className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-lg font-black text-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
                                             value={billingQuantity || ''}
                                             onChange={(e) => {
                                                 const qty = parseFloat(e.target.value) || 0;
@@ -1110,24 +1178,25 @@ export const CreateOrderPage: React.FC = () => {
                                             }}
                                         />
                                     </div>
-                                    <div className="col-span-3">
-                                        <p className="text-[9px] font-bold text-slate-400 mb-1">单价 (RM)</p>
+                                    <div className="space-y-2">
+                                        <p className="text-[11px] font-black text-slate-400 uppercase ml-1">单价 (RM)</p>
                                         <div className="relative">
-                                            <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">RM</span>
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">RM</span>
                                             <input
                                                 type="number"
                                                 step="0.01"
                                                 placeholder="0.00"
-                                                className="w-full pl-7 pr-2 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-indigo-500/20 outline-none"
+                                                className="w-full pl-11 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-lg font-black text-slate-700 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
                                                 value={billingPricePerUnit || ''}
                                                 onChange={(e) => setBillingPricePerUnit(parseFloat(e.target.value) || 0)}
                                             />
                                         </div>
                                     </div>
-                                    <div className="col-span-3">
-                                        <p className="text-[9px] font-bold text-slate-400 mb-1">小计 (Subtotal)</p>
-                                        <div className="w-full p-2 bg-slate-100 border border-transparent rounded-xl text-xs font-black text-slate-700 font-mono">
-                                            RM {(billingQuantity * billingPricePerUnit).toFixed(2)}
+                                    <div className="col-span-3 mt-2">
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2">小计 (Subtotal)</p>
+                                        <div className="w-full p-5 bg-slate-100/50 border border-slate-100 rounded-[1.5rem] text-xl font-black text-slate-900 font-mono flex items-center gap-2">
+                                            <span className="text-sm text-slate-400">RM</span>
+                                            {(billingQuantity * billingPricePerUnit).toFixed(2)}
                                         </div>
                                     </div>
                                 </div>
@@ -1174,3 +1243,5 @@ export const CreateOrderPage: React.FC = () => {
         </div>
     );
 };
+
+export default CreateOrderPage;

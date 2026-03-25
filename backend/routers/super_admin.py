@@ -274,6 +274,7 @@ async def get_all_orders(
 async def get_financials(
     range: str = "today",
     payment_status: str = "all",
+    event_date: Optional[str] = Query(None, description="特定活动日期筛选 (YYYY-MM-DD)"),
     current_user: dict = Depends(require_admin),
 ):
     """
@@ -292,6 +293,10 @@ async def get_financials(
     window_start = (now - timedelta(days=365)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
     
     query = supabase.table("orders").select("*").gte("created_at", window_start).neq("status", "cancelled")
+    
+    if event_date:
+        # 同时匹配 eventDate 字段或 dueTime 的日期部分
+        query = query.or_(f"eventDate.eq.{event_date},dueTime.ilike.{event_date}%")
     
     response = await run_in_threadpool(query.execute)
     all_orders = response.data or []

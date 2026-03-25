@@ -337,7 +337,7 @@ const KitchenCalendarPage: React.FC = () => {
                                                         <p className="text-[10px] text-slate-400 font-bold">暂无明细数据</p>
                                                     )}
                                                     <button
-                                                        onClick={() => navigate('/orders')}
+                                                        onClick={() => navigate(`/orders?highlightOrder=${order.id}`)}
                                                         className="mt-3 w-full py-2 text-[10px] font-black text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl transition-colors flex items-center justify-center gap-1"
                                                     >
                                                         <span className="material-icons-round text-[12px]">open_in_new</span>

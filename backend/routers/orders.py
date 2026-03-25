@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
 from database import supabase
 from models import Order, OrderCreate, OrderUpdate, OrderStatus
@@ -55,7 +55,8 @@ async def _sync_items_to_table(order_id: str, items: list):
 async def get_orders(
     status: Optional[str] = None, 
     sort_by: str = "created_at", 
-    order: str = "desc"
+    order: str = "desc",
+    event_date: Optional[str] = Query(None, description="特定活动日期筛选 (YYYY-MM-DD)")
 ):
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
@@ -65,6 +66,10 @@ async def get_orders(
     query = supabase.table("orders").select("*").gte("created_at", window_start)
     if status and status != 'all':
         query = query.eq("status", status)
+    
+    if event_date:
+        # 同时匹配 eventDate 字段或 dueTime 的日期部分
+        query = query.or_(f"eventDate.eq.{event_date},dueTime.ilike.{event_date}%")
     
     # Map 'asc'/'desc' to boolean for supabase-py (if needed) or use string
     is_desc = order.lower() == "desc"
@@ -380,7 +385,7 @@ async def approve_order(
 @router.post("/{order_id:path}/status", response_model=Order)
 async def update_order_status(
     order_id: str, 
-    status: OrderStatus,
+    status: OrderStatus = Query(...),
     current_user: dict = Depends(require_admin)
 ):
     response = supabase.table("orders").update({"status": status}).eq("id", order_id).execute()
@@ -741,3 +746,61 @@ async def kitchen_complete(
     )
 
     return {"message": "Order marked as ready", "orderId": order_id, "status": "ready"}
+
+
+@router.post("/{order_id:path}/revert")
+async def revert_order_to_production(
+    order_id: str,
+    current_user: dict = Depends(require_admin)
+):
+    """
+    将订单从已完成状态撤回至生产中。
+    1. 订单状态 -> preparing
+    2. 所有关联项 -> pending / is_prepared=False
+    3. 同步 GoEasy 通知
+    """
+    from datetime import datetime, timezone
+    from services.goeasy import notify_order_update
+    from services.audit import record_audit, AuditActions
+    import postgrest
+
+    # 1. 更新订单状态为 preparing
+    response = await run_in_threadpool(
+        supabase.table("orders")
+        .update({
+            "status": "preparing",
+            "updated_at": datetime.now(timezone.utc).isoformat()
+        })
+        .eq("id", order_id)
+        .execute
+    )
+    if not response.data:
+        raise HTTPException(status_code=404, detail="Order not found")
+
+    order_data = response.data[0]
+
+    # 2. 将关联的所有项也重置为 pending (需重新准备)
+    try:
+        await run_in_threadpool(
+            supabase.table("order_items")
+            .update({"is_prepared": False, "status": "pending"})
+            .eq("order_id", order_id)
+            .execute
+        )
+    except postgrest.exceptions.APIError as e:
+        if "PGRST205" not in str(e):
+            print(f"Error resetting order items during revert: {e}")
+
+    # 3. 发送 GoEasy 通知通知系统状态已变动
+    await notify_order_update(order_data, action="revert")
+
+    # 4. 记录审计日志
+    await record_audit(
+        actor_id=current_user.get("id"),
+        actor_role=current_user.get("role"),
+        action=AuditActions.ORDER_REVERT,
+        target=order_id,
+        detail={"new_status": "preparing", "reason": "admin_revert"}
+    )
+
+    return order_data

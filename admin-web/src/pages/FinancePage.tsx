@@ -14,6 +14,7 @@ export const FinancePage: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+    const [eventDate, setEventDate] = useState<string>('');
     const [isCollapsed, setIsCollapsed] = useState(false);
     const { search } = useLocation();
 
@@ -23,11 +24,13 @@ export const FinancePage: React.FC = () => {
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const result = await SuperAdminService.getFinanceSummary(range);
+            const result = await SuperAdminService.getFinanceSummary(range, eventDate);
             setData(result as any);
 
             // Also fetch raw orders for the transaction list
-            const ordersData = await AdminOrderService.getAll();
+            const ordersData = await AdminOrderService.getAll({
+                event_date: eventDate || undefined
+            });
             setOrders(ordersData.slice(0, 50));
         } catch (error) {
             console.error('Failed to load finance data', error);
@@ -82,7 +85,7 @@ export const FinancePage: React.FC = () => {
             scrollContainer.removeEventListener('scroll', handleScroll);
             supabase.removeChannel(channel);
         };
-    }, [range]);
+    }, [range, eventDate]);
 
     if (loading && !data) {
         return (
@@ -218,16 +221,40 @@ export const FinancePage: React.FC = () => {
                         <div className="px-8 py-5 border-b border-white/60 flex items-center justify-between bg-white/30">
                             <div className="flex items-center gap-6">
                                 <h4 className="font-bold text-slate-800 text-sm uppercase tracking-[0.1em]">Live Reconciliation</h4>
-                                <div className="flex bg-slate-100/40 p-1 rounded-full border border-slate-200/50">
-                                    {(['all', 'paid', 'unpaid'] as const).map(s => (
-                                        <button
-                                            key={s}
-                                            onClick={() => setStatusFilter(s)}
-                                            className={`px-4 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] transition-all duration-300 ${statusFilter === s ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
-                                        >
-                                            {s}
-                                        </button>
-                                    ))}
+                                
+                                <div className="flex items-center gap-3">
+                                    {/* Option B: Dedicated Date Filter Bar */}
+                                    <div className="flex items-center gap-2 bg-slate-100/40 px-3 py-1.5 rounded-full border border-slate-200/50 group focus-within:ring-2 focus-within:ring-indigo-500/20 focus-within:bg-white transition-all">
+                                        <span className="material-icons-round text-slate-400 text-[14px]">event</span>
+                                        <input
+                                            type="date"
+                                            value={eventDate}
+                                            onChange={(e) => setEventDate(e.target.value)}
+                                            className="bg-transparent border-none p-0 text-[10px] font-black text-slate-600 focus:ring-0 outline-none uppercase tracking-widest cursor-pointer"
+                                            title="Filter by Event Date"
+                                        />
+                                        {eventDate && (
+                                            <button 
+                                                onClick={() => setEventDate('')} 
+                                                className="flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
+                                                title="Clear Date Filter"
+                                            >
+                                                <span className="material-icons-round text-[14px]">cancel</span>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="flex bg-slate-100/40 p-1 rounded-full border border-slate-200/50">
+                                        {(['all', 'paid', 'unpaid'] as const).map(s => (
+                                            <button
+                                                key={s}
+                                                onClick={() => setStatusFilter(s)}
+                                                className={`px-4 py-1 rounded-full text-[9px] font-black uppercase tracking-[0.1em] transition-all duration-300 ${statusFilter === s ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400 hover:text-slate-600'}`}
+                                            >
+                                                {s}
+                                            </button>
+                                        ))}
+                                    </div>
                                 </div>
                             </div>
                             <button onClick={scrollToReconciliation} className="w-10 h-10 rounded-full bg-white/60 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-all shadow-sm">
@@ -241,7 +268,8 @@ export const FinancePage: React.FC = () => {
                                 <thead>
                                     <tr className="text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">
                                         <th className="px-4 py-4 text-left bg-slate-50/50"># (Order ID)</th>
-                                        <th className="px-4 py-4 text-left bg-slate-50/50">Date</th>
+                                        <th className="px-3 py-4 text-left bg-slate-50/50">Date</th>
+                                        <th className="px-3 py-4 text-left bg-slate-50/50">Event Date</th>
                                         <th className="px-6 py-4 text-left bg-slate-50/50">Customer</th>
                                         <th className="px-4 py-4 text-left bg-slate-50/50">Method</th>
                                         <th className="px-4 py-4 text-right bg-slate-50/50">Total</th>

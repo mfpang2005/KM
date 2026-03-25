@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { AdminOrderService } from '../services/api';
 import type { Order } from '../types';
 import { OrderStatus } from '../types';
@@ -234,7 +233,6 @@ const OrderCard: React.FC<{
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const KitchenPrepPage: React.FC = () => {
-    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'production' | 'history'>('production');
     const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
     const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
@@ -389,6 +387,17 @@ const KitchenPrepPage: React.FC = () => {
         }
     }, []);
 
+    const handleRevert = useCallback(async (orderId: string) => {
+        try {
+            await AdminOrderService.revertOrder(orderId);
+            // Re-fetch to update lists
+            fetchOrders();
+        } catch (e) {
+            console.error('Revert order failed', e);
+            alert('撤回失败，请稍后重试');
+        }
+    }, [fetchOrders]);
+
     const handleKitchenComplete = useCallback(async (orderId: string) => {
         setConfirmingOrders(prev => new Set(prev).add(orderId));
         try {
@@ -430,7 +439,7 @@ const KitchenPrepPage: React.FC = () => {
 
     return (
         <div className="flex flex-col h-full bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 shadow-xl">
-            <header className="pt-8 pb-4 px-8 bg-white border-b border-slate-100 flex flex-col gap-6">
+            <header className="sticky top-0 z-[100] pt-8 pb-4 px-8 bg-white/80 backdrop-blur-3xl border-b border-slate-100 flex flex-col gap-6 shadow-sm">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center border border-blue-500/20">
@@ -525,7 +534,7 @@ const KitchenPrepPage: React.FC = () => {
                             </div>
                         ) : (
                             completedOrders.map(order => (
-                                <div key={order.id} className="bg-white p-5 rounded-[28px] border border-slate-100 flex items-center justify-between hover:shadow-md transition-all">
+                                <div key={order.id} className="bg-white p-5 rounded-[28px] border border-slate-100 flex items-center justify-between hover:shadow-md transition-all group">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 bg-green-50 rounded-2xl flex items-center justify-center border border-green-100">
                                             <span className="material-icons-round text-green-600 text-sm">check_circle</span>
@@ -535,7 +544,16 @@ const KitchenPrepPage: React.FC = () => {
                                             <p className="text-[10px] text-slate-400 font-bold mt-0.5">{order.customerName} • {formatTime(order.dueTime || '')}</p>
                                         </div>
                                     </div>
-                                    <span className="text-[9px] font-black text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-100 uppercase">{order.status}</span>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[9px] font-black text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-100 uppercase">{order.status}</span>
+                                        <button
+                                            onClick={() => handleRevert(order.id)}
+                                            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-orange-500 hover:text-white transition-all flex items-center justify-center shadow-sm active:scale-90"
+                                            title="撤回订单"
+                                        >
+                                            <span className="material-icons-round text-sm">undo</span>
+                                        </button>
+                                    </div>
                                 </div>
                             ))
                         )}

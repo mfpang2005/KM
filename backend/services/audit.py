@@ -67,6 +67,7 @@ class AuditActions:
     ORDER_ITEM_PREPARED = "order_item_prepared"
     ORDER_UPDATE_PHOTOS = "order_update_photos"
     KITCHEN_COMPLETE = "kitchen_complete"
+    ORDER_REVERT = "order_revert"
     
     USER_UPDATE = "update_user"
     USER_PROFILE_UPDATE = "update_user_profile"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../src/lib/supabase';
 import { FleetService, VehicleService, api } from '../src/services/api';
@@ -21,6 +21,15 @@ const DriverList: React.FC = () => {
     const [isAssigning, setIsAssigning] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [rtStatus, setRtStatus] = useState<string>('CONNECTING');
+    const scrollRef = useRef<HTMLDivElement>(null);
+
+    const scroll = (direction: 'left' | 'right') => {
+        if (scrollRef.current) {
+            const { scrollLeft, clientWidth } = scrollRef.current;
+            const scrollTo = direction === 'left' ? scrollLeft - clientWidth / 2 : scrollLeft + clientWidth / 2;
+            scrollRef.current.scrollTo({ left: scrollTo, behavior: 'smooth' });
+        }
+    };
 
     // Add Driver/Vehicle states
     const [showAddVehicle, setShowAddVehicle] = useState(false);
@@ -227,6 +236,30 @@ const DriverList: React.FC = () => {
         );
     }, [vehicles, vehicleSearchQuery]);
 
+    const formatOrderTime = (order: Order) => {
+        let date = order.dueTime ? new Date(order.dueTime) : null;
+        if (!date || isNaN(date.getTime())) {
+            if (order.eventDate && order.eventTime) {
+                let dateStr = order.eventDate;
+                if (dateStr.includes('/')) {
+                    const parts = dateStr.split('/');
+                    if (parts.length === 3) {
+                        const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
+                        dateStr = `${year}-${parts[1]}-${parts[0]}`;
+                    }
+                }
+                date = new Date(`${dateStr}T${order.eventTime}`);
+            }
+        }
+        if (!date || isNaN(date.getTime())) {
+            date = order.created_at ? new Date(order.created_at) : null;
+        }
+        if (!date || isNaN(date.getTime())) return '--:--';
+        return date.toLocaleTimeString('en-MY', { 
+            hour: '2-digit', minute: '2-digit', hour12: false 
+        });
+    };
+
     if (loading) return (
         <div className="h-screen flex flex-col items-center justify-center bg-slate-50/30">
             <div className="relative">
@@ -293,13 +326,15 @@ const DriverList: React.FC = () => {
                                 }`}></span>
                                 {rtStatus === 'SUBSCRIBED' ? 'Live Sync Active' : `Sync: ${rtStatus}`}
                             </div>
-                            <button 
-                                onClick={() => setShowAddVehicle(true)}
-                                className="px-8 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5 shadow-xl shadow-slate-900/20"
-                            >
-                                <span className="material-icons-round text-sm">add_circle</span>
-                                Enroll Vehicle
-                            </button>
+                            {viewMode === 'inventory' && (
+                                <button 
+                                    onClick={() => setShowAddVehicle(true)}
+                                    className="px-8 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] hover:bg-blue-600 hover:scale-105 active:scale-95 transition-all flex items-center gap-2.5 shadow-xl shadow-slate-900/20"
+                                >
+                                    <span className="material-icons-round text-sm">add_circle</span>
+                                    Enroll Vehicle
+                                </button>
+                            )}
                         </div>
                     </div>
                     
@@ -371,11 +406,28 @@ const DriverList: React.FC = () => {
                                 <div className="flex items-center gap-3">
                                     <h2 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.3em]">待指派任务池 <span className="text-blue-600 ml-2">Mission Pool</span></h2>
                                     <span className="px-2.5 py-1 bg-blue-50 text-blue-600 rounded-lg text-[10px] font-black border border-blue-100/50">{pendingOrders.length}</span>
+                                    <div className="flex gap-1 ml-4 no-print-area">
+                                        <button 
+                                            onClick={() => scroll('left')}
+                                            className="w-7 h-7 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-100 transition-all shadow-sm"
+                                        >
+                                            <span className="material-icons-round text-sm">chevron_left</span>
+                                        </button>
+                                        <button 
+                                            onClick={() => scroll('right')}
+                                            className="w-7 h-7 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:border-blue-100 transition-all shadow-sm"
+                                        >
+                                            <span className="material-icons-round text-sm">chevron_right</span>
+                                        </button>
+                                    </div>
                                 </div>
-                                <div className="h-px flex-1 mx-10 bg-slate-100"></div>
+                                <div className="h-px flex-1 mx-10 bg-slate-100 placeholder-hide"></div>
                             </div>
 
-                            <div className="flex gap-4 overflow-x-auto no-scrollbar pb-6 -mx-4 px-4 mask-fade-right">
+                            <div 
+                                ref={scrollRef}
+                                className="flex gap-4 overflow-x-auto no-scrollbar pb-6 -mx-4 px-4 mask-fade-right scroll-smooth"
+                            >
                                 {pendingOrders.map(order => (
                                     <div 
                                         key={order.id} 
@@ -395,7 +447,7 @@ const DriverList: React.FC = () => {
                                             <div className="bg-slate-50 p-2 rounded-xl border border-slate-100 text-center min-w-[44px]">
                                                 <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Due</p>
                                                 <p className="text-xs font-black text-slate-800 font-mono leading-none">
-                                                    {order.dueTime ? new Date(order.dueTime).toLocaleTimeString('en-MY', { hour: '2-digit', minute: '2-digit', hour12: false }) : '--:--'}
+                                                    {formatOrderTime(order)}
                                                 </p>
                                             </div>
                                         </div>
@@ -423,7 +475,7 @@ const DriverList: React.FC = () => {
                                             }`}
                                         >
                                             <span className="material-icons-round text-sm">{selectedOrderForAssignment?.id === order.id ? 'close' : 'assignment_ind'}</span>
-                                            {selectedOrderForAssignment?.id === order.id ? 'Cancel Selection' : 'Assign Mission'}
+                                            {selectedOrderForAssignment?.id === order.id ? 'Cancel' : 'Assign Mission'}
                                         </button>
                                     </div>
                                 ))}
@@ -432,41 +484,41 @@ const DriverList: React.FC = () => {
                     )}
 
                     {/* Fleet List */}
-                    <div id="fleet-list" className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-6 pb-8">
+                    <div id="fleet-list" className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-8 pb-12">
                         {filteredDrivers.map(driver => (
                             <div 
                                 key={driver.id} 
-                                className={`group relative bg-white border rounded-[2rem] p-1 shadow-xl transition-all duration-500 hover:-translate-y-2 ${
+                                className={`group relative bg-white border rounded-[2.5rem] p-1 shadow-xl transition-all duration-500 hover:-translate-y-2 ${
                                     selectedOrderForAssignment ? 'border-blue-200 ring-4 ring-blue-50/50' : 'border-slate-50'
                                 }`}
                             >
-                                <div className="bg-slate-900 rounded-[1.8rem] p-6 relative overflow-hidden h-full flex flex-col">
+                                <div className="bg-slate-900 rounded-[2.2rem] p-10 relative overflow-hidden h-full flex flex-col">
                                     {/* Accent background */}
                                     <div className="absolute top-0 right-0 w-48 h-48 bg-blue-500/10 blur-[80px] rounded-full group-hover:bg-blue-500/20 transition-all pointer-events-none"></div>
                                     
-                                    <div className="relative flex flex-col lg:flex-row gap-6 items-start flex-1">
+                                    <div className="relative flex flex-col lg:flex-row gap-10 items-start flex-1">
                                         {/* Driver Identity */}
                                         <div className="flex flex-row lg:flex-col items-center lg:items-start gap-4 shrink-0">
                                             <div className="relative">
-                                                <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20 overflow-hidden shadow-inner group-hover:scale-105 transition-transform duration-500">
-                                                    {driver.avatar_url ? <img src={driver.avatar_url} className="w-full h-full object-cover" alt="" /> : <span className="material-icons-round text-3xl">person</span>}
+                                                <div className="w-20 h-20 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/20 overflow-hidden shadow-inner group-hover:scale-105 transition-transform duration-500">
+                                                    <span className="material-icons-round text-4xl">person</span>
                                                 </div>
-                                                <div className={`absolute -bottom-1 -right-1 w-6 h-6 rounded-lg border-4 border-slate-900 flex items-center justify-center shadow-lg ${driver.activeOrders.length > 0 ? 'bg-emerald-500' : 'bg-slate-700'}`}>
-                                                    <span className="material-icons-round text-white text-[12px]">{driver.activeOrders.length > 0 ? 'local_shipping' : 'potted_plant'}</span>
+                                                <div className={`absolute -bottom-1 -right-1 w-7 h-7 rounded-lg border-4 border-slate-900 flex items-center justify-center shadow-lg ${driver.activeOrders.length > 0 ? 'bg-emerald-500' : 'bg-slate-700'}`}>
+                                                    <span className="material-icons-round text-white text-[14px]">{driver.activeOrders.length > 0 ? 'local_shipping' : 'potted_plant'}</span>
                                                 </div>
                                             </div>
                                             <div className="text-left lg:text-left">
-                                                <h3 className="text-lg font-black text-white tracking-tight">{driver.name}</h3>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <span className="material-icons-round text-blue-400 text-xs">settings_phone</span>
-                                                    <p className="text-[10px] font-black text-blue-400 uppercase tracking-widest">{driver.phone || 'NO PHONE'}</p>
+                                                <h3 className="text-xl font-black text-white tracking-tight">{driver.name}</h3>
+                                                <div className="flex items-center gap-2 mt-2">
+                                                    <span className="material-icons-round text-blue-400 text-sm">settings_phone</span>
+                                                    <p className="text-[11px] font-black text-blue-400 uppercase tracking-widest">{driver.phone || 'NO PHONE'}</p>
                                                 </div>
                                             </div>
                                         </div>
 
                                         {/* Operational Info */}
-                                        <div className="flex-1 space-y-6 w-full">
-                                            <div className="grid grid-cols-2 gap-4">
+                                        <div className="flex-1 space-y-10 w-full">
+                                            <div className="grid grid-cols-2 gap-6">
                                                 <div className="bg-white/5 rounded-2xl p-5 border border-white/5 backdrop-blur-md group-hover:bg-white/10 transition-colors">
                                                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Current Asset</p>
                                                     <p className="text-sm font-black text-white font-mono tracking-widest leading-none">
@@ -479,14 +531,13 @@ const DriverList: React.FC = () => {
                                                 <div className="bg-white/5 rounded-2xl p-5 border border-white/5 backdrop-blur-md group-hover:bg-white/10 transition-colors">
                                                     <p className="text-[9px] font-black text-slate-500 uppercase tracking-widest mb-2">Today's Load</p>
                                                     <div className="flex items-baseline gap-2">
-                                                        <span className="text-2xl font-black text-white font-mono leading-none">{driver.completedToday}</span>
-                                                        <span className="text-[9px] font-black text-slate-500 uppercase tracking-tighter">Done</span>
+                                                        <span className="text-[24px] font-black text-cyan-400 font-mono leading-none">{driver.completedToday}</span>
                                                     </div>
                                                 </div>
                                             </div>
 
                                             {/* Mission Section */}
-                                            <div className="space-y-3">
+                                            <div className="space-y-4">
                                                 {driver.activeOrders.length > 0 ? (
                                                     driver.activeOrders.map(o => (
                                                         <div key={o.id} className="p-4 rounded-2xl bg-white/5 border border-white/5 space-y-3 group/mission hover:bg-white/10 transition-all">
@@ -589,20 +640,20 @@ const DriverList: React.FC = () => {
                                         </span>
                                     </div>
                                     <div className="flex flex-col items-end gap-2 text-right">
-                                        <div className={`relative px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border transition-colors shadow-sm ${
-                                            v.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
-                                            v.status === 'busy' ? 'bg-orange-50 text-orange-600 border-orange-100' :
+                                        <div className={`relative px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest border-2 transition-colors shadow-sm ${
+                                            v.status === 'available' ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 
+                                            v.status === 'repair' ? 'bg-orange-50 text-orange-600 border-orange-100' :
                                             'bg-red-50 text-red-600 border-red-100'
                                         }`}>
-                                            {v.status === 'available' ? '● Ready' : v.status === 'busy' ? '○ Active' : '⚠ Action Needed'}
+                                            {v.status === 'available' ? 'RDY' : v.status === 'repair' ? 'RP' : 'OUT'}
                                             <select 
-                                                className="opacity-0 absolute inset-0 cursor-pointer w-full h-full"
+                                                className="opacity-0 absolute inset-0 cursor-pointer w-full h-full text-slate-900"
                                                 value={v.status}
                                                 onChange={(e) => handleUpdateVehicleStatus(v.id, e.target.value as any)}
                                             >
-                                                <option value="available">Available</option>
-                                                <option value="busy">Busy</option>
-                                                <option value="repair">Repair</option>
+                                                <option value="available">Ready (RDY)</option>
+                                                <option value="busy">Out (OUT)</option>
+                                                <option value="repair">Repair (RP)</option>
                                             </select>
                                         </div>
                                         <p className="text-[10px] font-black text-slate-300 uppercase tracking-tighter">
@@ -738,12 +789,11 @@ const DriverList: React.FC = () => {
                                     >
                                         <option value="Van">🚚 Van</option>
                                         <option value="Truck">🚛 Truck</option>
-                                        <option value="Motorcycle">🛵 Motorcycle</option>
                                         <option value="Car">🚗 Car</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Road Tax Expiry</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">路税到期 Road Tax Expiry</label>
                                     <input 
                                         type="date"
                                         className="w-full px-6 py-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-[13px] font-bold outline-none focus:ring-4 focus:ring-blue-100 transition-all"
@@ -801,12 +851,11 @@ const DriverList: React.FC = () => {
                                     >
                                         <option value="Van">🚚 Van</option>
                                         <option value="Truck">🚛 Truck</option>
-                                        <option value="Motorcycle">🛵 Motorcycle</option>
                                         <option value="Car">🚗 Car</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Road Tax Expiry</label>
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">路税到期 Road Tax Expiry</label>
                                     <input 
                                         type="date"
                                         className="w-full px-6 py-4 bg-slate-50 border border-slate-200/50 rounded-2xl text-[13px] font-bold outline-none"
