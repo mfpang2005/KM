@@ -68,8 +68,8 @@ async def get_orders(
         query = query.eq("status", status)
     
     if event_date:
-        # 同时匹配 eventDate 字段或 dueTime 的日期部分
-        query = query.or_(f"eventDate.eq.{event_date},dueTime.ilike.{event_date}%")
+        # 只匹配 dueTime 的日期部分，因为 eventDate 列在数据库中不存在
+        query = query.ilike("dueTime", f"{event_date}%")
     
     # Map 'asc'/'desc' to boolean for supabase-py (if needed) or use string
     is_desc = order.lower() == "desc"

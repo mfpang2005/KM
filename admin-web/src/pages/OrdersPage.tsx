@@ -186,16 +186,6 @@ export const OrdersPage: React.FC = () => {
         navigate(`/create-order?id=${order.id}`);
     };
 
-    const handleApprove = async (orderId: string) => {
-        try {
-            await api.patch(`/orders/${orderId}/approve`);
-            await loadOrders();
-        } catch (error: any) {
-            console.error('Failed to approve order', error);
-            const errorMsg = error.response?.data?.detail || error.message || 'Unknown Error';
-            alert(`审批失败 / Approval failed: ${errorMsg}`);
-        }
-    };
 
     const handleDeleteClick = (id: string) => {
         setDeleteOrderId(id);
@@ -284,20 +274,7 @@ export const OrdersPage: React.FC = () => {
                                 <option value={OrderStatus.COMPLETED}>Completed</option>
                             </select>
 
-                            <div className="relative w-48 lg:w-64 flex items-center gap-2">
-                                <div className="relative flex-1">
-                                    <span className="material-icons-round absolute left-3 top-2.5 text-slate-400 text-sm">search</span>
-                                    <input
-                                        id="order-search"
-                                        name="order-search"
-                                        type="text"
-                                        placeholder="Search name/ID..."
-                                        value={searchQuery}
-                                        onChange={e => setSearchQuery(e.target.value)}
-                                        className="w-full pl-10 pr-4 py-2 border border-slate-200 rounded-xl bg-white/50 backdrop-blur text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all font-bold"
-                                    />
-                                </div>
-                                
+                            <div className="flex items-center gap-2">
                                 <div className="relative flex items-center bg-white/50 backdrop-blur border border-slate-200 rounded-xl px-3 py-2 group focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
                                     <span className="material-icons-round text-slate-400 text-[16px] mr-2">event</span>
                                     <input
@@ -425,15 +402,6 @@ export const OrdersPage: React.FC = () => {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4 pr-8 text-right space-x-1.5 whitespace-nowrap">
-                                                {order.status === OrderStatus.PENDING && (
-                                                    <button
-                                                        onClick={(e) => { e.stopPropagation(); handleApprove(order.id); }}
-                                                        title="Approve Order"
-                                                        className="w-8 h-8 inline-flex items-center justify-center bg-green-50 text-green-600 rounded-lg font-bold hover:bg-green-100 hover:scale-110 transition-all shadow-sm group"
-                                                    >
-                                                        <span className="material-icons-round text-[16px]">check_circle</span>
-                                                    </button>
-                                                )}
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); setSelectedPrintOrder(order); }}
                                                     title="View Bill / Print"

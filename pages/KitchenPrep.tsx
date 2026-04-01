@@ -5,6 +5,7 @@ import { OrderStatus } from '../types';
 import { supabase } from '../src/lib/supabase';
 import * as XLSX from 'xlsx';
 import PullToRefresh from '../src/components/PullToRefresh';
+import GoEasy from 'goeasy';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -66,6 +67,19 @@ const INITIAL_RECIPES: Recipe[] = [
         ]
     }
 ];
+
+// ─── Walkie-Talkie Constants ──────────────────────────────────────────────────
+const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
+const GOEASY_HOST = 'singapore.goeasy.io';
+const CHANNEL = 'KIM_LONG_COMUNITY';
+
+const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -271,6 +285,17 @@ const KitchenPrepPage: React.FC = () => {
     // NOTE: Track orders being fetched to avoid duplicate item loads
     const fetchingItemsRef = useRef<Set<string>>(new Set());
 
+    // ─── PTT / Walkie-Talkie States ───────────────────────────────────────────
+    const [userId, setUserId] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState<string>('kitchen');
+    const [isPttOpen, setIsPttOpen] = useState(false);
+    const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'CONNECTED' | 'TALKING' | 'LISTENING'>('IDLE');
+    const [isTransmitting, setIsTransmitting] = useState(false);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
+
     // ── Data Fetching ─────────────────────────────────────────────────────────
 
     const fetchOrders = useCallback(async () => {
@@ -356,11 +381,152 @@ const KitchenPrepPage: React.FC = () => {
             setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         }, 10_000);
 
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+                setUserId(session.user.id);
+                setUserEmail(session.user.email || 'kitchen');
+            }
+        });
+
         return () => {
             clearInterval(timer);
             supabase.removeChannel(ch);
         };
     }, [fetchOrders]);
+
+    // ─── PTT Logic ────────────────────────────────────────────────────────────
+
+    const playAudio = useCallback(async (content: string) => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+        try {
+            const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
+            const binary = atob(base64);
+            const buf = new ArrayBuffer(binary.length);
+            const view = new Uint8Array(buf);
+            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
+            const src = audioContextRef.current.createBufferSource();
+            src.buffer = audioBuf;
+            src.connect(audioContextRef.current.destination);
+            src.onended = () => setPttStatus('CONNECTED');
+            src.start(0);
+            setPttStatus('LISTENING');
+        } catch (err) {
+            console.error('[Kitchen PTT] Audio decode error', err);
+            setPttStatus('CONNECTED');
+        }
+    }, []);
+
+    const startPttSession = async () => {
+        setIsPttOpen(true);
+        setPttStatus('CONNECTING');
+
+        const doConnect = () => {
+            try {
+                const goEasy = GoEasy.getInstance({ host: GOEASY_HOST, appkey: GOEASY_APPKEY, modules: ['pubsub'] });
+                goEasyRef.current = goEasy;
+
+                const myId = userId || `kitchen-${Math.random().toString(36).slice(2, 9)}`;
+                goEasy.connect({
+                    id: myId,
+                    data: { role: 'kitchen' },
+                    onSuccess: () => {
+                        setPttStatus('CONNECTED');
+                        goEasy.pubsub.subscribe({
+                            channel: CHANNEL,
+                            onMessage: async (message: any) => {
+                                try {
+                                    const payload = JSON.parse(message.content);
+                                    if (payload.senderId === myId) return;
+                                    if (payload.receiverId !== 'GLOBAL') return;
+                                    const audioContent = payload.content || payload.audio;
+                                    if (payload.type === 'audio' && audioContent) {
+                                        await playAudio(audioContent);
+                                    }
+                                } catch (err) {}
+                            }
+                        });
+                    },
+                    onFailed: () => setPttStatus('IDLE')
+                });
+            } catch (e) {
+                setPttStatus('IDLE');
+            }
+        };
+
+        try {
+            const status = GoEasy.getConnectionStatus();
+            if (status === 'disconnected') doConnect();
+            else GoEasy.disconnect({ onSuccess: doConnect, onFailed: doConnect });
+        } catch { doConnect(); }
+    };
+
+    const handlePttDown = async () => {
+        if (pttStatus !== 'CONNECTED') return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mr = new MediaRecorder(stream);
+            audioChunksRef.current = [];
+            mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+            mr.start(100);
+            mediaRecorderRef.current = mr;
+            setIsTransmitting(true);
+            setPttStatus('TALKING');
+        } catch { alert('请允许麦克风权限以使用对讲功能。'); }
+    };
+
+    const handlePttUp = () => {
+        if (!mediaRecorderRef.current || !isTransmitting) return;
+        setIsTransmitting(false);
+        setPttStatus('CONNECTED');
+        const mr = mediaRecorderRef.current;
+        mr.onstop = async () => {
+            if (!goEasyRef.current) return;
+            try {
+                const mimeType = mr.mimeType || 'audio/webm';
+                const blob = new Blob(audioChunksRef.current, { type: mimeType });
+                if (blob.size < 100) return;
+
+                const myId = userId || 'unknown-kitchen';
+                const myName = userEmail || '厨房端';
+                const base64Audio = await blobToBase64(blob);
+                const ts = Date.now();
+                const msgId = `${myId}-${ts}`;
+
+                goEasyRef.current.pubsub.publish({
+                    channel: CHANNEL,
+                    message: JSON.stringify({
+                        id: msgId,
+                        type: 'audio',
+                        senderId: myId,
+                        senderLabel: myName,
+                        senderRole: 'kitchen',
+                        content: base64Audio,
+                        timestamp: ts,
+                        receiverId: 'GLOBAL',
+                        duration: 0
+                    })
+                });
+
+                supabase.from('messages').insert([{
+                    id: msgId,
+                    sender_id: myId,
+                    sender_label: myName,
+                    sender_role: 'kitchen',
+                    receiver_id: 'GLOBAL',
+                    content: base64Audio,
+                    type: 'audio',
+                    duration: 0
+                }]);
+            } catch (err) {}
+            audioChunksRef.current = [];
+        };
+        mr.stop();
+        mr.stream.getTracks().forEach(t => t.stop());
+    };
 
     // ── Event Handlers ────────────────────────────────────────────────────────
 
@@ -559,8 +725,39 @@ const KitchenPrepPage: React.FC = () => {
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{currentTime} • Real-time Monitoring</p>
                         </div>
                     </div>
-                    {/* Stats badges */}
-                    <div className="hidden md:flex items-center gap-3">
+                    <div className="flex items-center gap-6">
+                        {/* PTT Walkie-Talkie Button */}
+                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 p-1.5 rounded-2xl hidden md:flex">
+                            {!isPttOpen ? (
+                                <button
+                                    onClick={startPttSession}
+                                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
+                                >
+                                    <span className="material-icons-round text-[16px]">cell_tower</span>
+                                    Connect Dispatch
+                                </button>
+                            ) : (
+                                <button
+                                    onMouseDown={(e) => { e.preventDefault(); handlePttDown(); }}
+                                    onMouseUp={(e) => { e.preventDefault(); handlePttUp(); }}
+                                    onMouseLeave={handlePttUp}
+                                    onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
+                                    onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
+                                    className={`px-6 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-2 select-none ${
+                                        pttStatus === 'TALKING' ? 'bg-red-500 text-white animate-pulse shadow-red-500/30' : 
+                                        pttStatus === 'LISTENING' ? 'bg-amber-400 text-white shadow-amber-400/30' :
+                                        pttStatus === 'CONNECTED' ? 'bg-blue-600 text-white shadow-blue-500/30 hover:bg-blue-700' :
+                                        'bg-slate-300 text-slate-500 cursor-wait'
+                                    }`}
+                                >
+                                    <span className="material-icons-round text-[16px]">{pttStatus === 'TALKING' ? 'mic' : pttStatus === 'LISTENING' ? 'volume_up' : 'mic_none'}</span>
+                                    {pttStatus === 'TALKING' ? 'Transmitting...' : pttStatus === 'LISTENING' ? 'Receiving...' : pttStatus === 'CONNECTED' ? 'Hold To Talk' : 'Connecting...'}
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Stats badges */}
+                        <div className="hidden md:flex items-center gap-3">
                         <div className="px-4 py-2 bg-amber-50 border border-amber-100 rounded-2xl text-center">
                             <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Active</p>
                             <p className="text-xl font-black text-amber-700 leading-none">{activeCount}</p>

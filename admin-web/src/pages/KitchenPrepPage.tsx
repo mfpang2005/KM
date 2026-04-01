@@ -97,16 +97,15 @@ const OrderCard: React.FC<{
             <div className={`p-5 flex flex-col gap-4 border-b rounded-t-[32px] ${allPrepared ? 'bg-green-50/50 border-green-100' : isUrgent ? 'bg-amber-50/50 border-amber-100' : 'bg-slate-50/30 border-slate-50'}`}>
                 <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">Order Ticket</span>
-                            <span className="text-[10px] font-bold text-slate-300 leading-none">#</span>
-                            <span className="text-xs font-black text-slate-900 tracking-tight leading-none">{order.id}</span>
-                            <span className={`ml-2 px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider
+                        <div className="flex flex-wrap items-center gap-2 mb-1.5">
+                            <span className="text-[10px] font-black text-slate-500 bg-slate-200/50 px-1.5 py-0.5 rounded uppercase tracking-widest leading-none shrink-0">ID</span>
+                            <span className="text-xs font-black text-slate-900 tracking-tight leading-none truncate max-w-[90px]" title={order.id}>{order.id}</span>
+                            <span className={`px-1.5 py-0.5 rounded-md text-[8px] font-black uppercase tracking-wider shrink-0
                                 ${order.status === 'pending' ? 'bg-yellow-100 text-yellow-700 border border-yellow-200' : 'bg-blue-100 text-blue-700 border border-blue-200'}`}>
                                 {order.status}
                             </span>
                         </div>
-                        <h3 className="text-base font-black text-slate-800 tracking-tight truncate pr-2">{order.customerName}</h3>
+                        <h3 className="text-sm font-black text-slate-800 tracking-tight truncate pr-2">{order.customerName}</h3>
                     </div>
                     <div className={`px-3 py-1.5 rounded-xl flex flex-col items-center justify-center min-w-[70px] border shadow-sm shrink-0
                         ${isUrgent ? 'bg-amber-500 border-amber-400 text-white animate-pulse' : 'bg-white border-slate-100 text-blue-600'}`}>

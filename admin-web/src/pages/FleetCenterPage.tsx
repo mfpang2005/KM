@@ -4,6 +4,20 @@ import { supabase } from '../lib/supabase';
 import { FleetService, VehicleService, api, AdminOrderService } from '../services/api';
 import type { User, Vehicle, DriverAssignment, Order } from '../types';
 import { OrderStatus } from '../types';
+import GoEasy from 'goeasy';
+
+// ─── Walkie-Talkie Constants ──────────────────────────────────────────────────
+const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
+const GOEASY_HOST = 'singapore.goeasy.io';
+const CHANNEL = 'KIM_LONG_COMUNITY';
+
+const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+    });
 
 interface FleetDriver extends User {
     activeAssignment?: DriverAssignment & { vehicle: Vehicle };
@@ -23,6 +37,17 @@ export const FleetCenterPage: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [rtStatus, setRtStatus] = useState<string>('CONNECTING');
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // ─── PTT / Walkie-Talkie States ───────────────────────────────────────────
+    const [userId, setUserId] = useState<string | null>(null);
+    const [userEmail, setUserEmail] = useState<string>('dispatcher');
+    const [isPttOpen, setIsPttOpen] = useState(false);
+    const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'CONNECTED' | 'TALKING' | 'LISTENING'>('IDLE');
+    const [isTransmitting, setIsTransmitting] = useState(false);
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const audioChunksRef = useRef<Blob[]>([]);
+    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
 
     const scroll = (direction: 'left' | 'right') => {
         if (scrollRef.current) {
@@ -97,8 +122,150 @@ export const FleetCenterPage: React.FC = () => {
             supabase.channel('fleet-orders').on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => loadData()).subscribe(),
             supabase.channel('fleet-vehicles').on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => loadData()).subscribe()
         ];
+        
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) {
+                setUserId(session.user.id);
+                setUserEmail(session.user.email || 'dispatcher');
+            }
+        });
+
         return () => { channels.forEach(c => supabase.removeChannel(c)); };
     }, [loadData]);
+
+    // ─── PTT Logic ────────────────────────────────────────────────────────────
+
+    const playAudio = useCallback(async (content: string) => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
+        try {
+            const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
+            const binary = atob(base64);
+            const buf = new ArrayBuffer(binary.length);
+            const view = new Uint8Array(buf);
+            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
+            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
+            const src = audioContextRef.current.createBufferSource();
+            src.buffer = audioBuf;
+            src.connect(audioContextRef.current.destination);
+            src.onended = () => setPttStatus('CONNECTED');
+            src.start(0);
+            setPttStatus('LISTENING');
+        } catch (err) {
+            console.error('[Fleet PTT] Audio decode error', err);
+            setPttStatus('CONNECTED');
+        }
+    }, []);
+
+    const startPttSession = async () => {
+        setIsPttOpen(true);
+        setPttStatus('CONNECTING');
+
+        const doConnect = () => {
+            try {
+                const goEasy = GoEasy.getInstance({ host: GOEASY_HOST, appkey: GOEASY_APPKEY, modules: ['pubsub'] });
+                goEasyRef.current = goEasy;
+
+                const myId = userId || `dispatcher-${Math.random().toString(36).slice(2, 9)}`;
+                goEasy.connect({
+                    id: myId,
+                    data: { role: 'admin' },
+                    onSuccess: () => {
+                        setPttStatus('CONNECTED');
+                        goEasy.pubsub.subscribe({
+                            channel: CHANNEL,
+                            onMessage: async (message: any) => {
+                                try {
+                                    const payload = JSON.parse(message.content);
+                                    if (payload.senderId === myId) return;
+                                    if (payload.receiverId !== 'GLOBAL') return;
+                                    const audioContent = payload.content || payload.audio;
+                                    if (payload.type === 'audio' && audioContent) {
+                                        await playAudio(audioContent);
+                                    }
+                                } catch (err) {}
+                            }
+                        });
+                    },
+                    onFailed: () => setPttStatus('IDLE')
+                });
+            } catch (e) {
+                setPttStatus('IDLE');
+            }
+        };
+
+        try {
+            const status = GoEasy.getConnectionStatus();
+            if (status === 'disconnected') doConnect();
+            else GoEasy.disconnect({ onSuccess: doConnect, onFailed: doConnect });
+        } catch { doConnect(); }
+    };
+
+    const handlePttDown = async () => {
+        if (pttStatus !== 'CONNECTED') return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mr = new MediaRecorder(stream);
+            audioChunksRef.current = [];
+            mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+            mr.start(100);
+            mediaRecorderRef.current = mr;
+            setIsTransmitting(true);
+            setPttStatus('TALKING');
+        } catch { alert('请允许麦克风权限以使用对讲功能。'); }
+    };
+
+    const handlePttUp = () => {
+        if (!mediaRecorderRef.current || !isTransmitting) return;
+        setIsTransmitting(false);
+        setPttStatus('CONNECTED');
+        const mr = mediaRecorderRef.current;
+        mr.onstop = async () => {
+            if (!goEasyRef.current) return;
+            try {
+                const mimeType = mr.mimeType || 'audio/webm';
+                const blob = new Blob(audioChunksRef.current, { type: mimeType });
+                if (blob.size < 100) return;
+
+                const myId = userId || 'unknown-admin';
+                const myName = userEmail || '车队调度员';
+                const base64Audio = await blobToBase64(blob);
+                const ts = Date.now();
+                const msgId = `${myId}-${ts}`;
+
+                goEasyRef.current.pubsub.publish({
+                    channel: CHANNEL,
+                    message: JSON.stringify({
+                        id: msgId,
+                        type: 'audio',
+                        senderId: myId,
+                        senderLabel: myName,
+                        senderRole: 'admin',
+                        content: base64Audio,
+                        timestamp: ts,
+                        receiverId: 'GLOBAL',
+                        duration: 0
+                    })
+                });
+
+                supabase.from('messages').insert([{
+                    id: msgId,
+                    sender_id: myId,
+                    sender_label: myName,
+                    sender_role: 'admin',
+                    receiver_id: 'GLOBAL',
+                    content: base64Audio,
+                    type: 'audio',
+                    duration: 0
+                }]);
+            } catch (err) {}
+            audioChunksRef.current = [];
+        };
+        mr.stop();
+        mr.stream.getTracks().forEach(t => t.stop());
+    };
 
     const stats = useMemo(() => ({
         activeDrivers: drivers.filter(d => d.activeOrders.length > 0).length,
@@ -194,11 +361,14 @@ export const FleetCenterPage: React.FC = () => {
     };
 
     const filteredDrivers = useMemo(() => {
-        return drivers.filter(d => 
-            d.name?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-            d.phone?.includes(searchQuery) ||
-            d.activeAssignment?.vehicle?.plate_no?.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+        return drivers.filter(d => {
+            // 过滤掉没有名字的占位/无效账号
+            if (!d.name || d.name.trim() === '') return false;
+            
+            return d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                   d.phone?.includes(searchQuery) ||
+                   d.activeAssignment?.vehicle?.plate_no?.toLowerCase().includes(searchQuery.toLowerCase());
+        });
     }, [drivers, searchQuery]);
 
     const filteredVehicles = useMemo(() => {
@@ -208,18 +378,15 @@ export const FleetCenterPage: React.FC = () => {
         );
     }, [vehicles, vehicleSearchQuery]);
 
-    const formatOrderTime = (order: Order) => {
+    const formatOrderTime = (order: Order, includeDate = true) => {
         let date = order.dueTime ? new Date(order.dueTime) : null;
         
-        // 1. 如果 dueTime 无效，尝试 eventDate + eventTime
         if (!date || isNaN(date.getTime())) {
             if (order.eventDate && order.eventTime) {
-                // 尝试处理 DD/MM/YYYY 或 DD/MM/YY 这种非标准格式
                 let dateStr = order.eventDate;
                 if (dateStr.includes('/')) {
                     const parts = dateStr.split('/');
                     if (parts.length === 3) {
-                        // 假设为 DD/MM/YY(YY)
                         const year = parts[2].length === 2 ? `20${parts[2]}` : parts[2];
                         dateStr = `${year}-${parts[1]}-${parts[0]}`;
                     }
@@ -228,19 +395,24 @@ export const FleetCenterPage: React.FC = () => {
             }
         }
         
-        // 2. 如果仍然无效，使用 created_at 作为保底
         if (!date || isNaN(date.getTime())) {
             date = order.created_at ? new Date(order.created_at) : null;
         }
 
-        // 3. 最终检查
         if (!date || isNaN(date.getTime())) return '--:--';
         
-        return date.toLocaleTimeString('en-MY', { 
+        const timeStr = date.toLocaleTimeString('en-MY', { 
             hour: '2-digit', 
             minute: '2-digit', 
             hour12: false 
         });
+
+        if (includeDate) {
+            const dateStr = `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}`;
+            return `${dateStr} ${timeStr}`;
+        }
+        
+        return timeStr;
     };
 
     if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50/10"><div className="w-10 h-10 border-2 border-blue-500 border-t-transparent animate-spin rounded-full"></div></div>;
@@ -254,12 +426,45 @@ export const FleetCenterPage: React.FC = () => {
                         <span className="material-icons-round text-lg">local_shipping</span>
                     </div>
                     <div>
-                        <h1 className="text-xl font-black tracking-tighter">车队控制 <span className="text-blue-600">Fleet Control</span></h1>
+                        <div className="flex items-center gap-2">
+                            <h1 className="text-xl font-black tracking-tighter">车队控制 <span className="text-blue-600">Fleet Control</span></h1>
+                            <span className="text-[9px] bg-red-600 text-white px-1.5 py-0.5 rounded-full font-black animate-pulse">ULTRA V2</span>
+                        </div>
                         <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{rtStatus === 'SUBSCRIBED' ? '● Live Sync Active' : '○ Synchronizing...'}</p>
                     </div>
                 </div>
                 
                 <div className="flex items-center gap-4">
+                    {/* Add Walkie Talkie right beside the stats */}
+                    <div className="flex items-center">
+                        {!isPttOpen ? (
+                            <button
+                                onClick={startPttSession}
+                                className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 border border-blue-200"
+                            >
+                                <span className="material-icons-round text-sm">cell_tower</span>
+                                Global PTT
+                            </button>
+                        ) : (
+                            <button
+                                onMouseDown={(e) => { e.preventDefault(); handlePttDown(); }}
+                                onMouseUp={(e) => { e.preventDefault(); handlePttUp(); }}
+                                onMouseLeave={handlePttUp}
+                                onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
+                                onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
+                                className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow active:scale-95 flex items-center gap-1.5 select-none ${
+                                    pttStatus === 'TALKING' ? 'bg-red-500 text-white animate-pulse' : 
+                                    pttStatus === 'LISTENING' ? 'bg-amber-400 text-white' :
+                                    pttStatus === 'CONNECTED' ? 'bg-blue-600 text-white hover:bg-blue-700' :
+                                    'bg-slate-300 text-slate-500 cursor-wait'
+                                }`}
+                            >
+                                <span className="material-icons-round text-sm">{pttStatus === 'TALKING' ? 'mic' : pttStatus === 'LISTENING' ? 'volume_up' : 'mic_none'}</span>
+                                {pttStatus === 'TALKING' ? 'Transmitting' : pttStatus === 'LISTENING' ? 'Receiving' : pttStatus === 'CONNECTED' ? 'Hold To PTT' : '...'}
+                            </button>
+                        )}
+                    </div>
+                
                     <div className="flex gap-2">
                         <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 flex items-center gap-2">
                             <span className="text-xs font-black text-slate-700">{stats.activeDrivers}</span>
@@ -330,38 +535,37 @@ export const FleetCenterPage: React.FC = () => {
 
                         <div 
                             ref={scrollRef}
-                            className="flex gap-3 overflow-x-auto no-scrollbar pb-2 -mx-2 px-2 scroll-smooth"
+                            className="flex gap-2 overflow-x-auto no-scrollbar pb-1.5 -mx-2 px-2 scroll-smooth"
                         >
                             {pendingOrders.map(order => (
                                 <div 
                                     key={order.id} 
-                                    className={`min-w-[164px] bg-white border p-3 rounded-xl shadow-sm transition-all flex flex-col gap-2 relative ${
-                                        selectedOrderForAssignment?.id === order.id ? 'border-blue-600 bg-blue-50/30' : 'border-slate-50'
+                                    className={`min-w-[135px] bg-white border p-2 rounded-lg shadow-sm transition-all flex flex-col gap-1 relative ${
+                                        selectedOrderForAssignment?.id === order.id ? 'border-blue-600 bg-blue-50/10' : 'border-slate-100'
                                     }`}
                                 >
                                     <div className="flex justify-between items-start">
-                                        <div className="min-w-0">
-                                            <p className="text-[9px] font-black text-blue-600 truncate">#{order.order_number || order.id.slice(0, 6)}</p>
-                                            <h3 className="text-[11px] font-black text-slate-800 truncate leading-none mt-0.5">{order.customerName}</h3>
+                                        <div className="min-w-0 pr-1">
+                                            <p className="text-[9px] font-black text-blue-600 truncate opacity-80 uppercase tracking-tight">#{order.order_number || order.id.slice(0, 6)}</p>
+                                            <h3 className="text-[10px] font-black text-slate-800 truncate leading-tight mt-0.5 capitalize">{order.customerName}</h3>
                                         </div>
-                                        <div className="bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">
-                                            <p className="text-[9px] font-black text-slate-700 font-mono italic">
+                                        <div className="bg-slate-50 px-1 py-0.5 rounded border border-slate-100 shrink-0">
+                                            <p className="text-[8px] font-black text-slate-700 font-mono">
                                                 {formatOrderTime(order)}
                                             </p>
                                         </div>
                                     </div>
-                                    <p className="text-[9px] font-bold text-slate-400 line-clamp-2 leading-tight bg-slate-50/50 p-1.5 rounded">{order.address}</p>
+                                    <p className="text-[8px] font-bold text-slate-400 line-clamp-1 leading-snug bg-slate-50/50 px-1.5 py-0.5 rounded-md">{order.address}</p>
                                     <button 
                                         onClick={() => {
                                             if (selectedOrderForAssignment?.id === order.id) setSelectedOrderForAssignment(null);
                                             else { setSelectedOrderForAssignment(order); document.getElementById('fleet-list')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
                                         }}
-                                        className={`w-full py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
-                                            selectedOrderForAssignment?.id === order.id ? 'bg-white text-red-600 border border-red-100' : 'bg-blue-600 text-white shadow shadow-blue-600/20'
+                                        className={`w-full py-1 rounded-md text-[8px] font-black uppercase tracking-wider transition-all flex items-center justify-center gap-1 ${
+                                            selectedOrderForAssignment?.id === order.id ? 'bg-red-500 text-white' : 'bg-blue-600 text-white shadow-md shadow-blue-600/20 hover:bg-blue-700'
                                         }`}
                                     >
-                                        <span className="material-icons-round text-[12px]">{selectedOrderForAssignment?.id === order.id ? 'close' : 'assignment'}</span>
-                                        {selectedOrderForAssignment?.id === order.id ? 'Cancel' : 'Assign'}
+                                        {selectedOrderForAssignment?.id === order.id ? 'CANCEL' : 'ASSIGN'}
                                     </button>
                                 </div>
                             ))}
@@ -369,39 +573,47 @@ export const FleetCenterPage: React.FC = () => {
                     </div>
 
                     {/* Fleet List - Multi-column density */}
-                    <div id="fleet-list" className="grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-8 pb-12">
+                    <div id="fleet-list" className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 pb-12">
                         {filteredDrivers.map(driver => (
                             <div 
                                 key={driver.id} 
-                                className={`p-8 border rounded-[2rem] shadow-sm flex flex-col gap-8 group transition-all ${
+                                className={`p-4 border rounded-2xl shadow-sm flex flex-col gap-4 group transition-all ${
                                     driver.activeOrders.length > 0 
                                         ? 'bg-slate-900 text-white border-slate-800' 
-                                        : 'bg-slate-50 text-slate-800 border-slate-100'
-                                } ${selectedOrderForAssignment ? 'ring-4 ring-blue-300' : ''}`}
+                                        : 'bg-white text-slate-800 border-slate-200 shadow-sm'
+                                } ${selectedOrderForAssignment ? 'ring-4 ring-blue-500/20' : ''}`}
                             >
-                                <div className="flex items-center gap-3">
+                                <div className="flex items-start justify-between gap-3">
                                     <div className="flex-1 min-w-0">
-                                        <h3 className="text-sm font-black text-slate-800 truncate">{driver.name}</h3>
-                                        <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{driver.activeAssignment?.vehicle?.plate_no || 'No Vehicle'}</p>
+                                        <h3 className={`text-base font-black truncate leading-tight ${driver.activeOrders.length > 0 ? 'text-white' : 'text-slate-800'}`}>
+                                            {driver.name || <span className="text-slate-300 italic">No Name</span>}
+                                        </h3>
+                                        <p className="text-[9px] font-black text-blue-500 uppercase tracking-widest mt-1 leading-none">
+                                            {driver.activeAssignment?.vehicle?.plate_no || 'No Vehicle'}
+                                        </p>
                                     </div>
-                                    <div className="text-right">
-                                        <p className="text-[24px] font-black text-cyan-400 font-mono italic">{driver.completedToday}</p>
+                                    <div className="text-right shrink-0">
+                                        <p className="text-2xl font-black text-cyan-400 font-mono italic leading-none">{driver.completedToday}</p>
+                                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-tighter mt-1">COMPLETED</p>
                                     </div>
                                 </div>
 
-                                <div className="space-y-6">
+                                <div className="space-y-3">
                                     {driver.activeOrders.length > 0 ? (
-                                        <div className="flex flex-col gap-4">
+                                        <div className="flex flex-col gap-2">
                                             <div className="flex justify-between items-center px-1">
-                                                <span className="text-[10px] font-black uppercase tracking-widest text-blue-400">{driver.activeOrders.length} ORDERS ASSIGNED</span>
+                                                <span className="text-[9px] font-black uppercase tracking-[0.15em] text-blue-400/80">{driver.activeOrders.length} ORDERS ASSIGNED</span>
                                             </div>
                                             {driver.activeOrders.map(o => (
-                                                <div key={o.id} className="p-5 rounded-2xl bg-white/10 border border-white/5 space-y-3">
+                                                <div key={o.id} className="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-2 hover:bg-white/10 transition-colors">
                                                     <div className="flex justify-between items-center text-[10px]">
-                                                        <span className="font-black text-blue-300 uppercase tracking-tighter">#{o.order_number || o.id.slice(0,6)} • {o.status}</span>
-                                                        <div className="flex gap-1.5 text-[14px]">
-                                                            <span onClick={() => navigate(`/orders?search=${o.order_number || o.id}`)} className="material-icons-round text-white/40 cursor-pointer hover:text-blue-400" title="Order Details">info_outline</span>
-                                                            <span onClick={() => handleWhatsAppDeparture(o)} className="material-icons-round text-blue-400 cursor-pointer hover:scale-110" title="WhatsApp Delivery Notice">send</span>
+                                                        <div className="flex flex-col gap-0.5">
+                                                            <span className="font-black text-blue-300 uppercase tracking-tight">#{o.order_number || o.id.slice(0,6)} • {o.status}</span>
+                                                            <span className="text-[8px] font-black text-slate-400 font-mono italic">{formatOrderTime(o)}</span>
+                                                        </div>
+                                                        <div className="flex gap-1.5 text-sm">
+                                                            <span onClick={() => navigate(`/orders?search=${o.order_number || o.id}`)} className="material-icons-round text-white/40 cursor-pointer hover:text-blue-400 transition-colors" title="Order Details">info_outline</span>
+                                                            <span onClick={() => handleWhatsAppDeparture(o)} className="material-icons-round text-blue-400 cursor-pointer hover:scale-110 transition-transform" title="WhatsApp Delivery Notice">send</span>
                                                             <span 
                                                                 onClick={async () => {
                                                                     if (window.confirm('确定要将此订单退回生产线吗？')) {
@@ -413,44 +625,43 @@ export const FleetCenterPage: React.FC = () => {
                                                                         }
                                                                     }
                                                                 }} 
-                                                                className="material-icons-round text-orange-400 cursor-pointer hover:text-orange-600" 
+                                                                className="material-icons-round text-orange-400 cursor-pointer hover:text-orange-500 transition-colors" 
                                                                 title="Revert to Production"
                                                             >
                                                                 undo
                                                             </span>
-                                                            <span onClick={() => handleUnassignOrder(o.id)} className="material-icons-round text-red-400 cursor-pointer hover:text-red-600" title="Unassign Driver">close</span>
+                                                            <span onClick={() => handleUnassignOrder(o.id)} className="material-icons-round text-red-400 cursor-pointer hover:text-red-500 transition-colors" title="Unassign Driver">close</span>
                                                         </div>
                                                     </div>
-                                                    <p className="text-[10px] font-bold text-white/80 truncate leading-none">{o.customerName}</p>
+                                                    <p className="text-[10px] font-bold text-white/90 truncate leading-none capitalize">{o.customerName}</p>
                                                 </div>
                                             ))}
                                         </div>
                                     ) : (
-                                        <div className="py-2.5 text-center border border-dashed border-slate-200 rounded-xl text-[9px] font-black text-slate-300 uppercase">Standby Area</div>
+                                        <div className="py-2.5 text-center border border-dashed border-slate-200/50 rounded-xl text-[9px] font-black text-slate-400 uppercase tracking-widest">Standby Area</div>
                                     )}
                                 </div>
 
-                                <div className="mt-auto pt-2 border-t border-slate-50 flex gap-2">
+                                <div className="mt-auto pt-3 border-t border-slate-100/10 flex gap-2">
                                     {selectedOrderForAssignment ? (
                                         <button 
                                             disabled={isAssigningOrder}
                                             onClick={() => handleAssignOrder(driver.id)}
-                                            className="flex-1 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black uppercase tracking-wider hover:bg-blue-700 transition-all flex items-center justify-center gap-2 animate-pulse"
+                                            className="flex-1 py-1.5 bg-blue-600 text-white rounded-lg text-[9px] font-black uppercase tracking-widest hover:bg-blue-700 transition-all flex items-center justify-center gap-1.5 animate-pulse shadow-lg shadow-blue-600/20"
                                         >
                                             <span className="material-icons-round text-sm">bolt</span>
                                             Dispatch Order
                                         </button>
                                     ) : (
-                                        <>
-                                            <button onClick={() => setAssigningVehicleTo(driver)} className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all shadow-sm ${
-                                                driver.activeOrders.length > 0 ? 'bg-white text-slate-900 hover:bg-blue-500 hover:text-white' : 'bg-slate-900 text-white hover:bg-blue-600'
-                                            }`}>Car Inventory</button>
-                                        </>
+                                        <button onClick={() => setAssigningVehicleTo(driver)} className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all shadow-sm ${
+                                            driver.activeOrders.length > 0 ? 'bg-white text-slate-900 hover:bg-blue-500 hover:text-white' : 'bg-slate-900 text-white hover:bg-blue-600'
+                                        }`}>Car Inventory</button>
                                     )}
                                 </div>
                             </div>
                         ))}
                     </div>
+
                 </div>
             ) : (
                 /* Assets View - Compact Grid */

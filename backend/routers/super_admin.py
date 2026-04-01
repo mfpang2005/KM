@@ -295,8 +295,8 @@ async def get_financials(
     query = supabase.table("orders").select("*").gte("created_at", window_start).neq("status", "cancelled")
     
     if event_date:
-        # 同时匹配 eventDate 字段或 dueTime 的日期部分
-        query = query.or_(f"eventDate.eq.{event_date},dueTime.ilike.{event_date}%")
+        # 只匹配 dueTime 的日期部分，因为 eventDate 列在数据库中不存在
+        query = query.ilike("dueTime", f"{event_date}%")
     
     response = await run_in_threadpool(query.execute)
     all_orders = response.data or []

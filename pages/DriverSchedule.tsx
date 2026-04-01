@@ -210,7 +210,7 @@ const DriverSchedule: React.FC = () => {
             try {
                 const { data, error } = await supabase.from('messages')
                     .select('*')
-                    .or(`receiver_id.eq.GLOBAL,sender_id.eq.${userId},receiver_id.eq.${userId}`)
+                    .eq('receiver_id', 'GLOBAL')
                     .order('created_at', { ascending: false })
                     .limit(50);
 
@@ -376,6 +376,9 @@ const DriverSchedule: React.FC = () => {
                             try {
                                 const payload = JSON.parse(message.content);
                                 if (payload.senderId === myId) return;
+                                
+                                // 仅处理发送到 GLOBAL 全局广播频道的消息
+                                if (payload.receiverId !== 'GLOBAL') return;
 
                                 const msgId = payload.id || `${payload.senderId}-${payload.timestamp}`;
                                 // NOTE: 兼容 content 和 audio 两种字段格式
@@ -417,16 +420,8 @@ const DriverSchedule: React.FC = () => {
                         goEasy.pubsub.subscribe({
                             channel: CHANNEL,
                             onMessage: handleIncoming,
-                            onSuccess: () => console.log('[GoEasy] Subscribed to', CHANNEL),
+                            onSuccess: () => console.log('[GoEasy] Subscribed to GLOBAL dispatch'),
                             onFailed: (err: any) => console.error('[GoEasy] Subscribe GLOBAL failed', err),
-                        });
-
-                        // 订阅我的私人频道（SuperAdmin 私信我）
-                        goEasy.pubsub.subscribe({
-                            channel: `driver_${myId}`,
-                            onMessage: handleIncoming,
-                            onSuccess: () => console.log('[GoEasy] Subscribed to private driver_' + myId),
-                            onFailed: (err: any) => console.error('[GoEasy] Subscribe private failed', err),
                         });
                     },
                     onFailed: () => setPttStatus('IDLE'),
@@ -554,7 +549,8 @@ const DriverSchedule: React.FC = () => {
                     sender_role: 'driver',
                     receiver_id: 'GLOBAL',
                     content: base64Audio,
-                    type: 'audio'
+                    type: 'audio',
+                    duration: dur
                 }]);
 
                 if (error) {
@@ -577,8 +573,6 @@ const DriverSchedule: React.FC = () => {
         if (goEasyRef.current) {
             try {
                 goEasyRef.current.pubsub.unsubscribe({ channel: CHANNEL, onSuccess: () => {}, onFailed: () => {} });
-                const myId = userId || `driver-${Math.random().toString(36).slice(2, 9)}`;
-                goEasyRef.current.pubsub.unsubscribe({ channel: `driver_${myId}`, onSuccess: () => {}, onFailed: () => {} });
             } catch {}
         }
         mediaRecorderRef.current?.stop();
