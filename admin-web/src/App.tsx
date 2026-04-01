@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import LoginPage from './pages/LoginPage';
 import AdminLayout from './layouts/AdminLayout';
@@ -19,10 +19,6 @@ import { FinancePage } from './pages/FinancePage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading, logout } = useAuth();
-  const location = useLocation();
-
-  // NOTE: /walkie-talkie 使用 GoEasy 自带 AppKey 鉴权，无需 Supabase session
-  if (location.pathname === '/walkie-talkie') return <>{children}</>;
 
 
   if (loading) return (

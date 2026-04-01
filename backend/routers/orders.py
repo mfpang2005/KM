@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
 from database import supabase
-from models import Order, OrderCreate, OrderUpdate, OrderStatus
+from models import Order, OrderCreate, OrderUpdate, OrderStatus, UserRole
 from fastapi.concurrency import run_in_threadpool
 from middleware.auth import get_current_user, require_admin
 from services.audit import record_audit, AuditActions
@@ -751,7 +751,7 @@ async def kitchen_complete(
 @router.post("/{order_id:path}/revert")
 async def revert_order_to_production(
     order_id: str,
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(get_current_user)
 ):
     """
     将订单从已完成状态撤回至生产中。
@@ -759,6 +759,11 @@ async def revert_order_to_production(
     2. 所有关联项 -> pending / is_prepared=False
     3. 同步 GoEasy 通知
     """
+    if current_user.get("role") not in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value, UserRole.KITCHEN.value]:
+        raise HTTPException(
+            status_code=403,
+            detail="Insufficient permissions. Admin or Kitchen access required."
+        )
     from datetime import datetime, timezone
     from services.goeasy import notify_order_update
     from services.audit import record_audit, AuditActions

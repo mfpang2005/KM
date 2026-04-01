@@ -185,7 +185,7 @@ export const FleetCenterPage: React.FC = () => {
                                     if (payload.type === 'audio' && audioContent) {
                                         await playAudio(audioContent);
                                     }
-                                } catch (err) {}
+                                } catch {}
                             }
                         });
                     },
@@ -260,7 +260,7 @@ export const FleetCenterPage: React.FC = () => {
                     type: 'audio',
                     duration: 0
                 }]);
-            } catch (err) {}
+            } catch {}
             audioChunksRef.current = [];
         };
         mr.stop();

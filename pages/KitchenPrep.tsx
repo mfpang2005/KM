@@ -768,8 +768,9 @@ const KitchenPrepPage: React.FC = () => {
                         </div>
                     </div>
                 </div>
+            </div>
 
-                <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/50">
+            <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/50">
                     {[
                         { id: 'production', label: 'In Production', icon: 'pending_actions' },
                         { id: 'history', label: 'Completed', icon: 'history' },
