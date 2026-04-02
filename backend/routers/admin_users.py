@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi.concurrency import run_in_threadpool
 from typing import List
 from database import supabase
 from models import User, UserRole, UserStatus, UserUpdate, UserCreateInternal
@@ -39,7 +40,7 @@ async def create_internal_user(
         
         try:
             logger.info("Attempting Supabase Auth Admin creation...")
-            auth_res = supabase.auth.admin.create_user(auth_attributes)
+            auth_res = await run_in_threadpool(supabase.auth.admin.create_user, auth_attributes)
             logger.info(f"Auth Response Type: {type(auth_res)}")
         except Exception as auth_err:
             logger.error(f"Supabase Auth Admin call failed: {auth_err}")
@@ -86,7 +87,7 @@ async def create_internal_user(
         insert_data = {k: v for k, v in db_data.items() if v is not None}
         logger.info(f"Attempting DB Sync to 'users' table: {insert_data}")
         try:
-            response = supabase.table("users").insert(insert_data).execute()
+            response = await run_in_threadpool(supabase.table("users").insert(insert_data).execute)
             logger.info(f"DB Insert Response: {response}")
         except Exception as db_sync_err:
             logger.error(f"DB Sync to 'users' table failed: {db_sync_err}")
@@ -140,7 +141,9 @@ async def update_user_status(
     if user_id == current_user.get("id"):
         raise HTTPException(status_code=400, detail="Cannot alter your own status")
     
-    response = supabase.table("users").update({"status": status.value}).eq("id", user_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("users").update({"status": status.value}).eq("id", user_id).execute
+    )
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
         

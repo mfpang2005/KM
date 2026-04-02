@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.concurrency import run_in_threadpool
 from typing import List
 from database import supabase
 from models import Recipe
@@ -15,7 +16,9 @@ router = APIRouter(
 @router.get("", response_model=List[Recipe])
 async def get_recipes():
     """读取所有菜谱"""
-    response = supabase.table("recipes").select("*").order("name", desc=False).execute()
+    response = await run_in_threadpool(
+        supabase.table("recipes").select("*").order("name", desc=False).execute
+    )
     return response.data or []
 
 @router.post("", response_model=Recipe)
@@ -31,7 +34,7 @@ async def create_recipe(
     # 转换为 JSONB 存储格式
     data["ingredients"] = [ing.model_dump() for ing in recipe.ingredients]
     
-    response = supabase.table("recipes").insert(data).execute()
+    response = await run_in_threadpool(supabase.table("recipes").insert(data).execute)
     if not response.data:
         raise HTTPException(status_code=400, detail="Could not create recipe")
         
@@ -58,7 +61,9 @@ async def update_recipe(
     data["ingredients"] = [ing.model_dump() for ing in recipe.ingredients]
     data["updated_at"] = "now()" # 让 Postgres 处理时间戳
     
-    response = supabase.table("recipes").update(data).eq("id", recipe_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("recipes").update(data).eq("id", recipe_id).execute
+    )
     if not response.data:
         raise HTTPException(status_code=404, detail="Recipe not found")
         
@@ -77,7 +82,9 @@ async def delete_recipe(
     current_user: dict = Depends(require_admin)
 ):
     """删除菜谱"""
-    response = supabase.table("recipes").delete().eq("id", recipe_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("recipes").delete().eq("id", recipe_id).execute
+    )
     
     await record_audit(
         actor_id=current_user.get("id"),

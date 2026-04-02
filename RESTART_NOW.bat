@@ -13,7 +13,14 @@ echo   DEEP REPAIR: FastAPI Backend
 echo ==========================================
 
 :: 1. 杀死残留进程
-echo [1/4] Cleaning existing processes...
+echo [1/4] Cleaning existing processes (Ports: 8000, 5174)...
+for %%P in (8000 5174) do (
+    for /f "tokens=5" %%a in ('netstat -aon ^| findstr :%%P ^| findstr LISTENING') do (
+        echo Cleanup PID %%a on port %%P...
+        taskkill /F /PID %%a 2>NUL
+    )
+)
+:: Backup cleanup for node/python processes
 taskkill /F /IM node.exe /T 2>NUL
 taskkill /F /IM python.exe /T 2>NUL
 

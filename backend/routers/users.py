@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from typing import List
 from database import supabase
 from models import User, UserRole
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(
     prefix="/users",
@@ -10,12 +11,12 @@ router = APIRouter(
 
 @router.get("/", response_model=List[User])
 async def get_users():
-    response = supabase.table("users").select("*").execute()
+    response = await run_in_threadpool(supabase.table("users").select("*").execute)
     return response.data
 
 @router.get("/{user_id}", response_model=User)
 async def get_user(user_id: str):
-    response = supabase.table("users").select("*").eq("id", user_id).execute()
+    response = await run_in_threadpool(supabase.table("users").select("*").eq("id", user_id).execute)
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
     return response.data[0]
@@ -25,7 +26,9 @@ async def get_user(user_id: str):
 async def login(email: str, role: UserRole):
     # In a real app, use Supabase Auth (GoTrue).
     # Here we just check if a user with this email and role exists in our 'users' table
-    response = supabase.table("users").select("*").eq("email", email).eq("role", role).execute()
+    response = await run_in_threadpool(
+        supabase.table("users").select("*").eq("email", email).eq("role", role).execute
+    )
     if not response.data:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     return response.data[0]
@@ -37,7 +40,7 @@ async def get_current_user_profile(user_id: str):
     获取当前用户资料 (根据 ID)，模拟真实环境中的 /me
     前端在拿到 session 里的 uid 后传过来查
     """
-    response = supabase.table("users").select("*").eq("id", user_id).execute()
+    response = await run_in_threadpool(supabase.table("users").select("*").eq("id", user_id).execute)
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
     return response.data[0]
@@ -56,7 +59,7 @@ async def update_current_user_profile(user_id: str, profile_data: dict):
     if not update_data:
         raise HTTPException(status_code=400, detail="No valid fields to update")
         
-    response = supabase.table("users").update(update_data).eq("id", user_id).execute()
+    response = await run_in_threadpool(supabase.table("users").update(update_data).eq("id", user_id).execute)
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
         
