@@ -166,7 +166,9 @@ async def mark_item_prepared(item_id: str, payload: dict, current_user: dict = D
 
 @router.get("/{order_id:path}", response_model=Order)
 async def get_order(order_id: str):
-    response = supabase.table("orders").select("*").eq("id", order_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("orders").select("*").eq("id", order_id).execute
+    )
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
     return response.data[0]
@@ -197,7 +199,9 @@ async def create_order(
         prefix = f"KM-{today_str}/"
         
         # Query existing orders with the same day prefix to determine the next sequence number
-        res = supabase.table("orders").select("id").ilike("id", f"{prefix}%").execute()
+        res = await run_in_threadpool(
+            supabase.table("orders").select("id").ilike("id", f"{prefix}%").execute
+        )
         
         max_num = 0
         if res.data:
@@ -227,7 +231,9 @@ async def create_order(
     max_retries = 10
     for attempt in range(max_retries):
         try:
-            response = supabase.table("orders").insert(order_data).execute()
+            response = await run_in_threadpool(
+                supabase.table("orders").insert(order_data).execute
+            )
             if not response.data:
                 raise HTTPException(status_code=400, detail="Could not create order")
             
@@ -277,7 +283,9 @@ async def update_order(
     
     # Retrieve old order to gracefully get calendar_event_id (using * to avoid PGRST204 if missing)
     try:
-        old_res = supabase.table("orders").select("*").eq("id", order_id).execute()
+        old_res = await run_in_threadpool(
+            supabase.table("orders").select("*").eq("id", order_id).execute
+        )
         old_cal_id = old_res.data[0].get("calendar_event_id") if old_res.data else None
     except Exception:
         old_cal_id = None
@@ -296,7 +304,9 @@ async def update_order(
     import re
     for attempt in range(max_retries):
         try:
-            response = supabase.table("orders").update(order_data).eq("id", order_id).execute()
+            response = await run_in_threadpool(
+                supabase.table("orders").update(order_data).eq("id", order_id).execute
+            )
             if not response.data:
                 raise HTTPException(status_code=404, detail="Order not found or update failed")
             
@@ -388,7 +398,9 @@ async def update_order_status(
     status: OrderStatus = Query(...),
     current_user: dict = Depends(require_admin)
 ):
-    response = supabase.table("orders").update({"status": status}).eq("id", order_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("orders").update({"status": status}).eq("id", order_id).execute
+    )
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
     
@@ -534,7 +546,9 @@ async def partial_update_order(
     from services.google_calendar import sync_order_to_calendar
     
     # First fetch the existing full order to have all data for calendar sync and balance calc
-    old_res = supabase.table("orders").select("*").eq("id", order_id).execute()
+    old_res = await run_in_threadpool(
+        supabase.table("orders").select("*").eq("id", order_id).execute
+    )
     if not old_res.data:
         raise HTTPException(status_code=404, detail="Order not found")
         
@@ -578,7 +592,9 @@ async def partial_update_order(
             audit_action = AuditActions.ORDER_ASSIGN_DRIVER
 
     # Write to DB (single write, includes start_time if automated)
-    response = supabase.table("orders").update(update_data).eq("id", order_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("orders").update(update_data).eq("id", order_id).execute
+    )
     if not response.data:
         raise HTTPException(status_code=404, detail="Update failed")
 
@@ -613,7 +629,9 @@ async def delete_order(
     import postgrest
     
     # 1. Retrieve to get calendar_event_id before deletion
-    res = supabase.table("orders").select("calendar_event_id").eq("id", order_id).execute()
+    res = await run_in_threadpool(
+        supabase.table("orders").select("calendar_event_id").eq("id", order_id).execute
+    )
     
     # 2. Delete related order_items first (Avoid Foreign Key constraint violation)
     try:
@@ -630,7 +648,9 @@ async def delete_order(
             raise HTTPException(status_code=500, detail=f"Failed to clear dependent order items: {str(e)}")
 
     # 3. Delete the order itself
-    response = supabase.table("orders").delete().eq("id", order_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("orders").delete().eq("id", order_id).execute
+    )
     
     # 4. Cleanup external resources (Calendar)
     if res.data and res.data[0].get("calendar_event_id"):
@@ -668,7 +688,9 @@ async def assign_driver(
     if not driver_id:
         raise HTTPException(status_code=400, detail="driver_id is required")
         
-    response = supabase.table("orders").update({"driverId": driver_id}).eq("id", order_id).execute()
+    response = await run_in_threadpool(
+        supabase.table("orders").update({"driverId": driver_id}).eq("id", order_id).execute
+    )
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
         

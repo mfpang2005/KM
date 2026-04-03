@@ -8,6 +8,8 @@ const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
 const GOEASY_HOST = 'singapore.goeasy.io';
 const CHANNEL = 'KIM_LONG_COMUNITY';
 
+let globalGoEasy: any = null;
+
 interface OnlineUser {
     userId: string;
     email: string;
@@ -51,6 +53,7 @@ export const WalkieTalkiePage: React.FC = () => {
     const [goEasyStatus, setGoEasyStatus] = useState<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'>('DISCONNECTED');
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const [chatInput, setChatInput] = useState('');
+    const [visibleError, setVisibleError] = useState<string | null>(null);
 
     // NOTE: 使用 Ref 存储已处理的消息 ID，防止 GoEasy 和 Supabase 重复触发
     const messageIdsRef = useRef<Set<string>>(new Set());
@@ -62,7 +65,7 @@ export const WalkieTalkiePage: React.FC = () => {
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
-    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
+    const goEasyRef = useRef<any>(null);
     const fallbackIdRef = useRef<string>(`superadmin-${Math.random().toString(36).slice(2, 9)}`);
     const recordStartTimeRef = useRef<number | null>(null);
     const chatBottomRef = useRef<HTMLDivElement | null>(null);
@@ -121,68 +124,89 @@ export const WalkieTalkiePage: React.FC = () => {
 
         const doConnect = () => {
             try {
-                if (typeof (GoEasy as any).getInstance !== 'function') {
-                    throw new Error('GoEasy.getInstance is not a function.');
+                if (!globalGoEasy) {
+                    if (typeof (GoEasy as any).getInstance !== 'function') {
+                        throw new Error('GoEasy.getInstance is not a function.');
+                    }
+                    globalGoEasy = (GoEasy as any).getInstance({
+                        host: GOEASY_HOST,
+                        appkey: GOEASY_APPKEY,
+                        modules: ['pubsub'],
+                    });
                 }
-                goEasy = (GoEasy as any).getInstance({
-                    host: GOEASY_HOST,
-                    appkey: GOEASY_APPKEY,
-                    modules: ['pubsub'],
-                });
+                goEasy = globalGoEasy;
                 goEasyRef.current = goEasy;
-                setGoEasyStatus('CONNECTING');
 
+                const subscribeToChannel = () => {
+                    // 订阅固定频道以监听所有发给我的消息（接收端过滤）
+                    goEasy.pubsub.subscribe({
+                        channel: CHANNEL,
+                        onMessage: async (message: { content: string }) => {
+                            try {
+                                const payload = JSON.parse(message.content);
+                                if (payload.senderId === myId) return;
+
+                                // 接收全局电台广播
+                                if (payload.receiverId !== 'GLOBAL') return;
+
+                                const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
+                                const common = {
+                                    id: incomingId,
+                                    senderId: payload.senderId,
+                                    senderLabel: payload.senderLabel || payload.senderId,
+                                    senderRole: payload.senderRole || 'driver',
+                                    timestamp: payload.timestamp || Date.now(),
+                                    isMine: false,
+                                    receiverId: myId,
+                                    duration: payload.duration
+                                };
+
+                                if (payload.type === 'text') {
+                                    addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
+                                } else if (payload.type === 'audio' || payload.audio) {
+                                    const audioContent = payload.content || payload.audio;
+                                    if (!audioContent) return;
+                                    addMessage({ ...common, content: audioContent, type: 'audio' } as ChatMessage);
+                                    setLatestIncomingId(incomingId);
+                                }
+                            } catch (err) {
+                                console.error('[GoEasy] Failed to handle message', err);
+                            }
+                        },
+                    });
+                };
+
+                const status = goEasy.getConnectionStatus ? goEasy.getConnectionStatus() : 'disconnected';
+                if (status === 'connected') {
+                    console.log('[GoEasy] Already connected, reusing connection.');
+                    setGoEasyStatus('CONNECTED');
+                    subscribeToChannel();
+                    return;
+                }
+
+                setGoEasyStatus('CONNECTING');
                 goEasy.connect({
                     id: myId,
                     data: { email: myLabel, role: myRole },
                     onSuccess: () => {
+                        setVisibleError(null); // Clear errors on success
                         setGoEasyStatus('CONNECTED');
                         if (!goEasy) return;
-                        // 订阅固定频道以监听所有发给我的消息（接收端过滤）
-                        goEasy.pubsub.subscribe({
-                            channel: CHANNEL,
-                            onMessage: async (message: { content: string }) => {
-                                try {
-                                    const payload = JSON.parse(message.content);
-                                    if (payload.senderId === myId) return;
-
-                                    // 接收全局电台广播
-                                    if (payload.receiverId !== 'GLOBAL') return;
-
-                                    const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
-                                    const common = {
-                                        id: incomingId,
-                                        senderId: payload.senderId,
-                                        senderLabel: payload.senderLabel || payload.senderId,
-                                        senderRole: payload.senderRole || 'driver',
-                                        timestamp: payload.timestamp || Date.now(),
-                                        isMine: false,
-                                        receiverId: myId,
-                                        duration: payload.duration
-                                    };
-
-                                    if (payload.type === 'text') {
-                                        addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
-                                    } else if (payload.type === 'audio' || payload.audio) {
-                                        const audioContent = payload.content || payload.audio;
-                                        if (!audioContent) return;
-                                        addMessage({ ...common, content: audioContent, type: 'audio' } as ChatMessage);
-                                        setLatestIncomingId(incomingId);
-                                    }
-                                } catch (err) {
-                                    console.error('[GoEasy] Failed to handle message', err);
-                                }
-                            },
-                        });
+                        subscribeToChannel();
                     },
                     onFailed: (err: any) => {
                         console.error('[GoEasy] Connect failed', err);
+                        setVisibleError(`[GoEasy Error] ${err?.content || err?.message || JSON.stringify(err)}`);
                         setGoEasyStatus('DISCONNECTED');
                     },
-                    onDisconnected: () => setGoEasyStatus('DISCONNECTED'),
+                    onDisconnected: () => {
+                        setVisibleError("GoEasy Disconnected");
+                        setGoEasyStatus('DISCONNECTED');
+                    },
                 });
-            } catch (err) {
+            } catch (err: any) {
                 console.error('[GoEasy] SDK init error', err);
+                setVisibleError(`[GoEasy Init Error] ${err?.message || String(err)}`);
                 setGoEasyStatus('DISCONNECTED');
             }
         };
@@ -191,7 +215,11 @@ export const WalkieTalkiePage: React.FC = () => {
 
         return () => {
             if (goEasy) {
-                goEasy.pubsub.unsubscribe({ channel: CHANNEL });
+                goEasy.pubsub.unsubscribe({ 
+                    channel: CHANNEL,
+                    onSuccess: () => console.log('[GoEasy] Unsubscribe success'),
+                    onFailed: (err: any) => console.error('[GoEasy] Unsubscribe failed', err)
+                });
                 if (typeof goEasy.disconnect === 'function') goEasy.disconnect();
             }
         };
@@ -221,7 +249,11 @@ export const WalkieTalkiePage: React.FC = () => {
                 });
             }).subscribe();
 
-        return () => { supabase.removeChannel(channel); };
+        return () => { 
+            setTimeout(() => {
+                supabase.removeChannel(channel); 
+            }, 100);
+        };
     }, [user, addMessage]);
 
     // ── Fetch Historical Messages ──────────────────────────────────
@@ -435,7 +467,13 @@ export const WalkieTalkiePage: React.FC = () => {
     const myBubble = ROLE_CONFIG[myRole]?.bubble ?? 'bg-slate-500';
 
     return (
-        <div className="h-[calc(100vh-140px)] flex gap-6">
+        <div className="h-[calc(100vh-140px)] flex gap-6 relative">
+            {visibleError && (
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 bg-red-100 text-red-800 px-4 py-2 rounded-b shadow font-mono text-sm max-w-xl text-center">
+                    DEBUG: {visibleError}
+                    <button onClick={() => setVisibleError(null)} className="ml-2 underline font-bold">X</button>
+                </div>
+            )}
             {/* ── 左侧：在线用户 + 状态 ── */}
             <aside className="w-64 shrink-0 flex flex-col gap-3">
                 <div className="bg-white rounded-[24px] shadow-sm border border-slate-100 overflow-hidden flex-1 flex flex-col">

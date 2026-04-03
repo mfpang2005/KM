@@ -58,10 +58,38 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-8 bg-re-50 min-h-screen text-red-900 font-mono">
+          <h1 className="text-2xl font-bold mb-4">💥页面崩溃保护 (Error Boundary)</h1>
+          <div className="p-4 bg-white border border-red-200 rounded-lg shadow-sm whitespace-pre-wrap">
+            {this.state.error?.toString()}
+            <br />
+            {this.state.error?.stack}
+          </div>
+          <button onClick={() => window.location.reload()} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded">重新加载</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 const App: React.FC = () => {
   console.log("App: Rendering...");
   return (
-    <BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
@@ -81,6 +109,7 @@ const App: React.FC = () => {
         </Route>
       </Routes>
     </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 

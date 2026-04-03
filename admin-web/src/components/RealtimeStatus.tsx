@@ -53,7 +53,10 @@ const RealtimeStatus: React.FC = () => {
 
         return () => {
             isMounted = false;
-            supabase.removeChannel(channel);
+            // 延迟一点销毁，防止 React StrictMode 瞬间重载导致 "WebSocket is closed before the connection is established" 浏览器红字警告
+            setTimeout(() => {
+                supabase.removeChannel(channel);
+            }, 100);
         };
     }, [retryCount]);
 

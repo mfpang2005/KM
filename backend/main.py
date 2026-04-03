@@ -3,14 +3,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import logging
 import re
-from routers import super_admin
-from routers import admin_users
-from routers import recipes
-from routers import orders
-from routers import products
-from routers import users
-from routers import vehicles
-from routers import customers
+from contextlib import asynccontextmanager
+from routers import super_admin, admin_users, recipes, orders, products, users, vehicles, customers
+from services.goeasy import close_client
+
+# ── 资源生命周期管理 ──────────────────────────────────────────────────────────
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动时逻辑
+    logger.info("Initializing Kim Long API services...")
+    yield
+    # 关闭时逻辑
+    logger.info("Closing API services connections...")
+    await close_client()
 
 # ── 配置日志 ──────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -21,7 +26,10 @@ logger = logging.getLogger(__name__)
 
 
 # ── 应用初始化 ─────────────────────────────────────────────────────────────
-app = FastAPI(title="Kim Long Smart Catering System API")
+app = FastAPI(
+    title="Kim Long Smart Catering System API",
+    lifespan=lifespan
+)
 
 # ── 配置 CORS ──────────────────────────────────────────────────────────────
 # 允许前端开发服务器的所有可能端口 (静态列表 + 正则表达式)

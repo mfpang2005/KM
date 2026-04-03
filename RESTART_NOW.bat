@@ -42,11 +42,11 @@ powershell -Command "Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Cu
 
 :: 4. 启动后端 (带自动重试日志)
 echo [4/4] Launching Backend...
-start "BACKEND_SERVICE" cmd /k "cd /d %BACKEND_DIR% && echo Starting FastAPI... && "%PYTHON_EXE%" -m uvicorn main:app --reload --port 8000 --host 0.0.0.0"
+start "BACKEND_SERVICE" cmd /k "cd /d \"%BACKEND_DIR%\" && echo Starting FastAPI... && \"%PYTHON_EXE%\" -m uvicorn main:app --reload --port 8000 --host 0.0.0.0 --timeout-keep-alive 65 --limit-concurrency 100"
 
 :: 5. 顺便启动管理端
 echo Launching Admin Panel...
-start "ADMIN_PANEL" cmd /k "cd /d %BASE_DIR%admin-web && npm.cmd run dev"
+start "ADMIN_PANEL" cmd /k "cd /d \"%BASE_DIR%admin-web\" && cmd /c npm run dev"
 
 echo.
 echo ==========================================
