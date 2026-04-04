@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
-import { OrderService } from '../src/services/api';
+import { OrderService, api } from '../src/services/api';
 import type { Order } from '../types';
 import { OrderStatus } from '../types';
 import { supabase } from '../src/lib/supabase';
@@ -291,9 +291,11 @@ const KitchenPrepPage: React.FC = () => {
     const [isPttOpen, setIsPttOpen] = useState(false);
     const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'CONNECTED' | 'TALKING' | 'LISTENING'>('IDLE');
     const [isTransmitting, setIsTransmitting] = useState(false);
+    const [audioUnlocked, setAudioUnlocked] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    const silentAudioRef = useRef<HTMLAudioElement | null>(null);
     const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
 
     // ── Data Fetching ─────────────────────────────────────────────────────────
@@ -396,12 +398,55 @@ const KitchenPrepPage: React.FC = () => {
 
     // ─── PTT Logic ────────────────────────────────────────────────────────────
 
+    /** 用户交互解锁音频权限 */
+    const unlockAudio = useCallback(() => {
+        if (audioUnlocked) return;
+        const SILENT_WAV = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+        const audio = new Audio(`data:audio/wav;base64,${SILENT_WAV}`);
+        audio.volume = 0.01;
+        audio.play()
+            .then(() => {
+                setAudioUnlocked(true);
+                console.log('[Kitchen PTT] Audio context unlocked');
+            })
+            .catch((e) => {
+                console.warn('[Kitchen PTT] Unlock failed:', e);
+                setAudioUnlocked(true);
+            });
+        silentAudioRef.current = audio;
+    }, [audioUnlocked]);
+
+    // --- NEW: 监听全局点击以隐形解锁音频 ---
+    useEffect(() => {
+        if (audioUnlocked) return;
+        const handleFirstClick = () => {
+            unlockAudio();
+            window.removeEventListener('click', handleFirstClick);
+            window.removeEventListener('touchstart', handleFirstClick);
+        };
+        window.addEventListener('click', handleFirstClick);
+        window.addEventListener('touchstart', handleFirstClick);
+        return () => {
+            window.removeEventListener('click', handleFirstClick);
+            window.removeEventListener('touchstart', handleFirstClick);
+        };
+    }, [audioUnlocked, unlockAudio]);
+
     const playAudio = useCallback(async (content: string) => {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
         try {
+            // --- NEW: Handle HTTP URL directly ---
+            if (content.startsWith('http')) {
+                const audio = new Audio(content);
+                audio.onended = () => setPttStatus('CONNECTED');
+                audio.play().catch(e => console.error('[Kitchen PTT] Play error', e));
+                setPttStatus('LISTENING');
+                return;
+            }
+
             const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
             const binary = atob(base64);
             const buf = new ArrayBuffer(binary.length);
@@ -490,9 +535,18 @@ const KitchenPrepPage: React.FC = () => {
                 const blob = new Blob(audioChunksRef.current, { type: mimeType });
                 if (blob.size < 100) return;
 
+                const formData = new FormData();
+                formData.append('file', blob, `voice_kitchen_${userId || 'unknown'}_${Date.now()}.webm`);
+                
+                const { data: uploadResult } = await api.post('/audio/upload', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                
+                const audioUrl = uploadResult.url;
+                if (!audioUrl) throw new Error('Upload failed: No URL returned');
+
                 const myId = userId || 'unknown-kitchen';
                 const myName = userEmail || '厨房端';
-                const base64Audio = await blobToBase64(blob);
                 const ts = Date.now();
                 const msgId = `${myId}-${ts}`;
 
@@ -504,7 +558,7 @@ const KitchenPrepPage: React.FC = () => {
                         senderId: myId,
                         senderLabel: myName,
                         senderRole: 'kitchen',
-                        content: base64Audio,
+                        content: audioUrl,
                         timestamp: ts,
                         receiverId: 'GLOBAL',
                         duration: 0
@@ -517,11 +571,13 @@ const KitchenPrepPage: React.FC = () => {
                     sender_label: myName,
                     sender_role: 'kitchen',
                     receiver_id: 'GLOBAL',
-                    content: base64Audio,
+                    content: audioUrl,
                     type: 'audio',
                     duration: 0
                 }]);
-            } catch (err) {}
+            } catch (err) {
+                console.error('[Kitchen PTT] Upload or Publish failed', err);
+            }
             audioChunksRef.current = [];
         };
         mr.stop();

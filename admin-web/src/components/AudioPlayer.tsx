@@ -18,99 +18,75 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const objectUrlRef = useRef<string>('');
 
-    // --- Build a playable URL from whatever format is passed in ---
+    // --- 1. Audio Object Lifecycle ---
     useEffect(() => {
-        let cancelled = false;
+        if (!audioUrl) return;
 
-        const setup = async () => {
-            if (!audioUrl) {
-                console.error('[AudioPlayer] No audioUrl provided');
-                return;
+        const audio = new Audio();
+        audioRef.current = audio;
+        audio.volume = 1.0;
+        
+        const onMeta = () => {
+            if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
+                setDuration(audio.duration);
             }
+            setReady(true);
+        };
+        const onTime  = () => setCurrentTime(audio.currentTime);
+        const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
+        const onPlay  = () => setIsPlaying(true);
+        const onPause = () => setIsPlaying(false);
+        const onError = () => { setReady(false); setIsPlaying(false); };
 
-            // Revoke any previous object URL to prevent memory leak
-            if (objectUrlRef.current) {
-                URL.revokeObjectURL(objectUrlRef.current);
-                objectUrlRef.current = '';
-            }
+        audio.addEventListener('loadedmetadata', onMeta);
+        audio.addEventListener('timeupdate', onTime);
+        audio.addEventListener('ended', onEnded);
+        audio.addEventListener('play', onPlay);
+        audio.addEventListener('pause', onPause);
+        audio.addEventListener('error', onError);
 
-            const audio = new Audio();
-            audioRef.current = audio;
-            audio.volume = 1.0;
-            audio.muted = false;
-            setReady(false);
-            setIsPlaying(false);
-            setCurrentTime(0);
-
-            const onMeta = () => {
-                if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
-                    setDuration(audio.duration);
-                }
-                setReady(true);
-                // Auto-play incoming messages right after metadata is ready
-                if (autoPlay) {
-                    audio.play()
-                        .then(() => console.log('[AudioPlayer] Auto-play started'))
-                        .catch((e) => {
-                            console.warn('[AudioPlayer] Auto-play blocked by browser:', e.message);
-                        });
-                }
-            };
-            const onTime  = () => setCurrentTime(audio.currentTime);
-            const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
-            const onPlay  = () => setIsPlaying(true);
-            const onPause = () => setIsPlaying(false);
-            const onError = (e: Event) => {
-                const err = (e.target as HTMLAudioElement).error;
-                console.error('[AudioPlayer] Audio error:', err?.code, err?.message);
-            };
-
-            audio.addEventListener('loadedmetadata', onMeta);
-            audio.addEventListener('timeupdate', onTime);
-            audio.addEventListener('ended', onEnded);
-            audio.addEventListener('play', onPlay);
-            audio.addEventListener('pause', onPause);
-            audio.addEventListener('error', onError);
-
+        const setupSource = async () => {
             try {
-                let blobUrl: string;
                 if (audioUrl.startsWith('http')) {
-                    blobUrl = audioUrl;
+                    audio.src = audioUrl;
+                } else if (audioUrl.startsWith('data:')) {
+                    audio.src = audioUrl;
                 } else {
-                    const raw = audioUrl.startsWith('data:')
-                        ? await fetch(audioUrl).then(r => r.blob())
-                        : (() => {
-                            const bin = atob(audioUrl);
-                            const bytes = new Uint8Array(bin.length);
-                            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                            return new Blob([bytes], { type: 'audio/webm' });
-                        })();
-                    if (cancelled) return;
-                    blobUrl = URL.createObjectURL(raw);
-                    objectUrlRef.current = blobUrl;
+                    // Base64 fallback
+                    const bin = atob(audioUrl);
+                    const bytes = new Uint8Array(bin.length);
+                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                    const blob = new Blob([bytes], { type: 'audio/webm' });
+                    const url = URL.createObjectURL(blob);
+                    objectUrlRef.current = url;
+                    audio.src = url;
                 }
-                audio.src = blobUrl;
                 audio.load();
             } catch (err) {
-                console.error('[AudioPlayer] Setup error', err);
+                console.error('[AudioPlayer] Setup failed:', err);
             }
         };
 
-        setup();
+        setupSource();
 
         return () => {
-            cancelled = true;
-            const audio = audioRef.current;
-            if (audio) {
-                audio.pause();
-                audio.src = '';
-            }
+            audio.pause();
+            audio.src = '';
             if (objectUrlRef.current) {
                 URL.revokeObjectURL(objectUrlRef.current);
                 objectUrlRef.current = '';
             }
         };
-    }, [audioUrl, autoPlay]);
+    }, [audioUrl]);
+
+    // --- 2. Separate Auto-Play Trigger ---
+    useEffect(() => {
+        if (autoPlay && ready && audioRef.current && !isPlaying) {
+            audioRef.current.play()
+                .then(() => console.log('[AudioPlayer] Auto-played msg'))
+                .catch(e => console.warn('[AudioPlayer] Auto-play block:', e.message));
+        }
+    }, [autoPlay, ready]);
 
     const togglePlay = (e?: React.MouseEvent) => {
         // Prevent toggling if user is actually dragging the seeker

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
     receiver_id TEXT NOT NULL DEFAULT 'GLOBAL',
     content TEXT NOT NULL,
     type TEXT DEFAULT 'text',
+    duration FLOAT DEFAULT 0, -- Added for audio message duration
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

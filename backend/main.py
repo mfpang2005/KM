@@ -4,7 +4,7 @@ from datetime import datetime
 import logging
 import re
 from contextlib import asynccontextmanager
-from routers import super_admin, admin_users, recipes, orders, products, users, vehicles, customers
+from routers import super_admin, admin_users, recipes, orders, products, users, vehicles, customers, audio
 from services.goeasy import close_client
 
 # ── 资源生命周期管理 ──────────────────────────────────────────────────────────
@@ -68,6 +68,7 @@ app.include_router(admin_users.router)
 app.include_router(super_admin.router)
 app.include_router(vehicles.router)
 app.include_router(customers.router)
+app.include_router(audio.router)
 
 
 # ── 基础接口 ──────────────────────────────────────────────────────────────

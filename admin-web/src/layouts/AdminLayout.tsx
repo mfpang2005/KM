@@ -21,6 +21,7 @@ const StatusDot: React.FC<{ status: ServiceStatus; latency?: number }> = ({ stat
 };
 
 import RealtimeStatus from '../components/RealtimeStatus';
+import { GoEasyProvider } from '../contexts/GoEasyContext';
 
 /** 徧边栏底部健康检查组件 */
 const HealthCheck: React.FC = () => {
@@ -112,7 +113,8 @@ const AdminLayout: React.FC = () => {
     ].filter(item => !item.roles || (user?.role && item.roles.includes(user.role)));
 
     return (
-        <div className="flex h-screen text-slate-800 font-sans bg-[#f8f9fc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/40 via-white to-purple-100/40 selection:bg-blue-200">
+        <GoEasyProvider>
+            <div className="flex h-screen text-slate-800 font-sans bg-[#f8f9fc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/40 via-white to-purple-100/40 selection:bg-blue-200">
             {/* 侧边栏 (Glass Dark Theme) - 改为 Antigravity 悬浮缩放模式 */}
             <aside className="group fixed left-0 top-0 h-screen w-[75px] hover:w-[260px] bg-slate-900/95 backdrop-blur-2xl border-r border-white/10 flex flex-col sidebar-transition text-white z-50 shadow-[10px_0_40px_rgba(0,0,0,0.2)] overflow-hidden no-scrollbar">
                 <div className="h-24 px-5 border-b border-white/5 flex items-center shrink-0">
@@ -208,6 +210,7 @@ const AdminLayout: React.FC = () => {
                 </div>
             </main>
         </div>
+        </GoEasyProvider>
     );
 };
 

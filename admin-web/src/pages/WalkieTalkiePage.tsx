@@ -1,14 +1,11 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import GoEasy from 'goeasy';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
+import { useGoEasy } from '../contexts/GoEasyContext';
 import AudioPlayer from '../components/AudioPlayer';
+import { api } from '../services/api';
 
-const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
-const GOEASY_HOST = 'singapore.goeasy.io';
 const CHANNEL = 'KIM_LONG_COMUNITY';
-
-let globalGoEasy: any = null;
 
 interface OnlineUser {
     userId: string;
@@ -49,8 +46,8 @@ const blobToBase64 = (blob: Blob): Promise<string> =>
 
 export const WalkieTalkiePage: React.FC = () => {
     const { user } = useAuth();
+    const { goEasy: contextGoEasy, status: goEasyStatus } = useGoEasy();
     const [messages, setMessages] = useState<ChatMessage[]>([]);
-    const [goEasyStatus, setGoEasyStatus] = useState<'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'>('DISCONNECTED');
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const [chatInput, setChatInput] = useState('');
     const [visibleError, setVisibleError] = useState<string | null>(null);
@@ -65,11 +62,8 @@ export const WalkieTalkiePage: React.FC = () => {
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
-    const goEasyRef = useRef<any>(null);
-    const fallbackIdRef = useRef<string>(`superadmin-${Math.random().toString(36).slice(2, 9)}`);
     const recordStartTimeRef = useRef<number | null>(null);
     const chatBottomRef = useRef<HTMLDivElement | null>(null);
-    const currentGoEasyIdRef = useRef<string | null>(null);
     const silentAudioRef = useRef<HTMLAudioElement | null>(null);
 
     const addMessage = useCallback((msg: ChatMessage) => {
@@ -93,137 +87,99 @@ export const WalkieTalkiePage: React.FC = () => {
     }, [messages]);
 
     /** 用户交互解锁音频权限 */
-    const unlockAudio = () => {
+    const unlockAudio = useCallback(() => {
+        if (audioUnlocked) return;
         const SILENT_WAV = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
         const audio = new Audio(`data:audio/wav;base64,${SILENT_WAV}`);
         audio.volume = 0.01;
         audio.play()
             .then(() => {
                 setAudioUnlocked(true);
-                console.log('[Walkie] Audio context unlocked');
+                console.log('[Walkie] Audio context unlocked via interaction');
             })
             .catch((e) => {
                 console.warn('[Walkie] Unlock failed:', e);
                 setAudioUnlocked(true);
             });
         silentAudioRef.current = audio;
-    };
+    }, [audioUnlocked]);
 
-    // ── GoEasy PubSub Connection ────────────────────────────────────
+    // --- NEW: 监听全局点击以隐形解锁音频 ---
     useEffect(() => {
-        if (!user || user.id === currentGoEasyIdRef.current) return;
+        if (audioUnlocked) return;
+        const handleFirstClick = () => {
+            unlockAudio();
+            window.removeEventListener('click', handleFirstClick);
+            window.removeEventListener('touchstart', handleFirstClick);
+        };
+        window.addEventListener('click', handleFirstClick);
+        window.addEventListener('touchstart', handleFirstClick);
+        return () => {
+            window.removeEventListener('click', handleFirstClick);
+            window.removeEventListener('touchstart', handleFirstClick);
+        };
+    }, [audioUnlocked, unlockAudio]);
 
-        console.log('[GoEasy] Initializing for user:', user.id);
-        currentGoEasyIdRef.current = user.id;
+    // ── GoEasy PubSub Subscriptions ────────────────────────────────────
+    useEffect(() => {
+        if (!user || !contextGoEasy || goEasyStatus !== 'CONNECTED') return;
 
         const myId = user.id;
-        const myLabel = user.email || 'Super Admin';
-        const myRole = user.role || 'super_admin';
+        console.log('[Walkie] Subscribing to channel:', CHANNEL);
 
-        let goEasy: any = null;
+        contextGoEasy.pubsub.subscribe({
+            channel: CHANNEL,
+            onMessage: async (message: { content: string }) => {
+                try {
+                    const payload = JSON.parse(message.content);
+                    if (payload.senderId === myId) return;
 
-        const doConnect = () => {
-            try {
-                if (!globalGoEasy) {
-                    if (typeof (GoEasy as any).getInstance !== 'function') {
-                        throw new Error('GoEasy.getInstance is not a function.');
+                    // 接收全局电台广播
+                    if (payload.receiverId !== 'GLOBAL') return;
+
+                    const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
+                    const common = {
+                        id: incomingId,
+                        senderId: payload.senderId,
+                        senderLabel: payload.senderLabel || payload.senderId,
+                        senderRole: payload.senderRole || 'driver',
+                        timestamp: payload.timestamp || Date.now(),
+                        isMine: false,
+                        receiverId: myId,
+                        duration: payload.duration
+                    };
+
+                    if (payload.type === 'text') {
+                        addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
+                    } else if (payload.type === 'audio' || payload.audio) {
+                        const audioContent = payload.content || payload.audio;
+                        if (!audioContent) return;
+                        
+                        // 立即设置最新传入 ID 以触发自动播放
+                        setLatestIncomingId(incomingId);
+                        
+                        addMessage({ 
+                            ...common, 
+                            id: incomingId,
+                            content: audioContent, 
+                            type: 'audio' 
+                        } as ChatMessage);
                     }
-                    globalGoEasy = (GoEasy as any).getInstance({
-                        host: GOEASY_HOST,
-                        appkey: GOEASY_APPKEY,
-                        modules: ['pubsub'],
-                    });
+                } catch (err) {
+                    console.error('[Walkie] Failed to handle message', err);
                 }
-                goEasy = globalGoEasy;
-                goEasyRef.current = goEasy;
-
-                const subscribeToChannel = () => {
-                    // 订阅固定频道以监听所有发给我的消息（接收端过滤）
-                    goEasy.pubsub.subscribe({
-                        channel: CHANNEL,
-                        onMessage: async (message: { content: string }) => {
-                            try {
-                                const payload = JSON.parse(message.content);
-                                if (payload.senderId === myId) return;
-
-                                // 接收全局电台广播
-                                if (payload.receiverId !== 'GLOBAL') return;
-
-                                const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
-                                const common = {
-                                    id: incomingId,
-                                    senderId: payload.senderId,
-                                    senderLabel: payload.senderLabel || payload.senderId,
-                                    senderRole: payload.senderRole || 'driver',
-                                    timestamp: payload.timestamp || Date.now(),
-                                    isMine: false,
-                                    receiverId: myId,
-                                    duration: payload.duration
-                                };
-
-                                if (payload.type === 'text') {
-                                    addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
-                                } else if (payload.type === 'audio' || payload.audio) {
-                                    const audioContent = payload.content || payload.audio;
-                                    if (!audioContent) return;
-                                    addMessage({ ...common, content: audioContent, type: 'audio' } as ChatMessage);
-                                    setLatestIncomingId(incomingId);
-                                }
-                            } catch (err) {
-                                console.error('[GoEasy] Failed to handle message', err);
-                            }
-                        },
-                    });
-                };
-
-                const status = goEasy.getConnectionStatus ? goEasy.getConnectionStatus() : 'disconnected';
-                if (status === 'connected') {
-                    console.log('[GoEasy] Already connected, reusing connection.');
-                    setGoEasyStatus('CONNECTED');
-                    subscribeToChannel();
-                    return;
-                }
-
-                setGoEasyStatus('CONNECTING');
-                goEasy.connect({
-                    id: myId,
-                    data: { email: myLabel, role: myRole },
-                    onSuccess: () => {
-                        setVisibleError(null); // Clear errors on success
-                        setGoEasyStatus('CONNECTED');
-                        if (!goEasy) return;
-                        subscribeToChannel();
-                    },
-                    onFailed: (err: any) => {
-                        console.error('[GoEasy] Connect failed', err);
-                        setVisibleError(`[GoEasy Error] ${err?.content || err?.message || JSON.stringify(err)}`);
-                        setGoEasyStatus('DISCONNECTED');
-                    },
-                    onDisconnected: () => {
-                        setVisibleError("GoEasy Disconnected");
-                        setGoEasyStatus('DISCONNECTED');
-                    },
-                });
-            } catch (err: any) {
-                console.error('[GoEasy] SDK init error', err);
-                setVisibleError(`[GoEasy Init Error] ${err?.message || String(err)}`);
-                setGoEasyStatus('DISCONNECTED');
-            }
-        };
-
-        doConnect();
+            },
+            onSuccess: () => console.log('[Walkie] Subscribed to', CHANNEL),
+            onFailed: (err: any) => console.error('[Walkie] Subscribe failed', err)
+        });
 
         return () => {
-            if (goEasy) {
-                goEasy.pubsub.unsubscribe({ 
-                    channel: CHANNEL,
-                    onSuccess: () => console.log('[GoEasy] Unsubscribe success'),
-                    onFailed: (err: any) => console.error('[GoEasy] Unsubscribe failed', err)
-                });
-                if (typeof goEasy.disconnect === 'function') goEasy.disconnect();
-            }
+            console.log('[Walkie] Unsubscribing from', CHANNEL);
+            contextGoEasy.pubsub.unsubscribe({
+                channel: CHANNEL
+            });
         };
-    }, [user?.id, addMessage]);
+    }, [user?.id, contextGoEasy, goEasyStatus, addMessage]);
 
     // ── Supabase Messages Realtime Listener ────────────────────────
     useEffect(() => {
@@ -232,8 +188,8 @@ export const WalkieTalkiePage: React.FC = () => {
                 const msg = payload.new;
                 if (!msg || msg.sender_id === user?.id) return;
 
-                // 接收全局电台广播
-                if (msg.receiver_id !== 'GLOBAL') return;
+                // 接收全局电台广播或无接收者定义的消息（视作公告/全局）
+                if (msg.receiver_id && msg.receiver_id !== 'GLOBAL' && msg.receiver_id !== user?.id) return;
 
                 addMessage({
                     id: msg.id,
@@ -349,23 +305,33 @@ export const WalkieTalkiePage: React.FC = () => {
         mr.stop();
         mr.stream.getTracks().forEach((t) => t.stop());
         mr.onstop = async () => {
-            if (!goEasyRef.current || goEasyStatus !== 'CONNECTED') return;
+            if (!contextGoEasy || goEasyStatus !== 'CONNECTED') return;
             const mimeType = mr.mimeType || 'audio/webm';
             const blob = new Blob(audioChunksRef.current, { type: mimeType });
             if (blob.size < 100) return;
             try {
-                const base64Audio = await blobToBase64(blob);
+                // 将 Blob 通过 FormData 上传到后端存储
+                const formData = new FormData();
+                formData.append('file', blob, `voice_${user?.id || 'unknown'}_${Date.now()}.webm`);
+                
+                const { data: uploadResult } = await api.post('/audio/upload', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                
+                const audioUrl = uploadResult.url;
+                if (!audioUrl) throw new Error('Upload failed: No URL returned');
+
                 const ts = Date.now();
                 const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
-                const msgId = `${user?.id || fallbackIdRef.current}-${ts}`;
+                const msgId = `${user?.id || 'unknown'}-${ts}`;
 
                 const payload = {
                     id: msgId,
                     type: 'audio',
-                    senderId: user?.id ?? fallbackIdRef.current,
+                    senderId: user?.id ?? 'unknown',
                     senderLabel: user?.email ?? 'Super Admin',
                     senderRole: user?.role ?? 'super_admin',
-                    content: base64Audio,
+                    content: audioUrl, // 存入公开访问 URL
                     timestamp: ts,
                     receiverId: 'GLOBAL',
                     duration: dur
@@ -376,7 +342,7 @@ export const WalkieTalkiePage: React.FC = () => {
                     senderId: payload.senderId,
                     senderLabel: payload.senderLabel,
                     senderRole: payload.senderRole,
-                    content: base64Audio,
+                    content: audioUrl,
                     timestamp: ts,
                     isMine: true,
                     type: 'audio',
@@ -384,11 +350,11 @@ export const WalkieTalkiePage: React.FC = () => {
                     duration: dur
                 });
 
-                goEasyRef.current.pubsub.publish({
+                contextGoEasy.pubsub.publish({
                     channel: CHANNEL,
                     message: JSON.stringify(payload),
-                    onSuccess: () => console.log(`[GoEasy] Audio broadcasted to GLOBAL`),
-                    onFailed: (err: any) => console.error('[GoEasy] Publish failed', err),
+                    onSuccess: () => console.log(`[Walkie] Audio URL broadcasted to GLOBAL`),
+                    onFailed: (err: any) => console.error('[Walkie] Publish failed', err),
                 });
 
                 const insertAudio = async () => {
@@ -398,14 +364,14 @@ export const WalkieTalkiePage: React.FC = () => {
                         sender_label: payload.senderLabel,
                         sender_role: payload.senderRole,
                         receiver_id: 'GLOBAL',
-                        content: base64Audio,
+                        content: audioUrl,
                         type: 'audio',
                         duration: dur
                     }]);
                 };
                 insertAudio();
 
-            } catch (err) { console.error('[GoEasy] Failed to encode audio', err); }
+            } catch (err) { console.error('[GoEasy] Audio upload/publish failed', err); }
             audioChunksRef.current = [];
         };
     };
@@ -413,9 +379,9 @@ export const WalkieTalkiePage: React.FC = () => {
     // ── 发送文字消息 ──────────────────────────────────────────────────
     const sendTextMessage = () => {
         const text = chatInput.trim();
-        if (!text || !goEasyRef.current || goEasyStatus !== 'CONNECTED') return;
+        if (!text || !contextGoEasy || goEasyStatus !== 'CONNECTED') return;
 
-        const myId = user?.id ?? fallbackIdRef.current;
+        const myId = user?.id ?? 'unknown';
         const myLabel = user?.email ?? 'Super Admin';
         const myRole = user?.role ?? 'super_admin';
         const ts = Date.now();
@@ -434,7 +400,7 @@ export const WalkieTalkiePage: React.FC = () => {
         });
         setChatInput('');
 
-        goEasyRef.current.pubsub.publish({
+        contextGoEasy.pubsub.publish({
             channel: CHANNEL,
             message: JSON.stringify({
                 id: msgId,
@@ -446,7 +412,7 @@ export const WalkieTalkiePage: React.FC = () => {
                 timestamp: ts,
                 receiverId: 'GLOBAL'
             }),
-            onFailed: (err: any) => console.error('[GoEasy] Text publish failed', err),
+            onFailed: (err: any) => console.error('[Walkie] Text publish failed', err),
         });
 
         const insertText = async () => {
@@ -516,16 +482,6 @@ export const WalkieTalkiePage: React.FC = () => {
                     </div>
                 </div>
 
-                {/* 音频解锁按钮 */}
-                {!audioUnlocked && (
-                    <button
-                        onClick={unlockAudio}
-                        className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white rounded-xl text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-amber-500/30 active:scale-95 transition-all"
-                    >
-                        <span className="material-icons-round text-[18px]">volume_up</span>
-                        点击解锁语音播放
-                    </button>
-                )}
 
                 <div className="bg-white rounded-xl shadow-sm border border-slate-100 px-4 py-3 flex items-center gap-2.5">
                     <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${goEasyStatus === 'CONNECTED' ? 'bg-green-500 animate-pulse' : 'bg-red-400'}`}></span>

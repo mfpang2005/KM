@@ -56,9 +56,11 @@ const DriverSchedule: React.FC = () => {
     // NOTE: 追踪最新收到的语音消息 ID，用于触发 AudioPlayer autoPlay
     const [latestIncomingId, setLatestIncomingId] = useState<string | null>(null);
 
+    const [audioUnlocked, setAudioUnlocked] = useState(false);
     const audioContextRef = useRef<AudioContext | null>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
+    const silentAudioRef = useRef<HTMLAudioElement | null>(null);
     const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
     const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
     const chatBottomRef = useRef<HTMLDivElement | null>(null);
@@ -79,13 +81,56 @@ const DriverSchedule: React.FC = () => {
         setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
     }, []);
 
+    /** 用户交互解锁音频权限 */
+    const unlockAudio = useCallback(() => {
+        if (audioUnlocked) return;
+        const SILENT_WAV = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+        const audio = new Audio(`data:audio/wav;base64,${SILENT_WAV}`);
+        audio.volume = 0.01;
+        audio.play()
+            .then(() => {
+                setAudioUnlocked(true);
+                console.log('[Driver PTT] Audio context unlocked');
+            })
+            .catch((e) => {
+                console.warn('[Driver PTT] Unlock failed:', e);
+                setAudioUnlocked(true);
+            });
+        silentAudioRef.current = audio;
+    }, [audioUnlocked]);
+
+    // --- NEW: 监听全局点击以隐形解锁音频 ---
+    useEffect(() => {
+        if (audioUnlocked) return;
+        const handleFirstClick = () => {
+            unlockAudio();
+            window.removeEventListener('click', handleFirstClick);
+            window.removeEventListener('touchstart', handleFirstClick);
+        };
+        window.addEventListener('click', handleFirstClick);
+        window.addEventListener('touchstart', handleFirstClick);
+        return () => {
+            window.removeEventListener('click', handleFirstClick);
+            window.removeEventListener('touchstart', handleFirstClick);
+        };
+    }, [audioUnlocked, unlockAudio]);
+
     const playAudio = useCallback(async (content: string) => {
         if (!audioContextRef.current) {
             audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
         if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
         try {
-            // Handle potential data URI prefix
+            // --- NEW: Handle HTTP URL directly ---
+            if (content.startsWith('http')) {
+                const audio = new Audio(content);
+                audio.onended = () => setPttStatus('CONNECTED');
+                audio.play().catch(e => console.error('[GoEasy PTT] Play error', e));
+                setPttStatus('LISTENING');
+                return;
+            }
+
+            // Handle potential data URI prefix or raw base64
             const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
             
             const binary = atob(base64);
@@ -342,13 +387,6 @@ const DriverSchedule: React.FC = () => {
         }
     };
 
-    const blobToBase64 = (blob: Blob): Promise<string> =>
-        new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-            reader.onerror = reject;
-            reader.readAsDataURL(blob);
-        });
 
 
     const startPttSession = async () => {
@@ -501,29 +539,39 @@ const DriverSchedule: React.FC = () => {
                     return;
                 }
 
+                // --- NEW: Upload to Backend Storage ---
+                const formData = new FormData();
+                formData.append('file', blob, `voice_driver_${userId || 'unknown'}_${Date.now()}.webm`);
+                
+                const { data: uploadResult } = await api.post('/audio/upload', formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                });
+                
+                const audioUrl = uploadResult.url;
+                if (!audioUrl) throw new Error('Upload failed: No URL returned');
+
                 const myId = userId || 'unknown-driver';
                 const myName = driverName || '司机端';
-                const base64Audio = await blobToBase64(blob);
                 const ts = Date.now();
                 const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
                 const msgId = `${myId}-${ts}`;
 
-                console.log(`[Driver PTT] Sending audio ${msgId}, dur=${dur.toFixed(1)}s`);
+                console.log(`[Driver PTT] Sending audio URL ${msgId}, dur=${dur.toFixed(1)}s`);
 
-                // NOTE: 本地立即显示气泡，不等网络返回
+                // NOTE: 本地立即显示气泡
                 addMessage({
                     id: msgId,
                     senderId: myId,
                     senderLabel: myName,
                     senderRole: 'driver',
-                    content: base64Audio,
+                    content: audioUrl, // Store URL
                     timestamp: ts,
                     isMine: true,
                     type: 'audio',
                     duration: dur
                 });
 
-                // NOTE: 广播到全局频道，payload 统一用 content 字段（与 admin 读取逻辑一致）
+                // NOTE: 广播到全局频道
                 goEasyRef.current.pubsub.publish({
                     channel: CHANNEL,
                     message: JSON.stringify({
@@ -532,30 +580,30 @@ const DriverSchedule: React.FC = () => {
                         senderId: myId,
                         senderLabel: myName,
                         senderRole: 'driver',
-                        content: base64Audio,
+                        content: audioUrl,
                         timestamp: ts,
                         receiverId: 'GLOBAL',
                         duration: dur
                     }),
-                    onSuccess: () => console.log('[Driver PTT] GoEasy broadcast success'),
-                    onFailed: (e: any) => console.error('[Driver PTT] GoEasy broadcast failed', e)
+                    onSuccess: () => console.log('[Driver PTT] GoEasy URL broadcast success'),
+                    onFailed: (e: any) => console.error('[Driver PTT] GoEasy URL broadcast failed', e)
                 });
 
-                // NOTE: 同步保存到 Supabase，供历史记录查询
+                // NOTE: 同步保存到 Supabase
                 const { error } = await supabase.from('messages').insert([{
                     id: msgId,
                     sender_id: myId,
                     sender_label: myName,
                     sender_role: 'driver',
                     receiver_id: 'GLOBAL',
-                    content: base64Audio,
+                    content: audioUrl,
                     type: 'audio',
                     duration: dur
                 }]);
 
                 if (error) {
                     console.error('[Driver PTT] DB Insert failed:', error);
-                    alert('声音保存失败，请检查数据库连接。');
+                    // alert(`声音保存失败: ${error.message} (${error.code})。如果提示列不存在，请在 Supabase SQL 执行：ALTER TABLE messages ADD COLUMN duration FLOAT DEFAULT 0;`);
                 } else {
                     console.log('[Driver PTT] DB Insert success');
                 }

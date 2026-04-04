@@ -58,19 +58,29 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
             try {
                 let blobUrl: string;
                 if (audioUrl.startsWith('http')) {
+                    // Direct URL from Supabase Storage
                     blobUrl = audioUrl;
-                } else {
-                    const raw = audioUrl.startsWith('data:')
-                        ? await fetch(audioUrl).then(r => r.blob())
-                        : (() => {
-                            const bin = atob(audioUrl);
-                            const bytes = new Uint8Array(bin.length);
-                            for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                            return new Blob([bytes], { type: 'audio/webm' });
-                        })();
+                } else if (audioUrl.startsWith('data:')) {
+                    // Data URI
+                    const res = await fetch(audioUrl);
+                    const blob = await res.blob();
                     if (cancelled) return;
-                    blobUrl = URL.createObjectURL(raw);
+                    blobUrl = URL.createObjectURL(blob);
                     objectUrlRef.current = blobUrl;
+                } else {
+                    // Raw Base64 (Backwards compatibility)
+                    try {
+                        const bin = atob(audioUrl);
+                        const bytes = new Uint8Array(bin.length);
+                        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                        const raw = new Blob([bytes], { type: 'audio/webm' });
+                        if (cancelled) return;
+                        blobUrl = URL.createObjectURL(raw);
+                        objectUrlRef.current = blobUrl;
+                    } catch (e) {
+                        console.error('[AudioPlayer] Failed to decode raw base64', e);
+                        return;
+                    }
                 }
                 audio.src = blobUrl;
                 audio.load();
