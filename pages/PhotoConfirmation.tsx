@@ -1,13 +1,52 @@
 import React, { useState, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { PaymentMethod, OrderStatus } from '../types';
+import { Order, PaymentMethod, OrderStatus } from '../types';
 import { OrderService } from '../src/services/api';
 import { supabase } from '../src/lib/supabase';
+
+/**
+ * 客户端图片压缩 (1280px / 0.7 质量)
+ * 显著降低上载物理负载，让交付确认快如闪电
+ */
+const compressImage = (file: File, maxWidth = 1200, quality = 0.75): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height = (maxWidth / width) * height;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob((blob) => {
+                    if (blob) resolve(blob);
+                    else reject(new Error('Canvas 转换失败'));
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+    });
+};
 
 const PhotoConfirmation: React.FC = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const orderId = location.state?.orderId;
+    const [order, setOrder] = useState<Order | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
     // photos: { stepId -> { localUrl, storageUrl } }
     const [photos, setPhotos] = useState<Record<string, { localUrl: string; storageUrl: string }>>({});
     const [selectedPayment, setSelectedPayment] = useState<PaymentMethod | null>(null);
@@ -15,6 +54,29 @@ const PhotoConfirmation: React.FC = () => {
     const [uploadingStep, setUploadingStep] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const [pendingStepId, setPendingStepId] = useState<string | null>(null);
+
+    React.useEffect(() => {
+        if (!orderId) {
+            setIsLoading(false);
+            return;
+        }
+        const fetchOrder = async () => {
+            try {
+                const data = await OrderService.getById(orderId);
+                setOrder(data);
+            } catch (err: any) {
+                console.error('Failed to fetch order', err);
+                // 核心加固：如果初次加载就找不到订单，立即拦截并强制导回
+                if (err.response?.status === 404) {
+                    alert(`找不到订单 #${orderId?.slice(0,8).toUpperCase()}。\n可能已被管理员取消或指派关系已变更，正在返回行程表...`);
+                    navigate('/driver');
+                }
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchOrder();
+    }, [orderId]);
 
     const steps = [
         { id: 'receipt', label: '顾客签收底单', sub: 'Receipt Sign-off', icon: 'receipt_long', color: 'bg-blue-500' },
@@ -48,14 +110,20 @@ const PhotoConfirmation: React.FC = () => {
 
         setUploadingStep(pendingStepId);
         try {
-            // 本地预览用 blob URL
+            // 1. 本地预览直接使用原始 File 的 Blob URL
             const localUrl = URL.createObjectURL(file);
 
-            // 上传至 Supabase Storage Bucket: delivery-photos
+            // 2. 核心优化：在上传前进行极速压强处理 (压缩体积 > 90%)
+            const compressedBlob = await compressImage(file);
+
+            // 3. 上传压缩后的 Blob 数据至 Supabase
             const path = `${orderId}/${pendingStepId}-${Date.now()}.jpg`;
             const { error } = await supabase.storage
                 .from('delivery-photos')
-                .upload(path, file, { upsert: true, contentType: file.type });
+                .upload(path, compressedBlob, { 
+                    upsert: true, 
+                    contentType: 'image/jpeg' 
+                });
 
             if (error) throw error;
 
@@ -67,11 +135,10 @@ const PhotoConfirmation: React.FC = () => {
             setPhotos(prev => ({ ...prev, [pendingStepId]: { localUrl, storageUrl } }));
         } catch (err) {
             console.error('Upload failed', err);
-            alert('照片上传失败，请重试。');
+            alert('照片压缩或上载失败，请检查网络后重试。');
         } finally {
             setUploadingStep(null);
             setPendingStepId(null);
-            // Reset input so the same step can be retaken
             if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
@@ -82,8 +149,9 @@ const PhotoConfirmation: React.FC = () => {
         if (!canSubmit) return;
         setIsSubmitting(true);
         try {
-            // 1. 将 Storage URL 列表写入订单 delivery_photos 字段
-            const photoUrls = (Object.values(photos) as { localUrl: string; storageUrl: string }[]).map(p => p.storageUrl);
+            // 1. 核心优化：确保图片数组顺序固定 [0:底单, 1:食物, 2:证据]
+            // 这让财务对帐时图标永远对应实物
+            const photoUrls = steps.map(s => photos[s.id]?.storageUrl || "");
             await OrderService.updateOrderPhotos(orderId, photoUrls);
 
             // 2. 调用新接口完成订单（允许司机权限）
@@ -133,14 +201,16 @@ const PhotoConfirmation: React.FC = () => {
                         <div className="relative z-10 flex justify-between items-start">
                             <div className="space-y-1">
                                 <span className="text-[10px] font-black text-primary uppercase tracking-[0.2em]">Active Delivery</span>
-                                <h2 className="text-3xl font-black tracking-tighter">#{orderId || 'UNKNOWN'}</h2>
+                                <h2 className="text-3xl font-black tracking-tighter">#{orderId?.slice(0,8).toUpperCase() || 'UNKNOWN'}</h2>
                                 <p className="text-xs font-medium text-slate-400 mt-2 flex items-center gap-2">
-                                    <span className="material-icons-round text-sm">person</span>
-                                    Alice Wong (黄小姐)
+                                    <span className="material-icons-round text-sm text-primary">person</span>
+                                    {isLoading ? '加载客户中...' : (order?.customerName || '未关联客户')}
                                 </p>
                             </div>
                             <div className="flex flex-col items-end">
-                                <span className="bg-white/10 px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border border-white/5">RM 240.00</span>
+                                <span className="bg-primary px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest text-white shadow-lg shadow-primary/20 transition-all active:scale-95">
+                                    {isLoading ? '...' : `RM ${order?.amount?.toFixed(2) || '0.00'}`}
+                                </span>
                             </div>
                         </div>
                     </div>

@@ -42,8 +42,51 @@ async def upload_audio(file: UploadFile = File(...)):
             file_path
         )
         
-        return {"url": public_url_res}
+        # 兼容 supabase-py 返回对象或直接返回 URL 的不同版本
+        final_url = public_url_res if isinstance(public_url_res, str) else getattr(public_url_res, "public_url", public_url_res)
+        
+        return {"url": final_url}
 
     except Exception as e:
         logger.error(f"Audio upload failed: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+
+@router.patch("/recall/{msg_id}")
+async def recall_message(msg_id: str):
+    """
+    撤回指定 ID 的消息（设置为 is_recalled = true）。
+    """
+    try:
+        # 1. 尝试更新数据库中该消息的状态
+        res = await run_in_threadpool(
+            supabase.table("messages")
+            .update({"is_recalled": True})
+            .eq("id", msg_id.strip())
+            .execute
+        )
+        
+        if not res.data:
+            logger.warning(f"Recall failed: Message ID [{msg_id}] NOT FOUND in DB.")
+            raise HTTPException(status_code=404, detail=f"Message ID {msg_id} not found.")
+            
+        # 2. 只有数据库更新成功后，才尝试发送 GoEasy 实时撤回信令
+        try:
+            from services.goeasy import publish_message
+            await publish_message({
+                "type": "recall",
+                "msgId": msg_id.strip()
+            })
+            logger.info(f"GoEasy recall signal sent for {msg_id}")
+        except Exception as ge_err:
+            # GoEasy 失败不作为阻塞错误，仅记录警告
+            logger.warning(f"GoEasy notification failed but DB was updated: {str(ge_err)}")
+
+        logger.info(f"Message {msg_id} successfully recalled in DB.")
+        return {"status": "success", "id": msg_id}
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"CRITICAL ERROR during recall for {msg_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -13,6 +13,8 @@ from models import (
 )
 from services.audit import record_audit, AuditActions
 from middleware.auth import require_super_admin, require_admin
+from datetime import datetime, timezone, timedelta
+import dateutil.parser
 
 router = APIRouter(
     prefix="/super-admin",
@@ -33,30 +35,75 @@ async def get_stats_overview(
     """
     from fastapi.concurrency import run_in_threadpool
     
-    # 获取所有订单的状态和金额以计算总量
+    # Fetch orders with enough fields for timing and finance logic
     all_orders_resp = await run_in_threadpool(
         supabase.table("orders")
-        .select("status, amount")
+        .select("id, order_number, status, amount, dueTime, created_at, payment_received, paymentStatus, paymentMethod, balance")
+        .neq("status", "cancelled")
         .execute
     )
     all_orders_data = all_orders_resp.data or []
-    
+
+    # Business Timezone: GMT+8
+    now_utc = datetime.now(timezone.utc)
+    now_biz = now_utc + timedelta(hours=8)
+    now_naive = now_biz.replace(tzinfo=None)
+    today_str = now_naive.strftime("%Y-%m-%d")
+    month_ago = now_naive - timedelta(days=31)
+
     total_orders = len(all_orders_data)
-    total_revenue = sum(float(o.get("amount", 0)) for o in all_orders_data)
+    total_revenue = 0.0
+    today_orders = 0
+    today_revenue = 0.0
+    month_orders = 0
+    month_revenue = 0.0
+    total_unpaid = 0.0
     
     status_counts: dict[str, int] = {}
-    for o in all_orders_data:
-        s = o.get("status", "unknown")
-        status_counts[s] = status_counts.get(s, 0) + 1
 
-    # 拉取最近 200 条完整订单用于业务逻辑 (如 Recent Activity 的子集等)
-    recent_resp = await run_in_threadpool(
-        supabase.table("orders")
-        .select("*")
-        .order("created_at", desc=True)
-        .limit(200)
-        .execute
-    )
+    def get_field(obj, *keys):
+        for k in keys:
+            if k in obj: return obj[k]
+        return None
+
+    for o in all_orders_data:
+        # Status count (Normalized to lowercase for frontend mapping)
+        s = str(o.get("status", "unknown")).lower()
+        status_counts[s] = status_counts.get(s, 0) + 1
+        
+        # Amount extraction
+        amt = float(get_field(o, "amount", "Amount") or 0.0)
+        bal = float(get_field(o, "balance", "Balance") or 0.0)
+        total_revenue += amt
+        total_unpaid += bal
+
+        # Date parsing
+        due_raw = get_field(o, "dueTime", "duetime")
+        ca_raw = get_field(o, "created_at", "createdAt")
+        dt = None
+        try:
+            if due_raw: dt = dateutil.parser.parse(str(due_raw))
+            elif ca_raw: dt = dateutil.parser.parse(str(ca_raw))
+        except: continue
+        if not dt: continue
+
+        dt_naive = dt.replace(tzinfo=None)
+        dt_str = dt_naive.strftime("%Y-%m-%d")
+        
+        # Today calculation
+        is_today = (dt_str == today_str)
+        if is_today:
+            today_orders += 1
+            today_revenue += amt 
+            
+        # Month calculation (Last 31 days)
+        if dt_naive >= month_ago:
+            month_orders += 1
+            month_revenue += amt
+
+    # Ensure Recent Activity shows the latest 20 orders by sorting descending
+    all_orders_data.sort(key=lambda x: str(x.get('created_at', '')), reverse=True)
+
     # 拉取用户总数
     users_resp = await run_in_threadpool(supabase.table("users").select("id", count="exact").execute)
     total_users = users_resp.count if hasattr(users_resp, "count") else len(users_resp.data or [])
@@ -64,9 +111,14 @@ async def get_stats_overview(
     return {
         "total_orders": total_orders,
         "total_revenue": total_revenue,
+        "today_orders": today_orders,
+        "today_revenue": round(today_revenue, 2),
+        "month_revenue": round(month_revenue, 2),
+        "month_orders": month_orders,
         "total_users": total_users,
+        "total_unpaid": round(total_unpaid, 2),
         "orders_by_status": status_counts,
-        "recent_orders": recent_resp.data or []
+        "recent_orders": all_orders_data[:20]  
     }
 
 
@@ -285,14 +337,15 @@ async def get_financials(
     from datetime import datetime, timezone, timedelta
     import dateutil.parser
 
-    now = datetime.now(timezone.utc)
-    today_str = now.strftime("%Y-%m-%d")
+    # Business Timezone: GMT+8
+    now_utc = datetime.now(timezone.utc)
+    now_biz = now_utc + timedelta(hours=8)
+    now_naive = now_biz.replace(tzinfo=None)
+    today_str = now_naive.strftime("%Y-%m-%d")
 
-    # Fetch orders from a wider 365-day window to ensure all active orders are included in metrics.
-    # This prevents missing orders created in previous months but due in the current month.
-    window_start = (now - timedelta(days=365)).replace(hour=0, minute=0, second=0, microsecond=0).isoformat()
-    
-    query = supabase.table("orders").select("*").gte("created_at", window_start).neq("status", "cancelled")
+    # Fetch orders without a restrictive created_at filter to avoid format mismatch issues.
+    # We rely on Python logic (is_in_period) to filter the results.
+    query = supabase.table("orders").select("*").neq("status", "cancelled")
     
     if event_date:
         # 只匹配 dueTime 的日期部分，因为 eventDate 列在数据库中不存在
@@ -307,60 +360,72 @@ async def get_financials(
     today_order_count = 0
     pm_stats: dict = {}
 
-    for o in all_orders:
-        payment = float(o.get("payment_received") or 0.0)
-        due_time_raw = o.get("dueTime") or ""
-        
-        # Parse timing
-        is_today = False
-        is_in_period = False
-        try:
-            if due_time_raw and "T" in due_time_raw:
-                dt = dateutil.parser.isoparse(due_time_raw)
-                dt_str = dt.strftime("%Y-%m-%d")
-                if dt_str == today_str:
-                    is_today = True
-                
-                if range == "today":
-                    if dt_str == today_str: is_in_period = True
-                elif range == "month":
-                    if dt.month == now.month and dt.year == now.year: is_in_period = True
-                else: # all
-                    is_in_period = True
-            else:
-                ca = dateutil.parser.isoparse(o.get("created_at"))
-                ca_str = ca.strftime("%Y-%m-%d")
-                if ca_str == today_str: is_today = True
-                
-                if range == "today":
-                    if ca_str == today_str: is_in_period = True
-                elif range == "month":
-                    if ca.month == now.month and ca.year == now.year: is_in_period = True
-                else:
-                    is_in_period = True
-        except Exception:
-            continue
+    # Defensive helper to get values regardless of case
+    def get_field(obj, *keys):
+        for k in keys:
+            if k in obj: return obj[k]
+        return None
 
-        # Period calculation
-        if is_in_period:
-            period_order_count += 1
-            # Use amount for total sales volume, or payment_received for cash flow.
-            # We'll stick to amount for "Financials" volume overview.
-            amt = float(o.get("amount") or 0.0)
-            period_revenue += amt
-            
-            # Payment Method Stats (based on actual received)
-            if payment > 0:
-                method = o.get("paymentMethod") or "cash"
-                if method not in pm_stats:
-                    pm_stats[method] = {"method": method, "amount": 0, "count": 0}
-                pm_stats[method]["amount"] += payment
-                pm_stats[method]["count"] += 1
+    for o in all_orders:
+        amount = float(get_field(o, "amount", "Amount") or 0.0)
+        payment_received = float(get_field(o, "payment_received", "paymentReceived") or 0.0)
+        p_status = str(get_field(o, "paymentStatus", "paymentstatus", "payment_status") or "").lower()
+        p_method = str(get_field(o, "paymentMethod", "paymentmethod", "payment_method") or "cash").lower()
         
-        # Today's Revenue (regardless of range filter, for top card consistency)
+        due_time_raw = get_field(o, "dueTime", "duetime", "due_time")
+        created_at_raw = get_field(o, "created_at", "createdAt")
+        
+        # Robust Date Parsing - Using the more flexible dateutil.parser.parse
+        dt = None
+        try:
+            if due_time_raw:
+                dt = dateutil.parser.parse(str(due_time_raw))
+            elif created_at_raw:
+                dt = dateutil.parser.parse(str(created_at_raw))
+        except:
+            # Final fallback: Try to parse whatever date string we have without strict ISO
+            continue
+            
+        if not dt: continue
+        
+        # Use the business-aware dates defined outside the loop (now_naive, today_str)
+        dt_naive = dt.replace(tzinfo=None)
+        dt_str = dt_naive.strftime("%Y-%m-%d")
+        is_today = (dt_str == today_str)
+        is_in_period = False
+        
+        if range == "today":
+            is_in_period = is_today
+        elif range == "month":
+            # Change to last 31 days (inclusive)
+            thirty_days_ago = now_naive - timedelta(days=31)
+            is_in_period = (dt_naive >= thirty_days_ago)
+        else: # all
+            is_in_period = True
+            
+        # 1. Main Metrics
         if is_today:
-            today_revenue += amt
+            today_revenue += amount
             today_order_count += 1
+            
+        if is_in_period:
+            period_revenue += amount
+            period_order_count += 1
+            
+            # 2. Collection Stats (The core "Collection Data")
+            # Logic: Use payment_received, but fallback to amount if status is paid
+            actual_payment = payment_received
+            if actual_payment == 0 and p_status == 'paid':
+                actual_payment = amount
+                
+            if actual_payment > 0:
+                if p_method not in pm_stats:
+                    pm_stats[p_method] = {"method": p_method, "amount": 0.0, "count": 0}
+                pm_stats[p_method]["amount"] = round(pm_stats[p_method]["amount"] + actual_payment, 2)
+                pm_stats[p_method]["count"] += 1
+        
+
+        # (End of order loop)
 
     # Global Unpaid Total: SUM(balance)
     unpaid_query = supabase.table("orders").select("balance").neq("status", "cancelled").gt("balance", 0)

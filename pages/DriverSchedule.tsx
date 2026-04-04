@@ -21,8 +21,9 @@ interface DriverChatMsg {
     content: string;
     timestamp: number;
     isMine: boolean;
-    type?: 'text' | 'audio';
+    type?: 'text' | 'audio' | 'recall'; // 增加 recall 类型
     duration?: number;
+    isRecalled?: boolean; // 增加已撤回标志位
 }
 
 const DriverSchedule: React.FC = () => {
@@ -272,7 +273,8 @@ const DriverSchedule: React.FC = () => {
                             content: msg.content,
                             timestamp: new Date(msg.created_at).getTime(),
                             isMine: msg.sender_id === userId,
-                            duration: msg.duration
+                            duration: msg.duration,
+                            isRecalled: msg.is_recalled
                         };
                     });
                     setDriverChatMessages(history);
@@ -287,7 +289,11 @@ const DriverSchedule: React.FC = () => {
         const channel = supabase.channel('public:messages')
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
                 const msg = payload.new;
-                if (msg.sender_id === userId) return; // ignore own messages
+                if (!msg || msg.sender_id === userId) return; // ignore own messages or null
+                
+                // 仅同步全局消息或发送给本人的
+                const isTargeted = !msg.receiver_id || msg.receiver_id === 'GLOBAL' || msg.receiver_id === userId;
+                if (!isTargeted) return;
 
                 addMessage({
                     id: msg.id,
@@ -298,13 +304,22 @@ const DriverSchedule: React.FC = () => {
                     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
                     isMine: false,
                     type: (msg.type as any) || 'text',
-                    duration: msg.duration
+                    duration: msg.duration,
+                    isRecalled: msg.is_recalled
                 });
 
                 if (msg.type === 'audio' && msg.content) {
                     await playAudio(msg.content);
                 }
-            }).subscribe();
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+                const msg = payload.new;
+                if (msg && msg.is_recalled) {
+                    console.log('[PTT] Syncing recall state from DB UPDATE:', msg.id);
+                    setDriverChatMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isRecalled: true } : m));
+                }
+            })
+            .subscribe();
 
         return () => { supabase.removeChannel(channel); };
     }, [isPttOpen, userId, addMessage, playAudio]);
@@ -330,8 +345,9 @@ const DriverSchedule: React.FC = () => {
                     handleWhatsApp(order, 'arrival'); // 'arrival' type uses the departure template
                 }
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Failed to update status", e);
+            alert(`更新订单状态失败: ${e.response?.data?.detail || e.message}`);
         }
     };
 
@@ -415,6 +431,15 @@ const DriverSchedule: React.FC = () => {
                                 const payload = JSON.parse(message.content);
                                 if (payload.senderId === myId) return;
                                 
+                                // 处理撤回指令 (New)
+                                if (payload.type === 'recall') {
+                                    const targetId = payload.id || payload.msgId;
+                                    if (!targetId) return;
+                                    console.log('[GoEasy PTT] Remote recall signal received:', targetId);
+                                    setDriverChatMessages(prev => prev.map(m => m.id === targetId ? { ...m, isRecalled: true } : m));
+                                    return;
+                                }
+
                                 // 仅处理发送到 GLOBAL 全局广播频道的消息
                                 if (payload.receiverId !== 'GLOBAL') return;
 
@@ -506,6 +531,31 @@ const DriverSchedule: React.FC = () => {
         }
     };
 
+    // ── 撤回消息逻辑 ──────────────────────────────────────────────────
+    const handleRecall = async (msgId: string) => {
+        if (!window.confirm('确定要撤回这条消息吗？撤回后所有人都将无法查看。')) return;
+
+        try {
+            // 1. 调用后端接口更新 DB
+            await api.patch(`/audio/recall/${msgId}`);
+
+            // 2. 本地 UI 立即反馈
+            setDriverChatMessages(prev => prev.map(m => m.id === msgId ? { ...m, isRecalled: true } : m));
+
+            // 3. 通过 GoEasy 广播撤回信令
+            if (goEasyRef.current) {
+                goEasyRef.current.pubsub.publish({
+                    channel: CHANNEL,
+                    message: JSON.stringify({ type: 'recall', id: msgId }),
+                    onSuccess: () => console.log('[GoEasy] Recall broadcasted:', msgId),
+                });
+            }
+        } catch (err) {
+            console.error('Recall failed:', err);
+            alert('撤回失败，请稍后重试');
+        }
+    };
+
     const handlePttDown = async () => {
         if (pttStatus !== 'CONNECTED') return;
         try {
@@ -554,7 +604,7 @@ const DriverSchedule: React.FC = () => {
                 const myName = driverName || '司机端';
                 const ts = Date.now();
                 const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
-                const msgId = `${myId}-${ts}`;
+                const msgId = self.crypto.randomUUID();
 
                 console.log(`[Driver PTT] Sending audio URL ${msgId}, dur=${dur.toFixed(1)}s`);
 
@@ -603,7 +653,7 @@ const DriverSchedule: React.FC = () => {
 
                 if (error) {
                     console.error('[Driver PTT] DB Insert failed:', error);
-                    // alert(`声音保存失败: ${error.message} (${error.code})。如果提示列不存在，请在 Supabase SQL 执行：ALTER TABLE messages ADD COLUMN duration FLOAT DEFAULT 0;`);
+                    alert(`数据库存入失败 (Error ${error.code}): ${error.message}\n请联系管理员确认消息表结构（duration 字段可能丢失）。`);
                 } else {
                     console.log('[Driver PTT] DB Insert success');
                 }
@@ -642,7 +692,7 @@ const DriverSchedule: React.FC = () => {
 
         const myId = userId || 'unknown-driver';
         const ts = Date.now();
-        const msgId = `${myId}-${ts}`;
+        const msgId = self.crypto.randomUUID();
         const myName = driverName || '司机端';
 
         // 乐观 UI
@@ -692,14 +742,18 @@ const DriverSchedule: React.FC = () => {
         insertMsg();
     };
 
-    const handleWhatsApp = (order: Order, type: 'general' | 'arrival' = 'general') => {
+    const handleWhatsApp = (order: Order, type: 'general' | 'arrival' | 'departure' = 'general') => {
+        if (!order || !order.customerPhone) return;
         const cleanPhone = order.customerPhone.replace(/\D/g, '');
         let message = `你好 ${order.customerName}，我是金龙餐饮的配送司机。我正在配送您的订单 ${order.id}，预计于 ${order.dueTime} 左右到达。`;
-        if (type === 'arrival') {
-            message = `[金龙餐饮] 出发通知%0A----------------------%0A尊敬的 ${order.customerName}，您的订单 ${order.order_number || order.id.slice(0, 8)} 司机已整装出发！%0A%0A预计30-90分钟送达，请耐心等待和保持电话畅通。%0A配送地址: ${order.address}%0A%0A祝您用餐愉快！`;
+        
+        if (type === 'arrival' || type === 'departure') {
+            message = `[金龙餐饮] 出发通知%0A----------------------%0A尊敬的 ${order.customerName}，您的订单 ${order.order_number || order.id.slice(0, 8)} 司机已整装出发！%0A%0A预计 30-90 分钟送达，请保持电话畅通。%0A配送地址: ${order.address}%0A%0A祝您用餐愉快！`;
             setNotifiedOrders(prev => new Set(prev).add(order.id));
         }
-        window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
+
+        const url = `https://wa.me/60${cleanPhone.replace(/^60/, '').replace(/^0/, '')}?text=${message}`;
+        window.open(url, '_blank');
     };
 
     const handleDeclareVehicle = async (vehicle: Vehicle) => {
@@ -937,14 +991,20 @@ const DriverSchedule: React.FC = () => {
                         {driverChatMessages.length === 0 ? (
                             <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-2"><span className="material-icons-round text-3xl">chat_bubble_outline</span><p className="text-xs font-bold">暂无消息</p></div>
                         ) : driverChatMessages.map((msg) => {
+                            if (!msg || !msg.id) return null;
                             const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
                             return (
                                 <div key={msg.id} className={`flex gap-2.5 ${msg.isMine ? 'flex-row-reverse' : 'flex-row'}`}>
                                     <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${msg.senderRole === 'driver' ? 'bg-primary' : 'bg-purple-500'}`}><span className="material-icons-round text-white text-[12px]">person</span></div>
                                     <div className={`max-w-[70%] flex flex-col gap-0.5 ${msg.isMine ? 'items-end' : 'items-start'}`}>
                                         <div className="flex items-center gap-1.5">{!msg.isMine && <span className="text-[9px] font-black text-slate-400">{msg.senderLabel}</span>}<span className="text-[9px] text-slate-600">{time}</span></div>
-                                        <div className={`rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-transparent' : 'bg-transparent'}`}>
-                                            {msg.type === 'audio'
+                                        <div className={`rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-transparent' : 'bg-transparent'} relative group`}>
+                                            {msg.isRecalled ? (
+                                                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-slate-800/40 text-slate-500 rounded-2xl text-[10px] font-bold border border-white/5 italic">
+                                                    <span className="material-icons-round text-xs">remove_circle_outline</span>
+                                                    消息已撤回
+                                                </div>
+                                            ) : msg.type === 'audio'
                                                 ? <AudioPlayer
                                                     audioUrl={msg.content}
                                                     initialDuration={msg.duration}
@@ -954,6 +1014,16 @@ const DriverSchedule: React.FC = () => {
                                                 <div className={`px-3.5 py-2 rounded-2xl text-sm font-medium ${msg.isMine ? 'bg-primary text-white rounded-tr-sm' : 'bg-slate-700/80 text-slate-100 rounded-tl-sm'}`}>
                                                     {msg.content}
                                                 </div>
+                                            )}
+
+                                            {/* 撤回按钮：仅限自己发送且未被撤回时 */}
+                                            {msg.isMine && !msg.isRecalled && (
+                                                <button
+                                                    onClick={() => handleRecall(msg.id)}
+                                                    className="absolute -left-8 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-slate-500 hover:text-white p-1 rounded-full border border-white/5 shadow-lg"
+                                                >
+                                                    <span className="material-icons-round text-[14px]">undo</span>
+                                                </button>
                                             )}
                                         </div>
                                     </div>

@@ -5,51 +5,51 @@ interface FinanceTableRowProps {
     order: Order;
     onUpdateField: (orderId: string, field: string, value: any) => void;
     getPaymentIcon: (method: string) => string;
+    onViewPhoto: (url: string) => void;
+    expandedOrderId: string | null;
+    setExpandedOrderId: (id: string | null) => void;
 }
 
 export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({ 
     order, 
     onUpdateField, 
-    getPaymentIcon 
+    getPaymentIcon,
+    onViewPhoto,
+    expandedOrderId,
+    setExpandedOrderId
 }) => {
     const balance = (order.amount || 0) - (order.payment_received || 0);
     const isPaid = (order.paymentStatus || 'unpaid').toLowerCase() === 'paid';
 
     return (
-        <tr className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${!isPaid && balance > 0 ? 'bg-red-50/5' : ''}`}>
-            <td className="px-4 py-3 align-middle font-mono-finance text-[11px] text-indigo-600 font-bold tracking-tight relative">
+        <>
+            <tr className={`hover:bg-indigo-50/30 transition-all duration-300 group relative ${!isPaid && balance > 0 ? 'bg-red-50/5' : ''}`}>
+            <td className="px-5 py-4 align-middle font-mono-finance text-[12px] text-indigo-600 font-bold tracking-tight relative">
                 <button 
                     onClick={() => {
-                        // Use window.location.href or inject navigate via props if we want to be pure,
-                        // but since navigate is common in pages using this component, let's see if we can use a link or window.location.
-                        // Actually, I'll use a direct link or look at how other components handle navigation.
-                        // In this project, FinancePage uses useNavigate. Let's add navigate to FinanceTableRow props.
                         window.location.href = `/orders?highlightOrder=${order.id}`;
                     }}
                     title="View in Order Status"
-                    className="text-indigo-600 font-bold font-mono-finance hover:underline decoration-2 underline-offset-4 flex items-center gap-1 group/btn"
+                    className="text-indigo-600 font-bold font-mono-finance hover:underline decoration-2 underline-offset-4 flex items-center gap-1.5 group/btn"
                 >
                     {order.order_number || order.id}
-                    <span className="material-icons-round text-[14px] opacity-0 group-hover/btn:opacity-100 transition-opacity">open_in_new</span>
+                    <span className="material-icons-round text-[16px] opacity-0 group-hover/btn:opacity-100 transition-opacity">open_in_new</span>
                 </button>
             </td>
-            <td className="px-3 py-3 align-middle font-mono-finance text-[10px] text-slate-400">
-                {order.created_at ? new Date(order.created_at).toLocaleDateString('en-GB') : '-'}
-            </td>
-            <td className="px-3 py-3 align-middle font-mono-finance text-[10px] text-slate-600 font-bold">
+            <td className="px-5 py-4 align-middle font-mono-finance text-[11px] text-slate-600 font-bold bg-slate-50/20 whitespace-nowrap">
                 {order.dueTime ? new Date(order.dueTime).toLocaleDateString('en-GB') : (order.eventDate || '-')}
             </td>
-            <td className="px-6 py-3 align-middle">
-                <p className="text-xs font-bold text-slate-800 tracking-tight">{order.customerName || 'Walk-in'}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{order.customerPhone || '-'}</p>
+            <td className="px-8 py-4 align-middle text-center">
+                <p className="text-[13px] font-bold text-slate-800 tracking-tight">{order.customerName || 'Walk-in'}</p>
+                <p className="text-[11px] text-slate-400 mt-1">{order.customerPhone || '-'}</p>
             </td>
-            <td className="px-4 py-3 align-middle">
-                <div className="flex items-center gap-1.5 text-slate-500">
-                    <span className="material-icons-round text-xs">{getPaymentIcon(order.paymentMethod || 'cash')}</span>
+            <td className="px-5 py-4 align-middle text-slate-500">
+                <div className="flex items-center justify-center gap-2">
+                    <span className="material-icons-round text-sm">{getPaymentIcon(order.paymentMethod || 'cash')}</span>
                     <select
                         value={order.paymentMethod || 'cash'}
                         onChange={(e) => onUpdateField(order.id, 'paymentMethod', e.target.value)}
-                        className="bg-transparent border-none p-0 text-[10px] font-bold uppercase tracking-tighter focus:ring-0 cursor-pointer text-slate-600 hover:text-indigo-600 transition-colors outline-none appearance-none"
+                        className="bg-transparent border-none p-0 text-[11px] font-bold uppercase tracking-tight focus:ring-0 cursor-pointer text-slate-600 hover:text-indigo-600 transition-colors outline-none appearance-none"
                     >
                         <option value="cash">Cash</option>
                         <option value="bank_transfer">Bank Transfer</option>
@@ -58,19 +58,20 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                     </select>
                 </div>
             </td>
-            <td className="px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-bold text-slate-800">
-                RM {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            <td className="px-5 py-4 align-middle text-right font-mono-finance text-[12px] font-bold text-slate-800 whitespace-nowrap">
+                <span className="text-[10px] text-slate-400 mr-1.5">RM</span>
+                {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </td>
-            <td className="px-4 py-3 align-middle">
+            <td className="px-5 py-4 align-middle">
                 <div className="flex items-center justify-center">
                     <div className="relative group">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400">RM</span>
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">RM</span>
                         <input
                             key={`${order.id}-${order.payment_received}`}
                             type="number"
                             step="0.01"
                             placeholder="0.00"
-                            className="w-28 pl-7 pr-3 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[11px] font-mono-finance font-black focus:ring-2 focus:ring-indigo-500/20 focus:bg-white focus:border-indigo-500 transition-all outline-none"
+                            className="w-24 pl-8 pr-2 py-2 bg-slate-50 border border-slate-100 rounded-xl text-[12px] font-mono-finance font-bold focus:ring-4 focus:ring-indigo-500/10 focus:bg-white focus:border-indigo-500 transition-all outline-none shadow-inner text-right"
                             defaultValue={order.payment_received || 0}
                             onBlur={(e) => {
                                 const val = parseFloat(e.target.value) || 0;
@@ -82,21 +83,42 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                     </div>
                 </div>
             </td>
-            <td className={`px-4 py-3 align-middle text-right font-mono-finance text-[11px] font-black ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-                RM {balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+            <td className={`px-5 py-4 align-middle text-right font-mono-finance text-[12px] font-bold whitespace-nowrap ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                <span className={`text-[10px] mr-1.5 ${balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>RM</span>
+                {balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </td>
-            <td className="px-4 py-3 align-middle">
+            <td className="px-5 py-4 align-middle min-w-[130px]">
                 <select
                     value={order.paymentStatus || 'unpaid'}
                     onChange={(e) => onUpdateField(order.id, 'paymentStatus', e.target.value)}
-                    className={`text-[9px] font-black px-3 py-1.5 rounded-full border transition-all uppercase tracking-widest block text-center w-full appearance-none cursor-pointer outline-none shadow-sm
+                    className={`text-[10px] font-bold px-1 py-2 rounded-full border-2 transition-all uppercase tracking-wider block text-center w-full appearance-none cursor-pointer outline-none shadow-sm
                         ${isPaid
-                            ? 'bg-emerald-500 text-white border-emerald-400 shadow-emerald-500/20' 
-                            : 'bg-red-500 text-white border-red-400 shadow-red-500/20'}`}
+                            ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
+                            : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'}`}
                 >
                     <option value="paid" className="bg-white text-slate-900">PAID</option>
                     <option value="unpaid" className="bg-white text-slate-900">UNPAID</option>
                 </select>
+            </td>
+            <td className="px-5 py-4 align-middle">
+                {order.delivery_photos && order.delivery_photos.length > 0 ? (
+                    <button
+                        onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setExpandedOrderId(expandedOrderId === order.id ? null : order.id);
+                        }}
+                        className={`flex items-center justify-center gap-2 text-[10px] font-bold px-3 py-2 rounded-xl transition-all uppercase tracking-wider ${expandedOrderId === order.id
+                            ? 'bg-indigo-600 text-white shadow-lg'
+                            : 'bg-slate-100 text-slate-500 hover:bg-white hover:text-indigo-600 hover:shadow-md'
+                            }`}
+                    >
+                        <span className="material-icons-round text-[16px]">photo_library</span>
+                        <span>{order.delivery_photos.length}</span>
+                    </button>
+                ) : (
+                    <span className="text-[11px] font-bold text-slate-200 tracking-widest">—</span>
+                )}
             </td>
             <td className="px-6 py-3 align-middle">
                 <input
@@ -108,8 +130,43 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                 />
             </td>
         </tr>
+        {expandedOrderId === order.id && order.delivery_photos && order.delivery_photos.length > 0 && (
+            <tr className="animate-in slide-in-from-top-4 duration-500">
+                <td colSpan={11} className="pb-8 bg-indigo-50/20 px-8">
+                    <div className="pt-4 border-t border-indigo-100/50 flex flex-col items-center">
+                        <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-4 flex items-center justify-center gap-2">
+                            <span className="material-icons-round text-[14px]">verified_user</span>
+                            Delivery Evidence — {order.delivery_photos.length} Verified Records
+                        </p>
+                        <div className="flex flex-wrap justify-center gap-4">
+                            {order.delivery_photos?.map((url: string, idx: number) => (
+                                <button
+                                    key={idx}
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                        onViewPhoto(url);
+                                    }}
+                                    className="group relative w-32 h-32 rounded-3xl overflow-hidden shadow-xl hover:scale-105 transition-all duration-500 hover:shadow-indigo-500/20 bg-white p-1 ring-1 ring-slate-100"
+                                >
+                                    <div className="w-full h-full rounded-[20px] overflow-hidden">
+                                        <img src={url} alt={`proof-${idx}`} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
+                                    </div>
+                                    <div className="absolute inset-0 bg-indigo-600/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-full bg-white/90 shadow-lg flex items-center justify-center">
+                                            <span className="material-icons-round text-indigo-600">zoom_in</span>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        )}
+        </>
     );
 }, (prevProps, nextProps) => {
-    // Only re-render if the order data has actually changed
-    return prevProps.order === nextProps.order;
+    // Only re-render if the order data OR expanded state has actually changed
+    return prevProps.order === nextProps.order && prevProps.expandedOrderId === nextProps.expandedOrderId;
 });

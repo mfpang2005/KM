@@ -254,9 +254,15 @@ class StatsOverview(BaseModel):
     """
     total_orders: int
     total_revenue: float
+    today_orders: int = 0
+    today_revenue: float = 0.0
+    month_revenue: float = 0.0
+    month_orders: int = 0
     total_users: int
+    total_unpaid: float = 0.0
     orders_by_status: dict
     recent_orders: List[Order] = []
+    monthly_sales: List[float] = [] # Monthly sales history for line graph
 
 
 class DailyRevenue(BaseModel):

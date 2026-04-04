@@ -658,7 +658,7 @@ export const CreateOrderPage: React.FC = () => {
 
     // ─── 下单主界面 ────────────────────────────────────────────────────────
     return (
-        <div className="space-y-6 animate-in fade-in duration-500">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 space-y-6 animate-in fade-in duration-500">
             {/* 顶部信息栏 */}
             <div className="flex items-center justify-between">
                 <div>

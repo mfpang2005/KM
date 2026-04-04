@@ -71,7 +71,7 @@ export const ConfigPage: React.FC = () => {
     };
 
     return (
-        <div className="space-y-6">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 space-y-6 pb-20">
             <div className="bg-gradient-to-br from-emerald-50 to-teal-50 border border-emerald-100 rounded-2xl p-6 shadow-sm">
                 <div className="flex items-center gap-3 mb-4">
                     <span className="material-icons-round text-emerald-600 text-xl">payments</span>

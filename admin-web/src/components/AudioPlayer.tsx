@@ -47,19 +47,25 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
 
         const setupSource = async () => {
             try {
-                if (audioUrl.startsWith('http')) {
+                if (audioUrl.startsWith('http') || audioUrl.startsWith('/') || audioUrl.includes('://')) {
                     audio.src = audioUrl;
                 } else if (audioUrl.startsWith('data:')) {
                     audio.src = audioUrl;
                 } else {
-                    // Base64 fallback
-                    const bin = atob(audioUrl);
-                    const bytes = new Uint8Array(bin.length);
-                    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-                    const blob = new Blob([bytes], { type: 'audio/webm' });
-                    const url = URL.createObjectURL(blob);
-                    objectUrlRef.current = url;
-                    audio.src = url;
+                    // 仅当看起来像 Base64 时才尝试解码
+                    try {
+                        const cleanBase64 = audioUrl.replace(/\s/g, ''); // 移除空格和换行
+                        const bin = atob(cleanBase64);
+                        const bytes = new Uint8Array(bin.length);
+                        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+                        const blob = new Blob([bytes], { type: 'audio/webm' });
+                        const url = URL.createObjectURL(blob);
+                        objectUrlRef.current = url;
+                        audio.src = url;
+                    } catch (e) {
+                        console.error('[AudioPlayer] Data format unrecognized, trying as direct source:', e);
+                        audio.src = audioUrl;
+                    }
                 }
                 audio.load();
             } catch (err) {

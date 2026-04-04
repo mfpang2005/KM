@@ -91,6 +91,7 @@ async def get_orders(
 
 @router.get("/items/{order_id:path}")
 async def get_order_items(order_id: str):
+    order_id = order_id.strip()
     """
     获取指定订单的所有 order_items（含 is_prepared 状态）
     """
@@ -166,6 +167,7 @@ async def mark_item_prepared(item_id: str, payload: dict, current_user: dict = D
 
 @router.get("/{order_id:path}", response_model=Order)
 async def get_order(order_id: str):
+    order_id = order_id.strip()
     response = await run_in_threadpool(
         supabase.table("orders").select("*").eq("id", order_id).execute
     )
@@ -396,13 +398,21 @@ async def approve_order(
 async def update_order_status(
     order_id: str, 
     status: OrderStatus = Query(...),
-    current_user: dict = Depends(require_admin)
+    current_user: dict = Depends(get_current_user)
 ):
+    order_id = order_id.strip()
+    # 路径防御性纠偏：防止 :path 占位符贪婪捕获了后缀
+    if order_id.endswith("/status"): order_id = order_id[:-7]
     response = await run_in_threadpool(
         supabase.table("orders").update({"status": status}).eq("id", order_id).execute
     )
     if not response.data:
-        raise HTTPException(status_code=404, detail="Order not found")
+        # Check if it exists at all
+        exists = await run_in_threadpool(supabase.table("orders").select("id").eq("id", order_id).execute)
+        logger.error(f"Status update failed for {order_id}. Exists: {bool(exists.data)}. Raw Response: {response}")
+        if not exists.data:
+            raise HTTPException(status_code=404, detail=f"Order {order_id} not found in database")
+        raise HTTPException(status_code=403, detail=f"Permission denied or update failed. DB Error: {getattr(response, 'error', 'None')}")
     
     # GoEasy Notification
     from services.goeasy import notify_order_update
@@ -429,14 +439,26 @@ async def complete_order(
     司机完成送餐。接收 { "paymentMethod": "cash/..." } 并更新状态。
     使用 get_current_user 而不是 require_admin 允许司机操作。
     """
+    order_id = order_id.strip()
+    # 路径防御性纠偏：防止 :path 占位符贪婪捕获了后缀
+    if order_id.endswith("/complete"): order_id = order_id[:-9]
+    
     import re
     payment_method = payload.get("payment_method") or payload.get("paymentMethod")
     if not payment_method:
         raise HTTPException(status_code=400, detail="payment_method is required")
         
+    # 获取当前订单详情以获取待支付金额
+    order_res = await run_in_threadpool(supabase.table("orders").select("amount").eq("id", order_id).execute)
+    order_amount = 0.0
+    if order_res.data:
+        order_amount = float(order_res.data[0].get("amount") or 0.0)
+        
     update_params = {
         "status": "completed",
-        "paymentMethod": payment_method
+        "paymentMethod": payment_method,
+        "paymentStatus": "paid",
+        "payment_received": order_amount
     }
     
     max_retries = 3
@@ -451,7 +473,17 @@ async def complete_order(
             )
             
             if not response.data:
-                raise HTTPException(status_code=404, detail="Order not found or update failed")
+                ex = await run_in_threadpool(supabase.table("orders").select("id").eq("id", order_id).execute)
+                logger.error(f"Complete order failed for {order_id}. Exists: {bool(ex.data)}. Error: {getattr(response, 'error', 'None')}")
+                if not ex.data:
+                    raise HTTPException(status_code=404, detail=f"Completion failed: Order {order_id} does not exist")
+                
+                # Check if it's a column mismatch issue
+                error_info = str(getattr(response, 'error', ''))
+                if "column" in error_info.lower() and "does not exist" in error_info.lower():
+                    raise HTTPException(status_code=500, detail="Database schema outdated: Missing columns in 'orders' table. Please run the SQL migration scripts.")
+                    
+                raise HTTPException(status_code=403, detail=f"Completion failed: Database rejected update (Check RLS or Columns). Raw Error: {error_info}")
             
             order_data = response.data[0]
             
@@ -490,6 +522,10 @@ async def update_order_photos(
     """
     更新订单交付照片。允许司机操作。
     """
+    order_id = order_id.strip()
+    # 路径防御性纠偏：防止 :path 占位符贪婪捕获了后缀
+    if order_id.endswith("/photos"): order_id = order_id[:-7]
+    
     import re
     delivery_photos = payload.get("delivery_photos")
     if delivery_photos is None:
@@ -507,7 +543,17 @@ async def update_order_photos(
                 .execute
             )
             if not response.data:
-                raise HTTPException(status_code=404, detail="Order not found")
+                ex = await run_in_threadpool(supabase.table("orders").select("id").eq("id", order_id).execute)
+                logger.error(f"Photos update failed for {order_id}. Exists: {bool(ex.data)}. Error: {getattr(response, 'error', 'None')}")
+                if not ex.data:
+                    raise HTTPException(status_code=404, detail=f"Photos update failed: Order {order_id} not found")
+                
+                # Diagnostic: Check for missing columns
+                error_info = str(getattr(response, 'error', ''))
+                if "column" in error_info.lower() and "does not exist" in error_info.lower():
+                    raise HTTPException(status_code=500, detail="Database schema mismatch: Column 'delivery_photos' might be missing in 'orders' table. Please run the SQL migration scripts.")
+
+                raise HTTPException(status_code=403, detail=f"Photos update failed: Database rejected update. Raw Error: {error_info}")
                 
             order_data = response.data[0]
             

@@ -1,15 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { FleetService, VehicleService, api, AdminOrderService } from '../services/api';
+import { FleetService, VehicleService, api } from '../services/api';
 import type { Vehicle, DriverAssignment, Order } from '../types';
 import { OrderStatus } from '../types';
 import { useAuth } from '../hooks/useAuth';
-import { useGoEasy } from '../contexts/GoEasyContext';
-import AudioPlayer from '../components/AudioPlayer';
 
-// ─── Walkie-Talkie Constants ──────────────────────────────────────────────────
-const CHANNEL = 'KIM_LONG_COMUNITY';
 
 interface FleetDriver {
     id: string;
@@ -25,7 +21,6 @@ interface FleetDriver {
 export const FleetCenterPage: React.FC = () => {
     const navigate = useNavigate();
     const { user } = useAuth();
-    const { goEasy: contextGoEasy, status: goEasyStatus } = useGoEasy();
     const [drivers, setDrivers] = useState<FleetDriver[]>([]);
     const [vehicles, setVehicles] = useState<Vehicle[]>([]);
     const [pendingOrders, setPendingOrders] = useState<Order[]>([]);
@@ -37,26 +32,6 @@ export const FleetCenterPage: React.FC = () => {
     const [rtStatus, setRtStatus] = useState<string>('CONNECTING');
     const scrollRef = useRef<HTMLDivElement>(null);
 
-    // ─── PTT / Walkie-Talkie States ───────────────────────────────────────────
-    const [isPttOpen, setIsPttOpen] = useState(false);
-    const [isTransmitting, setIsTransmitting] = useState(false);
-    const [isListening, setIsListening] = useState(false);
-    const [messages, setMessages] = useState<any[]>([]);
-    const messageIdsRef = useRef<Set<string>>(new Set());
-    const [latestIncomingId, setLatestIncomingId] = useState<string | null>(null);
-    const [audioUnlocked, setAudioUnlocked] = useState(false);
-    const chatBottomRef = useRef<HTMLDivElement | null>(null);
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-
-    const pttStatus = useMemo(() => {
-        if (!isPttOpen) return 'IDLE';
-        if (isTransmitting) return 'TALKING';
-        if (isListening) return 'LISTENING';
-        if (goEasyStatus === 'CONNECTED') return 'CONNECTED';
-        return 'CONNECTING';
-    }, [isPttOpen, isTransmitting, isListening, goEasyStatus]);
 
     const scroll = (direction: 'left' | 'right') => {
         if (scrollRef.current) {
@@ -125,15 +100,6 @@ export const FleetCenterPage: React.FC = () => {
     }, []);
 
     useEffect(() => {
-        const handleFirstClick = () => {
-            if (!audioUnlocked) setAudioUnlocked(true);
-            window.removeEventListener('click', handleFirstClick);
-        };
-        window.addEventListener('click', handleFirstClick);
-        return () => window.removeEventListener('click', handleFirstClick);
-    }, [audioUnlocked]);
-
-    useEffect(() => {
         loadData();
         const channels = [
             supabase.channel('fleet-assignments').on('postgres_changes', { event: '*', schema: 'public', table: 'driver_assignments' }, () => loadData()).subscribe((status) => setRtStatus(status)),
@@ -144,221 +110,7 @@ export const FleetCenterPage: React.FC = () => {
         return () => { channels.forEach(c => supabase.removeChannel(c)); };
     }, [loadData]);
 
-    useEffect(() => {
-        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, [messages]);
 
-    // ─── PTT Logic ────────────────────────────────────────────────────────────
-
-    const addMessage = useCallback((msg: any) => {
-        if (!msg || !msg.id) return;
-        if (messageIdsRef.current.has(msg.id)) return;
-        messageIdsRef.current.add(msg.id);
-        setMessages(prev => [...prev, msg].slice(-50)); // 只保留最近50条
-    }, []);
-
-    const playAudio = useCallback(async (content: string) => {
-        if (!content) return;
-        
-        // 兼容处理：如果是 URL 则直接播放
-        if (content.startsWith('http')) {
-            try {
-                const audio = new Audio(content);
-                audio.onplay = () => setIsListening(true);
-                audio.onended = () => setIsListening(false);
-                audio.onerror = () => setIsListening(false);
-                await audio.play();
-            } catch (err) {
-                console.error('[Fleet PTT] URL Play error:', err);
-                setIsListening(false);
-            }
-            return;
-        }
-
-        // 兼容处理：Base64 逻辑
-        if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
-        
-        try {
-            const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
-            const binary = atob(base64);
-            const buf = new ArrayBuffer(binary.length);
-            const view = new Uint8Array(buf);
-            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
-            const src = audioContextRef.current.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(audioContextRef.current.destination);
-            src.onended = () => setIsListening(false);
-            src.start(0);
-            setIsListening(true);
-        } catch (err) {
-            console.error('[Fleet PTT] Audio decode/play error', err);
-            setIsListening(false);
-        }
-    }, []);
-
-    // ── Supabase & GoEasy Message Integration ──────────────────────────────────
-    useEffect(() => {
-        const fetchHistory = async () => {
-            const { data } = await supabase.from('messages').select('*').eq('receiver_id', 'GLOBAL').order('created_at', { ascending: false }).limit(30);
-            if (data) {
-                const history = data.reverse().map(m => {
-                    messageIdsRef.current.add(m.id);
-                    return {
-                        id: m.id, senderId: m.sender_id, senderLabel: m.sender_label || 'Driver',
-                        senderRole: m.sender_role || 'driver', content: m.content,
-                        timestamp: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-                        isMine: m.sender_id === user?.id, type: m.type || 'audio', duration: m.duration
-                    };
-                });
-                setMessages(history);
-            }
-        };
-        fetchHistory();
-
-        const channel = supabase.channel('fleet-messages-realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
-                const m = payload.new;
-                if (m.sender_id === user?.id) return;
-                if (m.receiver_id && m.receiver_id !== 'GLOBAL' && m.receiver_id !== user?.id) return;
-                addMessage({
-                    id: m.id, senderId: m.sender_id, senderLabel: m.sender_label || 'Driver',
-                    senderRole: m.sender_role || 'driver', content: m.content,
-                    timestamp: m.created_at ? new Date(m.created_at).getTime() : Date.now(),
-                    isMine: false, type: m.type || 'audio', duration: m.duration
-                });
-            }).subscribe();
-        
-        return () => { supabase.removeChannel(channel); };
-    }, [user?.id, addMessage]);
-
-    // ── GoEasy PubSub Subscriptions for Fleet Center ──────────────────────────
-    useEffect(() => {
-        if (!isPttOpen || !contextGoEasy || goEasyStatus !== 'CONNECTED') return;
-
-        const myId = user?.id;
-        console.log('[Fleet PTT] Subscribing to channel:', CHANNEL);
-        contextGoEasy.pubsub.subscribe({
-            channel: CHANNEL,
-            onMessage: async (message: { content: string }) => {
-                try {
-                    const payload = JSON.parse(message.content);
-                    if (payload.senderId === myId) return;
-                    if (payload.receiverId !== 'GLOBAL') return;
-                    const audioContent = payload.content || payload.audio;
-                    
-                    const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
-                    setLatestIncomingId(incomingId);
-                    
-                    // 1. 立即添加到本地气泡列表
-                    addMessage({
-                        id: incomingId,
-                        senderId: payload.senderId,
-                        senderLabel: payload.senderLabel || payload.senderId,
-                        senderRole: payload.senderRole || 'driver',
-                        content: audioContent,
-                        timestamp: payload.timestamp || Date.now(),
-                        isMine: false,
-                        type: 'audio',
-                        duration: payload.duration
-                    });
-
-                    // 2. 播放音频
-                    if (payload.type === 'audio' && audioContent) {
-                        await playAudio(audioContent);
-                    }
-                } catch (err) {
-                    console.error('[Fleet PTT] Failed to handle message', err);
-                }
-            }
-        });
-
-        return () => {
-            console.log('[Fleet PTT] Unsubscribing from', CHANNEL);
-            contextGoEasy.pubsub.unsubscribe({ channel: CHANNEL });
-        }
-    }, [isPttOpen, contextGoEasy, goEasyStatus, playAudio, user?.id]);
-
-    const startPttSession = () => {
-        setIsPttOpen(true);
-    };
-
-    const handlePttDown = async () => {
-        if (goEasyStatus !== 'CONNECTED') return;
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mr = new MediaRecorder(stream);
-            audioChunksRef.current = [];
-            mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-            mr.start(100);
-            mediaRecorderRef.current = mr;
-            setIsTransmitting(true);
-        } catch { alert('请允许麦克风权限以使用对讲功能。'); }
-    };
-
-    const handlePttUp = () => {
-        if (!mediaRecorderRef.current || !isTransmitting) return;
-        setIsTransmitting(false);
-        const mr = mediaRecorderRef.current;
-        mr.onstop = async () => {
-            if (!contextGoEasy || goEasyStatus !== 'CONNECTED') return;
-            try {
-                const mimeType = mr.mimeType || 'audio/webm';
-                const blob = new Blob(audioChunksRef.current, { type: mimeType });
-                if (blob.size < 100) return;
-
-                // 将 Blob 通过 FormData 上传到后端存储
-                const formData = new FormData();
-                formData.append('file', blob, `voice_admin_${Date.now()}.webm`);
-                
-                const { data: uploadResult } = await api.post('/audio/upload', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                
-                const audioUrl = uploadResult.url;
-                if (!audioUrl) throw new Error('Upload failed: No URL returned');
-
-                const myId = user?.id || 'unknown-admin';
-                const myName = user?.email || '车队调度员';
-                const ts = Date.now();
-                const msgId = `${myId}-${ts}`;
-                
-                contextGoEasy.pubsub.publish({
-                    channel: CHANNEL,
-                    message: JSON.stringify({
-                        id: msgId,
-                        type: 'audio',
-                        senderId: myId,
-                        senderLabel: myName,
-                        senderRole: 'admin',
-                        content: audioUrl,
-                        timestamp: ts,
-                        receiverId: 'GLOBAL',
-                        duration: 0
-                    })
-                });
-
-                await supabase.from('messages').insert([{
-                    id: msgId,
-                    sender_id: myId,
-                    sender_label: myName,
-                    sender_role: 'admin',
-                    receiver_id: 'GLOBAL',
-                    content: audioUrl,
-                    type: 'audio',
-                    duration: 0
-                }]);
-            } catch (err) {
-                console.error('[Fleet PTT] Failed to upload/send audio', err);
-            }
-            audioChunksRef.current = [];
-        };
-        mr.stop();
-        mr.stream.getTracks().forEach(t => t.stop());
-    };
 
     const stats = useMemo(() => ({
         activeDrivers: drivers.filter(d => d.activeOrders.length > 0).length,
@@ -509,51 +261,7 @@ export const FleetCenterPage: React.FC = () => {
     if (loading) return <div className="h-screen flex items-center justify-center bg-slate-50/10"><div className="w-10 h-10 border-2 border-blue-500 border-t-transparent animate-spin rounded-full"></div></div>;
 
     return (
-        <div className="min-h-full py-4 space-y-4 animate-in fade-in duration-500 text-slate-800 flex flex-col">
-            {/* 全局调度房浮窗 (当 PTT 开启时) */}
-            {isPttOpen && (
-                <div className="fixed right-6 bottom-24 z-40 w-80 h-[450px] bg-white rounded-3xl shadow-2xl border border-slate-100 flex flex-col overflow-hidden animate-in slide-in-from-right-10 duration-300">
-                    <div className="px-5 py-4 bg-slate-900 text-white flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center">
-                                <span className="material-icons-round text-lg">cell_tower</span>
-                            </div>
-                            <div>
-                                <h3 className="text-xs font-black uppercase tracking-widest">Dispatch Room</h3>
-                                <p className="text-[9px] text-emerald-400 font-bold">Online · Live Feed</p>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-slate-50/50">
-                        {messages.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center opacity-20 filter grayscale">
-                                <span className="material-icons-round text-4xl mb-2">forum</span>
-                                <p className="text-[10px] font-black tracking-tighter">WAITING FOR COMMS</p>
-                            </div>
-                        ) : messages.map((msg) => (
-                            <div key={msg.id} className={`flex flex-col ${msg.isMine ? 'items-end' : 'items-start'} gap-1`}>
-                                <div className="flex items-center gap-2 px-1">
-                                    {!msg.isMine && <span className="text-[10px] font-black text-blue-600 uppercase tracking-tighter">{msg.senderLabel}</span>}
-                                    <span className="text-[8px] text-slate-400 font-bold">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                </div>
-                                <div className="max-w-[90%]">
-                                    <AudioPlayer 
-                                        audioUrl={msg.content} 
-                                        initialDuration={msg.duration} 
-                                        autoPlay={audioUnlocked && !msg.isMine && msg.id === latestIncomingId} 
-                                    />
-                                </div>
-                            </div>
-                        ))}
-                        <div ref={chatBottomRef} />
-                    </div>
-
-                    <div className="p-3 bg-white border-t border-slate-100 text-center">
-                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hold red button above to talk</p>
-                    </div>
-                </div>
-            )}
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 py-4 space-y-4 animate-in fade-in duration-500 text-slate-800 flex flex-col uppercase">
 
             {/* Dashboard Header - Compact */}
             <div className="relative flex flex-col md:flex-row items-center justify-between gap-4 bg-white/60 backdrop-blur-3xl border border-white p-4 rounded-2xl shadow-sm">
@@ -571,44 +279,6 @@ export const FleetCenterPage: React.FC = () => {
                 </div>
                 
                 <div className="flex items-center gap-4">
-                    <div className="flex items-center">
-                        {!isPttOpen ? (
-                            <button
-                                onClick={startPttSession}
-                                className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-1.5 border border-blue-200"
-                            >
-                                <span className="material-icons-round text-sm">cell_tower</span>
-                                Global PTT
-                            </button>
-                        ) : (
-                            <div className="flex items-center gap-3 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-                                <div className="flex flex-col items-center justify-center px-2 border-r border-slate-200">
-                                    <p className="text-[8px] font-black text-slate-400 uppercase leading-none mb-1">Status</p>
-                                    <span className={`w-2 h-2 rounded-full ${pttStatus === 'CONNECTED' ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
-                                </div>
-                                <button
-                                    onMouseDown={(e) => { e.preventDefault(); handlePttDown(); }}
-                                    onMouseUp={(e) => { e.preventDefault(); handlePttUp(); }}
-                                    onMouseLeave={handlePttUp}
-                                    onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
-                                    onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
-                                    className={`px-4 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all shadow active:scale-95 flex items-center gap-1.5 select-none ${
-                                        pttStatus === 'TALKING' ? 'bg-red-500 text-white animate-pulse' : 
-                                        pttStatus === 'LISTENING' ? 'bg-amber-400 text-white' :
-                                        pttStatus === 'CONNECTED' ? 'bg-blue-600 text-white hover:bg-blue-700' :
-                                        'bg-slate-300 text-slate-500 cursor-wait'
-                                    }`}
-                                >
-                                    <span className="material-icons-round text-sm">{pttStatus === 'TALKING' ? 'mic' : pttStatus === 'LISTENING' ? 'volume_up' : 'mic_none'}</span>
-                                    {pttStatus === 'TALKING' ? 'TALK' : pttStatus === 'LISTENING' ? 'HEAR' : 'HOLD'}
-                                </button>
-                                <button onClick={() => setIsPttOpen(false)} className="w-8 h-8 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors">
-                                    <span className="material-icons-round text-lg">close</span>
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                
                     <div className="flex gap-2">
                         <div className="bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100 flex items-center gap-2">
                             <span className="text-xs font-black text-slate-700">{stats.activeDrivers}</span>
@@ -782,6 +452,53 @@ export const FleetCenterPage: React.FC = () => {
                                 </div>
                             ))}
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 新增/编辑车辆弹窗 */}
+            {(showAddVehicle || editingVehicle) && (
+                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200">
+                        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                            <h3 className="text-sm font-black text-slate-800 uppercase tracking-widest italic">
+                                {editingVehicle ? 'Edit Vehicle' : 'New Vehicle'}
+                            </h3>
+                            <button onClick={() => { setShowAddVehicle(false); setEditingVehicle(null); }} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white hover:shadow-sm transition-all text-slate-300 hover:text-slate-600">
+                                <span className="material-icons-round">close</span>
+                            </button>
+                        </div>
+                        <form onSubmit={editingVehicle ? (e) => {
+                            e.preventDefault();
+                            setIsSubmitting(true);
+                            api.put(`/vehicles/${editingVehicle.id}`, newVehicle)
+                                .then(() => { setEditingVehicle(null); loadData(); })
+                                .catch(err => alert(err.message))
+                                .finally(() => setIsSubmitting(false));
+                        } : handleAddVehicle} className="p-6 space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Plate No.</label>
+                                    <input required type="text" value={newVehicle.plate_no} onChange={e => setNewVehicle({...newVehicle, plate_no: e.target.value.toUpperCase()})} className="w-full px-4 py-2 bg-slate-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 transition-all outline-none" placeholder="WYM 1234" />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Type</label>
+                                    <select value={newVehicle.type} onChange={e => setNewVehicle({...newVehicle, type: e.target.value})} className="w-full px-4 py-2 bg-slate-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 transition-all outline-none">
+                                        <option value="Van">Van</option>
+                                        <option value="Lorry">Lorry 1T</option>
+                                        <option value="Lorry 3T">Lorry 3T</option>
+                                        <option value="Bike">Bike</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">Model / Driver Name</label>
+                                <input required type="text" value={newVehicle.model} onChange={e => setNewVehicle({...newVehicle, model: e.target.value})} className="w-full px-4 py-2 bg-slate-50 border-none rounded-xl text-sm font-bold focus:ring-2 focus:ring-blue-100 transition-all outline-none" placeholder="e.g. Toyota Hiace / John Doe" />
+                            </div>
+                            <button disabled={isSubmitting} type="submit" className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-black uppercase tracking-[0.2em] hover:bg-blue-600 disabled:opacity-50 transition-all shadow-xl shadow-slate-900/10 active:scale-[0.98] mt-2">
+                                {isSubmitting ? 'Saving...' : 'Confirm Details'}
+                            </button>
+                        </form>
                     </div>
                 </div>
             )}

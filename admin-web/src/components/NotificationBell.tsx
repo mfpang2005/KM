@@ -1,14 +1,22 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../hooks/useNotifications';
 
 export const NotificationBell: React.FC = () => {
+    const navigate = useNavigate();
     const {
         showNotifs,
+        setShowNotifs,
         notifs,
         unread,
         toggleNotifs,
         clearAll
     } = useNotifications();
+
+    const handleNotifClick = (id: string) => {
+        navigate(`/orders?highlightOrder=${id}`);
+        if (setShowNotifs) setShowNotifs(false);
+    };
 
     return (
         <div className="relative">
@@ -53,7 +61,11 @@ export const NotificationBell: React.FC = () => {
                                 <p className="text-[10px] font-black uppercase tracking-widest mt-2">Inbox is clear</p>
                             </div>
                         ) : notifs.map(n => (
-                            <div key={n.id} className="px-6 py-4 hover:bg-slate-50 transition-colors">
+                            <div 
+                                key={n.id} 
+                                onClick={() => handleNotifClick(n.id)}
+                                className="px-6 py-4 hover:bg-slate-50 transition-colors cursor-pointer"
+                            >
                                 <div className="flex items-start gap-3">
                                     <div className="w-9 h-9 rounded-xl bg-blue-50 flex items-center justify-center shrink-0">
                                         <span className="material-icons-round text-[18px] text-blue-600">receipt_long</span>

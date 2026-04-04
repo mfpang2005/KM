@@ -5,6 +5,7 @@ import { SuperAdminService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { StatsOverview } from '../types';
 import { FinanceWidget } from '../components/FinanceWidget';
+import { NotificationBell } from '../components/NotificationBell';
 
 export const DashboardPage: React.FC = () => {
     const { user: authUser, isProfileLoading } = useAuth();
@@ -85,19 +86,22 @@ export const DashboardPage: React.FC = () => {
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 space-y-8 animate-in fade-in duration-500 pb-20">
             <div className="flex items-center justify-between mb-2">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800 tracking-tight">System Overview</h1>
                     <p className="text-slate-500 text-sm mt-1">Real-time business performance & linkage</p>
                 </div>
-                <button
-                    onClick={() => (window as any)._refreshDashboard?.()}
-                    className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-red-500 hover:border-red-100 hover:shadow-lg hover:shadow-red-500/5 transition-all group active:scale-95"
-                    title="Manual Refresh"
-                >
-                    <span className="material-icons-round text-xl group-hover:rotate-180 transition-transform duration-500">autorenew</span>
-                </button>
+                <div className="flex items-center gap-3">
+                    <NotificationBell />
+                    <button
+                        onClick={() => (window as any)._refreshDashboard?.()}
+                        className="p-3 bg-white border border-slate-200 rounded-2xl text-slate-400 hover:text-red-500 hover:border-red-100 hover:shadow-lg hover:shadow-red-500/5 transition-all group active:scale-95"
+                        title="Manual Refresh"
+                    >
+                        <span className="material-icons-round text-xl group-hover:rotate-180 transition-transform duration-500">autorenew</span>
+                    </button>
+                </div>
             </div>
 
             {stats === null && !loading && !isProfileLoading && !isSuperAdmin && (
@@ -124,7 +128,7 @@ export const DashboardPage: React.FC = () => {
                     <div className="min-w-0">
                         <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Today Orders</p>
                         <p className="text-4xl md:text-5xl font-black text-slate-800 tracking-tighter truncate">
-                            {stats?.total_orders || 0}
+                            {stats?.today_orders || 0}
                         </p>
                     </div>
                 </div>
@@ -140,21 +144,24 @@ export const DashboardPage: React.FC = () => {
                         <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Monthly Revenue</p>
                         <p className="text-4xl md:text-5xl font-black text-orange-500 tracking-tighter truncate font-mono">
                             <span className="text-lg md:text-xl text-orange-400/80 mr-1 font-sans">RM</span>
-                            {Number(stats?.total_revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            {Number(stats?.month_revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                         </p>
                     </div>
                 </div>
 
                 <div
-                    onClick={() => navigate('/users')}
+                    onClick={() => navigate('/finance')}
                     className="bg-white p-6 rounded-[32px] shadow-[0_8px_30px_rgba(220,38,38,0.04)] border border-red-50 flex items-center gap-5 hover:-translate-y-1 hover:shadow-xl hover:shadow-rose-500/5 transition-all duration-300 group cursor-pointer active:scale-95"
                 >
                     <div className="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white shadow-lg shadow-rose-500/20 overflow-hidden group-hover:scale-110 transition-transform duration-300">
-                        <span className="material-icons-round text-2xl max-w-full truncate">people</span>
+                        <span className="material-icons-round text-2xl max-w-full truncate">account_balance_wallet</span>
                     </div>
                     <div className="min-w-0">
-                        <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Total Users</p>
-                        <p className="text-4xl md:text-5xl font-black text-rose-600 tracking-tighter truncate">{stats?.total_users || 0}</p>
+                        <p className="text-sm text-slate-400 font-extrabold uppercase tracking-[0.2em] mb-1 truncate">Total Unpaid</p>
+                        <p className="text-4xl md:text-5xl font-black text-rose-600 tracking-tighter truncate font-mono">
+                            <span className="text-lg md:text-xl min-w-0 text-rose-400/80 mr-1 font-sans">RM</span>
+                            {Number(stats?.total_unpaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                        </p>
                     </div>
                 </div>
             </div>

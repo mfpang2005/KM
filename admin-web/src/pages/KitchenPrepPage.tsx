@@ -437,7 +437,7 @@ const KitchenPrepPage: React.FC = () => {
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 shadow-xl">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 flex flex-col h-full bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 shadow-xl">
             <header className="sticky top-0 z-[100] pt-8 pb-4 px-8 bg-white/80 backdrop-blur-3xl border-b border-slate-100 flex flex-col gap-6 shadow-sm">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">

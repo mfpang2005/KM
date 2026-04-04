@@ -155,7 +155,7 @@ export const UsersPage: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen bg-[#FDFDFF] pb-20">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 min-h-screen bg-[#FDFDFF] pb-20">
             {/* Modern Header Section - Collapsible & Balanced */}
             <div className={`sticky top-0 z-[40] transition-all duration-500 ease-in-out ${
                 isScrolled 

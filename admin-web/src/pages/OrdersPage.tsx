@@ -151,7 +151,14 @@ export const OrdersPage: React.FC = () => {
         if (!highlightId || loading || orders.length === 0) return;
 
         const orderIndex = filteredOrders.findIndex(o => (o.id === highlightId) || (o.order_number === highlightId));
-        if (orderIndex === -1) return;
+        if (orderIndex === -1) {
+            // Not found in current filter - Reset filters to ensure targeted order is visible
+            setStatusFilter('all');
+            setSearchQuery('');
+            setDateFilter('all');
+            setEventDate('');
+            return;
+        }
 
         const targetPage = Math.ceil((orderIndex + 1) / pageSize);
         if (currentPage !== targetPage) {
@@ -243,7 +250,7 @@ export const OrdersPage: React.FC = () => {
     }, [searchQuery, statusFilter, dateFilter, eventDate]);
 
     return (
-        <div className="pb-20">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 pb-20">
             <PageHeader
                 title="Order Status / 订单状态"
                 subtitle="Manage all incoming tasks and dispatches"

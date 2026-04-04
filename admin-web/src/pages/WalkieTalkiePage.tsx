@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useGoEasy } from '../contexts/GoEasyContext';
 import AudioPlayer from '../components/AudioPlayer';
+import { NotificationBell } from '../components/NotificationBell';
 import { api } from '../services/api';
 
 const CHANNEL = 'KIM_LONG_COMUNITY';
@@ -23,9 +24,10 @@ interface ChatMessage {
     content: string;
     timestamp: number;
     isMine: boolean;
-    type: 'text' | 'audio';
+    type: 'text' | 'audio' | 'voice' | 'recall'; // 增加 recall 类型
     receiverId: string;
     duration?: number;
+    isRecalled?: boolean; // 增加已撤回标志位
 }
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; icon: string; bubble: string }> = {
@@ -36,13 +38,6 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; icon: string; 
     guest: { label: 'Guest', color: 'bg-slate-100 text-slate-600', icon: 'person', bubble: 'bg-slate-400' },
 };
 
-const blobToBase64 = (blob: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
 
 export const WalkieTalkiePage: React.FC = () => {
     const { user } = useAuth();
@@ -59,6 +54,8 @@ export const WalkieTalkiePage: React.FC = () => {
     const [latestIncomingId, setLatestIncomingId] = useState<string | null>(null);
     // NOTE: 浏览器自动播放限制 —— 用户需先与页面交互才能解锁
     const [audioUnlocked, setAudioUnlocked] = useState(false);
+    const hasFetchedHistoryRef = useRef(false);
+    const lastUserIdRef = useRef<string | null>(null);
 
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
@@ -68,17 +65,15 @@ export const WalkieTalkiePage: React.FC = () => {
 
     const addMessage = useCallback((msg: ChatMessage) => {
         if (!msg || !msg.id) return;
-        // 1. 根据 ID 去重
+        // 仅根据唯一 ID 去重，移除过严的内容指纹校验
         if (messageIdsRef.current.has(msg.id)) return;
 
-        // 2. 根据内容指纹去重（针对同一发送者在极短时间内发送的相同内容）
-        const contentSnippet = (msg.content || '').slice(0, 50);
-        const fingerprint = `${msg.senderId}:${msg.type}:${contentSnippet}:${Math.floor((msg.timestamp || 0) / 1000)}`;
-        if (messageIdsRef.current.has(fingerprint)) return;
-
         messageIdsRef.current.add(msg.id);
-        messageIdsRef.current.add(fingerprint);
-        setMessages(prev => [...prev, msg]);
+        setMessages(prev => {
+            // 再次检查防止 React 异步更新导致的竞态重复
+            if (prev.some(m => m.id === msg.id)) return prev;
+            return [...prev, msg].slice(-100); // 限制展示最近100条气泡
+        });
     }, []);
 
     // 新消息自动滚到底部
@@ -134,9 +129,17 @@ export const WalkieTalkiePage: React.FC = () => {
                     const payload = JSON.parse(message.content);
                     if (payload.senderId === myId) return;
 
-                    // 接收全局电台广播
-                    if (payload.receiverId !== 'GLOBAL') return;
+                    // 处理撤回指令 (New)
+                    if (payload.type === 'recall') {
+                        const targetId = payload.id || payload.msgId;
+                        if (!targetId) return;
+                        console.log('[Walkie] Remote recall signal received:', targetId);
+                        setMessages(prev => prev.map(m => m.id === targetId ? { ...m, isRecalled: true } : m));
+                        return;
+                    }
 
+                    // 兼容语音消息的各种类型定义 (audio, voice, ptt)
+                    const isVoicePayload = payload.type === 'audio' || payload.type === 'voice' || payload.audio || payload.audioUrl || payload.url;
                     const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
                     const common = {
                         id: incomingId,
@@ -145,24 +148,21 @@ export const WalkieTalkiePage: React.FC = () => {
                         senderRole: payload.senderRole || 'driver',
                         timestamp: payload.timestamp || Date.now(),
                         isMine: false,
-                        receiverId: myId,
+                        receiverId: 'GLOBAL',
                         duration: payload.duration
                     };
 
                     if (payload.type === 'text') {
                         addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
-                    } else if (payload.type === 'audio' || payload.audio) {
-                        const audioContent = payload.content || payload.audio;
+                    } else if (isVoicePayload) {
+                        const audioContent = payload.content || payload.audio || payload.audioUrl || payload.url || payload.voiceUrl;
                         if (!audioContent) return;
                         
-                        // 立即设置最新传入 ID 以触发自动播放
                         setLatestIncomingId(incomingId);
-                        
                         addMessage({ 
                             ...common, 
-                            id: incomingId,
                             content: audioContent, 
-                            type: 'audio' 
+                            type: 'audio' // 统一映射为 audio 进行渲染
                         } as ChatMessage);
                     }
                 } catch (err) {
@@ -174,10 +174,14 @@ export const WalkieTalkiePage: React.FC = () => {
         });
 
         return () => {
-            console.log('[Walkie] Unsubscribing from', CHANNEL);
-            contextGoEasy.pubsub.unsubscribe({
-                channel: CHANNEL
-            });
+            if (contextGoEasy && goEasyStatus === 'CONNECTED') {
+                console.log('[Walkie] Unsubscribing from', CHANNEL);
+                contextGoEasy.pubsub.unsubscribe({
+                    channel: CHANNEL,
+                    onSuccess: () => console.log('[Walkie] Unsubscribe success'),
+                    onFailed: (err: any) => console.error('[Walkie] Unsubscribe failed', err)
+                });
+            }
         };
     }, [user?.id, contextGoEasy, goEasyStatus, addMessage]);
 
@@ -187,22 +191,37 @@ export const WalkieTalkiePage: React.FC = () => {
             .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
                 const msg = payload.new;
                 if (!msg || msg.sender_id === user?.id) return;
+                
+                // 兼容语音消息类型 (只要是 audio, voice 或含有可见的音频特征)
+                const isAudio = msg.type === 'audio' || msg.type === 'voice' || (msg.content && (msg.content.includes('.mp3') || msg.content.includes('.webm') || msg.content.includes('/audio/')));
+                const isTargeted = !msg.receiver_id || msg.receiver_id === 'GLOBAL' || msg.receiver_id === user?.id;
+                
+                if (!isAudio && !isTargeted) return;
 
-                // 接收全局电台广播或无接收者定义的消息（视作公告/全局）
-                if (msg.receiver_id && msg.receiver_id !== 'GLOBAL' && msg.receiver_id !== user?.id) return;
+                console.log('[Walkie] Rendering bubble from Supabase Realtime:', msg.id);
+                // 确保触发自动播放
+                if (isAudio) setLatestIncomingId(msg.id);
 
                 addMessage({
                     id: msg.id,
                     senderId: msg.sender_id,
                     senderLabel: msg.sender_label || 'Unknown',
-                    senderRole: msg.sender_role || 'guest',
+                    senderRole: msg.sender_role || 'driver',
                     content: msg.content || '',
                     timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
                     isMine: false,
-                    type: msg.type || 'text',
-                    receiverId: user?.id || '',
-                    duration: msg.duration
+                    type: isAudio ? 'audio' : 'text',
+                    receiverId: 'GLOBAL',
+                    duration: msg.duration,
+                    isRecalled: msg.is_recalled
                 });
+            })
+            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
+                const msg = payload.new;
+                if (msg && msg.is_recalled) {
+                    console.log('[Walkie] Message recalled via DB Update:', msg.id);
+                    setMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isRecalled: true } : m));
+                }
             }).subscribe();
 
         return () => { 
@@ -216,21 +235,26 @@ export const WalkieTalkiePage: React.FC = () => {
     useEffect(() => {
         if (!user) {
             setMessages([]);
+            hasFetchedHistoryRef.current = false;
+            lastUserIdRef.current = null;
             return;
         }
+
+        // 只有当用户 ID 真正改变时才重新加载历史
+        if (lastUserIdRef.current === user.id && hasFetchedHistoryRef.current) return;
+        
         const fetchHistory = async () => {
             try {
-                // 查询全局频道消息记录
+                console.log('[Walkie] Fetching history for user:', user.id);
                 const { data, error } = await supabase
                     .from('messages')
                     .select('*')
-                    .eq('receiver_id', 'GLOBAL')
+                    .or(`receiver_id.eq.GLOBAL,receiver_id.is.null,receiver_id.eq.${user.id}`)
                     .order('created_at', { ascending: false })
                     .limit(50);
 
                 if (error) throw error;
                 if (data) {
-                    messageIdsRef.current = new Set();
                     const history = data
                         .filter(msg => msg && msg.content)
                         .reverse()
@@ -240,23 +264,38 @@ export const WalkieTalkiePage: React.FC = () => {
                                 id: msg.id,
                                 senderId: msg.sender_id,
                                 senderLabel: msg.sender_label || 'Unknown',
-                                senderRole: msg.sender_role || 'guest',
+                                senderRole: msg.sender_role || 'driver',
                                 content: msg.content,
                                 timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
                                 isMine: msg.sender_id === user.id,
-                                type: (msg.type as any) || 'text',
-                                receiverId: msg.receiver_id || '',
+                                type: (msg.type as any) || 'audio',
+                                isRecalled: msg.is_recalled,
+                                receiverId: msg.receiver_id || 'GLOBAL',
                                 duration: msg.duration
                             };
                         });
-                    setMessages(history);
+                    
+                    setMessages(prev => {
+                        // 合并历史记录和当前的实时消息，以 ID 为准去重，并过滤无效项
+                        const filteredPrev = prev.filter(Boolean);
+                        const combined = [...history, ...filteredPrev];
+                        const seen = new Set();
+                        return combined.filter(m => {
+                            if (!m || !m.id || seen.has(m.id)) return false;
+                            seen.add(m.id);
+                            return true;
+                        }).slice(-100);
+                    });
+                    
+                    hasFetchedHistoryRef.current = true;
+                    lastUserIdRef.current = user.id;
                 }
             } catch (err) {
                 console.error('Failed to fetch history', err);
             }
         };
         fetchHistory();
-    }, [user]);
+    }, [user?.id]);
 
     // ── Supabase Presence ───────────────────────────────────────────
     useEffect(() => {
@@ -323,7 +362,7 @@ export const WalkieTalkiePage: React.FC = () => {
 
                 const ts = Date.now();
                 const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
-                const msgId = `${user?.id || 'unknown'}-${ts}`;
+                const msgId = self.crypto.randomUUID();
 
                 const payload = {
                     id: msgId,
@@ -358,7 +397,7 @@ export const WalkieTalkiePage: React.FC = () => {
                 });
 
                 const insertAudio = async () => {
-                    await supabase.from('messages').insert([{
+                    const { error } = await supabase.from('messages').insert([{
                         id: msgId,
                         sender_id: payload.senderId,
                         sender_label: payload.senderLabel,
@@ -368,8 +407,12 @@ export const WalkieTalkiePage: React.FC = () => {
                         type: 'audio',
                         duration: dur
                     }]);
+                    if (error) {
+                        console.error('[Admin] Database Audio Insert Error:', error);
+                        alert(`管理员端语音保存失败 (Error ${error.code}): ${error.message}`);
+                    }
                 };
-                insertAudio();
+                await insertAudio();
 
             } catch (err) { console.error('[GoEasy] Audio upload/publish failed', err); }
             audioChunksRef.current = [];
@@ -377,7 +420,7 @@ export const WalkieTalkiePage: React.FC = () => {
     };
 
     // ── 发送文字消息 ──────────────────────────────────────────────────
-    const sendTextMessage = () => {
+    const sendTextMessage = async () => {
         const text = chatInput.trim();
         if (!text || !contextGoEasy || goEasyStatus !== 'CONNECTED') return;
 
@@ -385,7 +428,7 @@ export const WalkieTalkiePage: React.FC = () => {
         const myLabel = user?.email ?? 'Super Admin';
         const myRole = user?.role ?? 'super_admin';
         const ts = Date.now();
-        const msgId = `${myId}-${ts}`;
+        const msgId = self.crypto.randomUUID();
 
         addMessage({
             id: msgId,
@@ -416,7 +459,7 @@ export const WalkieTalkiePage: React.FC = () => {
         });
 
         const insertText = async () => {
-            await supabase.from('messages').insert([{
+            const { error } = await supabase.from('messages').insert([{
                 id: msgId,
                 sender_id: myId,
                 sender_label: myLabel,
@@ -425,15 +468,48 @@ export const WalkieTalkiePage: React.FC = () => {
                 content: text,
                 type: 'text'
             }]);
+            if (error) {
+                console.error('[Admin] Database Text Insert Error:', error);
+                alert(`管理员端文字保存失败 (Error ${error.code}): ${error.message}`);
+            }
         };
-        insertText();
+        await insertText();
+    };
+
+    // ── 撤回消息逻辑 ──────────────────────────────────────────────────
+    const handleRecall = async (msgId: string) => {
+        // NOTE: 超级管理员有权撤回任何人的消息，其他角色只能撤回自己的
+        const targetMsg = messages.find(m => m.id === msgId);
+        const canRecall = user?.role === 'super_admin' || targetMsg?.isMine;
+
+        if (!canRecall) {
+            alert('您没有权限撤回这条消息');
+            return;
+        }
+
+        if (!window.confirm('确定要撤回这条消息吗？撤回后所有人都将无法查看。')) return;
+
+        try {
+            await api.patch(`/audio/recall/${msgId}`);
+            setMessages(prev => prev.map(m => m.id === msgId ? { ...m, isRecalled: true } : m));
+            if (contextGoEasy && goEasyStatus === 'CONNECTED') {
+                contextGoEasy.pubsub.publish({
+                    channel: CHANNEL,
+                    message: JSON.stringify({ type: 'recall', id: msgId }),
+                    onSuccess: () => console.log('[Walkie] Recall broadcasted:', msgId),
+                });
+            }
+        } catch (err) {
+            console.error('Recall failed:', err);
+            alert('撤回失败，请稍后重试');
+        }
     };
 
     const myRole = user?.role ?? 'super_admin';
     const myBubble = ROLE_CONFIG[myRole]?.bubble ?? 'bg-slate-500';
 
     return (
-        <div className="h-[calc(100vh-140px)] flex gap-6 relative">
+        <div className="h-[calc(100vh-220px)] flex gap-6 relative mt-10 max-w-[1600px] mx-auto px-4">
             {visibleError && (
                 <div className="absolute top-0 left-1/2 -translate-x-1/2 z-50 bg-red-100 text-red-800 px-4 py-2 rounded-b shadow font-mono text-sm max-w-xl text-center">
                     DEBUG: {visibleError}
@@ -508,18 +584,21 @@ export const WalkieTalkiePage: React.FC = () => {
                             </p>
                         </div>
                     </div>
-                    <button
-                        onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
-                        onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
-                        onMouseLeave={stopRecording}
-                        onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                        onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-                        disabled={goEasyStatus !== 'CONNECTED'}
-                        className={`w-14 h-14 rounded-full flex flex-col items-center justify-center text-white font-black text-[9px] transition-all duration-200 select-none cursor-pointer outline-none gap-0.5 shadow-lg active:scale-95 ${goEasyStatus !== 'CONNECTED' ? 'bg-slate-300 cursor-not-allowed' : isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'}`}
-                    >
-                        <span className="material-icons-round text-2xl">{isRecording ? 'mic' : 'mic_none'}</span>
-                        {isRecording ? 'PTT' : 'HOLD'}
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <NotificationBell />
+                        <button
+                            onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
+                            onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
+                            onMouseLeave={stopRecording}
+                            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
+                            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+                            disabled={goEasyStatus !== 'CONNECTED'}
+                            className={`w-14 h-14 rounded-full flex flex-col items-center justify-center text-white font-black text-[9px] transition-all duration-200 select-none cursor-pointer outline-none gap-0.5 shadow-lg active:scale-95 ${goEasyStatus !== 'CONNECTED' ? 'bg-slate-300 cursor-not-allowed' : isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'}`}
+                        >
+                            <span className="material-icons-round text-2xl">{isRecording ? 'mic' : 'mic_none'}</span>
+                            {isRecording ? 'PTT' : 'HOLD'}
+                        </button>
+                    </div>
                 </div>
 
                 {/* 聊天消息区 */}
@@ -544,7 +623,12 @@ export const WalkieTalkiePage: React.FC = () => {
                                         <span className="text-[9px] text-slate-300 font-bold">{time}</span>
                                     </div>
                                     <div className="group relative">
-                                        {msg.type === 'audio' ? (
+                                        {msg.isRecalled ? (
+                                            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-400 rounded-2xl text-[11px] font-bold border border-slate-100 italic">
+                                                <span className="material-icons-round text-sm">remove_circle_outline</span>
+                                                消息已撤回
+                                            </div>
+                                        ) : (msg.type === 'audio' || msg.type === 'voice') ? (
                                             <AudioPlayer
                                                 audioUrl={msg.content}
                                                 initialDuration={msg.duration}
@@ -554,6 +638,17 @@ export const WalkieTalkiePage: React.FC = () => {
                                             <div className={`px-4 py-2.5 rounded-2xl text-sm font-medium shadow-sm transition-all ${msg.isMine ? 'bg-slate-800 text-white rounded-tr-none hover:bg-slate-900 border border-slate-700' : 'bg-slate-50 text-slate-800 rounded-tl-none hover:bg-white border border-slate-100'}`}>
                                                 {msg.content}
                                             </div>
+                                        )}
+                                        
+                                        {/* 撤回按钮：仅限自己发送的消息且未被撤回时显示 */}
+                                        {msg.isMine && !msg.isRecalled && (
+                                            <button
+                                                onClick={() => handleRecall(msg.id)}
+                                                className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white hover:bg-red-50 text-slate-300 hover:text-red-500 p-1.5 rounded-full border border-slate-100 shadow-sm"
+                                                title="撤回消息"
+                                            >
+                                                <span className="material-icons-round text-sm">undo</span>
+                                            </button>
                                         )}
                                     </div>
                                 </div>

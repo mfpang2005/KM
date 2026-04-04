@@ -164,7 +164,7 @@ const KitchenRecipesPage: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 shadow-xl">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 mb-10 flex flex-col h-full bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 shadow-xl">
             <header className="pt-8 pb-6 px-10 bg-white border-b border-slate-100 flex items-center justify-between">
                 <div className="flex items-center gap-5">
                     <button 

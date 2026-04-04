@@ -288,7 +288,6 @@ const KitchenPrepPage: React.FC = () => {
     // ─── PTT / Walkie-Talkie States ───────────────────────────────────────────
     const [userId, setUserId] = useState<string | null>(null);
     const [userEmail, setUserEmail] = useState<string>('kitchen');
-    const [isPttOpen, setIsPttOpen] = useState(false);
     const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'CONNECTED' | 'TALKING' | 'LISTENING'>('IDLE');
     const [isTransmitting, setIsTransmitting] = useState(false);
     const [audioUnlocked, setAudioUnlocked] = useState(false);
@@ -396,6 +395,11 @@ const KitchenPrepPage: React.FC = () => {
         };
     }, [fetchOrders]);
 
+    useEffect(() => {
+        // 后厨端自动开启后台监听
+        startPttSession();
+    }, [userId]);
+
     // ─── PTT Logic ────────────────────────────────────────────────────────────
 
     /** 用户交互解锁音频权限 */
@@ -466,7 +470,6 @@ const KitchenPrepPage: React.FC = () => {
     }, []);
 
     const startPttSession = async () => {
-        setIsPttOpen(true);
         setPttStatus('CONNECTING');
 
         const doConnect = () => {
@@ -486,6 +489,19 @@ const KitchenPrepPage: React.FC = () => {
                                 try {
                                     const payload = JSON.parse(message.content);
                                     if (payload.senderId === myId) return;
+
+                                    // 处理撤回指令 (New)
+                                    if (payload.type === 'recall') {
+                                        // 停止当前正在播放的一切声音
+                                        if (audioContextRef.current) {
+                                            audioContextRef.current.close().then(() => {
+                                                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+                                            });
+                                        }
+                                        console.log('[Kitchen PTT] Remote recall signal: Stopping playback');
+                                        return;
+                                    }
+
                                     if (payload.receiverId !== 'GLOBAL') return;
                                     const audioContent = payload.content || payload.audio;
                                     if (payload.type === 'audio' && audioContent) {
@@ -782,35 +798,6 @@ const KitchenPrepPage: React.FC = () => {
                         </div>
                     </div>
                     <div className="flex items-center gap-6">
-                        {/* PTT Walkie-Talkie Button */}
-                        <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 p-1.5 rounded-2xl hidden md:flex">
-                            {!isPttOpen ? (
-                                <button
-                                    onClick={startPttSession}
-                                    className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all flex items-center gap-2"
-                                >
-                                    <span className="material-icons-round text-[16px]">cell_tower</span>
-                                    Connect Dispatch
-                                </button>
-                            ) : (
-                                <button
-                                    onMouseDown={(e) => { e.preventDefault(); handlePttDown(); }}
-                                    onMouseUp={(e) => { e.preventDefault(); handlePttUp(); }}
-                                    onMouseLeave={handlePttUp}
-                                    onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
-                                    onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
-                                    className={`px-6 py-2 rounded-xl text-[11px] font-black uppercase tracking-widest transition-all shadow-md active:scale-95 flex items-center gap-2 select-none ${
-                                        pttStatus === 'TALKING' ? 'bg-red-500 text-white animate-pulse shadow-red-500/30' : 
-                                        pttStatus === 'LISTENING' ? 'bg-amber-400 text-white shadow-amber-400/30' :
-                                        pttStatus === 'CONNECTED' ? 'bg-blue-600 text-white shadow-blue-500/30 hover:bg-blue-700' :
-                                        'bg-slate-300 text-slate-500 cursor-wait'
-                                    }`}
-                                >
-                                    <span className="material-icons-round text-[16px]">{pttStatus === 'TALKING' ? 'mic' : pttStatus === 'LISTENING' ? 'volume_up' : 'mic_none'}</span>
-                                    {pttStatus === 'TALKING' ? 'Transmitting...' : pttStatus === 'LISTENING' ? 'Receiving...' : pttStatus === 'CONNECTED' ? 'Hold To Talk' : 'Connecting...'}
-                                </button>
-                            )}
-                        </div>
 
                         {/* Stats badges */}
                         <div className="hidden md:flex items-center gap-3">

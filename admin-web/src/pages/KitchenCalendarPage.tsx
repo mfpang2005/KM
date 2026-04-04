@@ -5,6 +5,7 @@ import { AdminOrderService, SuperAdminService } from '../services/api';
 import { supabase } from '../lib/supabase';
 import type { Order, User } from '../types';
 import { OrderStatus } from '../types';
+import { NotificationBell } from '../components/NotificationBell';
 
 interface OrderItemDetail {
     id: string;
@@ -165,14 +166,16 @@ const KitchenCalendarPage: React.FC = () => {
     const selectedDayOrders = selectedDate ? (groupedOrders[selectedDate] || []) : [];
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 space-y-8 animate-in fade-in duration-500 pb-20">
             {/* Header / Month Selector */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="space-y-1">
                     <h2 className="text-2xl font-black text-slate-800 tracking-tight">Event Calendar Monitoring</h2>
                     <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Real-time catering order & dispatch schedule</p>
                 </div>
-                <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+                <div className="flex items-center gap-4">
+                    <NotificationBell />
+                    <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
                     <button
                         onClick={() => setViewMonth(new Date(viewMonth.getFullYear(), viewMonth.getMonth() - 1))}
                         className="p-2 hover:bg-slate-50 rounded-xl transition-colors text-slate-400"
@@ -197,6 +200,7 @@ const KitchenCalendarPage: React.FC = () => {
                     </button>
                 </div>
             </div>
+        </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 {/* 日历主视图 */}

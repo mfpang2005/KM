@@ -129,7 +129,12 @@ export interface AuditLog {
 export interface StatsOverview {
     total_orders: number;
     total_revenue: number;
+    today_orders: number;
+    today_revenue: number;
+    month_revenue: number;
+    month_orders: number;
     total_users: number;
+    total_unpaid?: number;
     orders_by_status: Record<string, number>;
     recent_orders: Order[];
 }

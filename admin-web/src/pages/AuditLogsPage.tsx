@@ -160,7 +160,7 @@ export const AuditLogsPage: React.FC = () => {
     ];
 
     return (
-        <div className="min-h-screen bg-[#FDFDFF] pb-20">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 min-h-screen bg-[#FDFDFF] pb-20">
             {/* Header Section with Glassmorphism Title */}
             <div className="relative mb-12">
                 <div className="absolute top-0 left-0 w-full h-[300px] bg-gradient-to-b from-blue-50/50 to-transparent -z-10"></div>

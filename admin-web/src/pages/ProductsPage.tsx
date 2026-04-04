@@ -161,7 +161,7 @@ export const ProductsPage: React.FC = () => {
     };
 
     return (
-        <div className="pb-20">
+        <div className="mt-10 mx-auto max-w-[1600px] px-4 pb-20">
             <PageHeader
                 title="Products Management"
                 subtitle="Configure item details and pricing globally"
