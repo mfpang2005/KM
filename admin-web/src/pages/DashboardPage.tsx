@@ -90,7 +90,7 @@ export const DashboardPage: React.FC = () => {
             <div className="flex items-center justify-between mb-2">
                 <div>
                     <h1 className="text-2xl font-black text-slate-800 tracking-tight">System Overview</h1>
-                    <p className="text-slate-500 text-sm mt-1">Real-time business performance & linkage</p>
+                    <p className="text-slate-500 text-sm mt-1">Business Performance Data</p>
                 </div>
                 <div className="flex items-center gap-3">
                     <NotificationBell />

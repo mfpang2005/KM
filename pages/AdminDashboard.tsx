@@ -77,96 +77,101 @@ const AdminDashboard: React.FC = () => {
                 {/* 2. 实时财务指标 */}
                 <FinanceWidget user={userRole} />
 
-                {/* 3. 核心统计指标 (Stats Grid) */}
-                <div className="grid grid-cols-1 gap-4">
+                {/* 3. 核心统计指标 (Stats Grid) - 同步后台逻辑 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div
                             onClick={() => navigate('/admin/orders')}
-                            className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/40 hover:-translate-y-1 transition-all group active:scale-95"
+                            className="bg-white p-5 rounded-3xl border border-red-50 shadow-xl shadow-red-500/5 hover:-translate-y-1 transition-all group active:scale-95"
                         >
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl bg-red-500 text-white flex items-center justify-center shadow-lg shadow-red-500/20 group-hover:scale-110 transition-transform">
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center shadow-lg shadow-red-500/20 group-hover:scale-110 transition-transform">
                                     <span className="material-icons-round text-sm">receipt_long</span>
                                 </div>
                                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Orders</span>
                             </div>
                             <p className="text-3xl font-black text-slate-800 tracking-tighter">
-                                {statsLoading ? '...' : stats?.total_orders || 0}
+                                {statsLoading ? '...' : stats?.today_orders || 0}
                             </p>
                         </div>
 
                         <div
-                            onClick={() => navigate('/admin/users')}
-                            className="bg-white p-5 rounded-3xl border border-slate-100 shadow-xl shadow-slate-200/40 hover:-translate-y-1 transition-all group active:scale-95"
+                            onClick={() => navigate('/admin/finance')}
+                            className="bg-white p-5 rounded-3xl border border-orange-50 shadow-xl shadow-orange-500/5 hover:-translate-y-1 transition-all group active:scale-95"
                         >
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
-                                    <span className="material-icons-round text-sm">people</span>
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
+                                    <span className="material-icons-round text-sm">payments</span>
                                 </div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Users</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monthly Revenue</span>
                             </div>
-                            <p className="text-3xl font-black text-slate-800 tracking-tighter">
-                                {statsLoading ? '...' : stats?.total_users || 0}
-                            </p>
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-xs font-bold text-orange-400">RM</span>
+                                <p className="text-2xl font-black text-slate-800 tracking-tighter">
+                                    {statsLoading ? '...' : Number(stats?.month_revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                                </p>
+                            </div>
                         </div>
                     </div>
 
                     <div
                         onClick={() => navigate('/admin/finance')}
-                        className="bg-slate-900 p-6 rounded-3xl border border-white/5 shadow-2xl hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden"
+                        className="bg-white p-6 rounded-3xl border border-rose-50 shadow-xl shadow-rose-500/5 hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden"
                     >
-                        <div className="absolute top-0 right-0 p-6 opacity-[0.05] text-white">
-                            <span className="material-icons-round text-7xl">account_balance</span>
+                        <div className="absolute top-0 right-0 p-6 opacity-[0.05] text-rose-500">
+                            <span className="material-icons-round text-7xl">account_balance_wallet</span>
                         </div>
                         <div className="relative z-10">
                             <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl bg-indigo-500 text-white flex items-center justify-center shadow-lg shadow-indigo-500/20 group-hover:scale-110 transition-transform">
-                                    <span className="material-icons-round text-sm">payments</span>
+                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-pink-500 text-white flex items-center justify-center shadow-lg shadow-rose-500/20 group-hover:scale-110 transition-transform">
+                                    <span className="material-icons-round text-sm">pending_actions</span>
                                 </div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Revenue (MTD)</span>
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Unpaid</span>
                             </div>
-                            <div className="flex items-baseline gap-2">
-                                <span className="text-lg font-black text-indigo-400/80">RM</span>
-                                <p className="text-4xl font-black text-white tracking-tighter">
-                                    {statsLoading ? '...' : Number(stats?.total_revenue || 0).toLocaleString('en-MY', { maximumFractionDigits: 0 })}
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-xs font-bold text-rose-400">RM</span>
+                                <p className="text-4xl font-black text-rose-600 tracking-tighter">
+                                    {statsLoading ? '...' : Number(stats?.total_unpaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </p>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                {/* 4. 快捷功能面板 (Quick Actions) */}
-                <div className="bg-white/60 backdrop-blur-md p-8 rounded-[2.5rem] border border-white shadow-xl shadow-indigo-500/5">
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center gap-2">
-                        <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse"></span>
-                        核心快捷功能
+                {/* 4. 快捷功能面板 (Quick Actions) - 同步后台设置 */}
+                <div className="bg-white p-8 rounded-[2.5rem] border border-red-50 shadow-xl shadow-red-500/5 relative overflow-hidden">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shadow-inner">
+                            <span className="material-icons-round text-sm">bolt</span>
+                        </div>
+                        Quick Actions
                     </h3>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {[
-                            { icon: 'add_shopping_cart', label: '创建订单', color: 'bg-slate-50 text-slate-400 hover:text-primary hover:bg-primary/5', path: '/admin/create-order' },
-                            { icon: 'local_shipping', label: '司机调度', color: 'bg-slate-50 text-slate-400 hover:text-blue-500 hover:bg-blue-50', path: '/admin/drivers' },
-                            { icon: 'inventory_2', label: '商品管理', color: 'bg-slate-50 text-slate-400 hover:text-orange-500 hover:bg-orange-50', path: '/admin/products' },
-                            { icon: 'settings_voice', label: '对讲机', color: 'bg-primary text-white shadow-lg shadow-primary/20 hover:scale-105', path: '/admin/walkie-talkie' }
+                            { icon: 'add_shopping_cart', label: 'Create Order', color: 'bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50', path: '/admin/create-order' },
+                            { icon: 'local_shipping', label: 'Assign Driver', color: 'bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50', path: '/admin/drivers' },
+                            { icon: 'inventory_2', label: 'Manage Products', color: 'bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50', path: '/admin/products' },
+                            { icon: 'settings_voice', label: 'Walkie-Talkie', color: 'bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/20 hover:scale-105', path: '/admin/walkie-talkie' }
                         ].map((func, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => navigate(func.path)}
-                                className={`flex flex-col items-center justify-center p-6 rounded-3xl transition-all group active:scale-95 border border-transparent hover:border-white hover:shadow-2xl ${func.color}`}
+                                className={`flex flex-col items-center justify-center p-6 rounded-3xl transition-all group active:scale-95 border border-transparent ${func.color}`}
                             >
-                                <span className="material-icons-round text-3xl mb-3 transition-transform group-hover:scale-110">{func.icon}</span>
+                                <span className={`material-icons-round text-3xl mb-3 transition-transform group-hover:scale-110 ${!func.color.includes('gradient') ? 'text-slate-400 group-hover:text-red-500' : ''}`}>{func.icon}</span>
                                 <span className="text-[10px] font-black tracking-widest uppercase">{func.label}</span>
                             </button>
                         ))}
                     </div>
                 </div>
 
-                {/* 5. 订单分布状态图 (Order Status Breakdown) */}
-                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/40 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-8 opacity-[0.03] select-none pointer-events-none text-slate-400">
+                {/* 5. 订单分布状态图 (Order Status Breakdown) - 同步后台渐变条 */}
+                <div className="bg-white p-8 rounded-[2.5rem] border border-red-50 shadow-xl shadow-red-500/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-8 opacity-[0.03] select-none pointer-events-none text-red-500">
                         <span className="material-icons-round text-[120px]">donut_large</span>
                     </div>
-                    <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] mb-8 flex items-center gap-3 relative z-10">
-                        <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
+                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8 flex items-center gap-3 relative z-10">
+                        <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center text-red-500">
                             <span className="material-icons-round text-sm">analytics</span>
                         </div>
                         Orders by Status
@@ -180,61 +185,68 @@ const AdminDashboard: React.FC = () => {
                             const total = stats?.total_orders || 1;
                             const pct = Math.round(((count as number) / total) * 100);
                             return (
-                                <div key={status} className="flex items-center gap-4 group">
-                                    <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest w-24 text-center ${statusColors[status] || 'bg-slate-100 text-slate-600'}`}>
+                                <div key={status} className="flex items-center gap-4 group cursor-pointer hover:bg-slate-50/50 p-2 -m-2 rounded-2xl transition-all">
+                                    <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest w-24 text-center transition-transform group-hover:scale-105 ${statusColors[status] || 'bg-slate-100 text-slate-600'}`}>
                                         {statusLabels[status] || status}
                                     </span>
-                                    <div className="flex-1 h-2.5 bg-slate-50 rounded-full overflow-hidden border border-slate-100">
+                                    <div className="flex-1 h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100 shadow-inner">
                                         <div 
-                                            className={`h-full progress-${status} rounded-full transition-all duration-1000 relative animate-shimmer`}
+                                            className={`h-full progress-${status} rounded-full transition-all duration-1000 relative overflow-hidden`}
                                             style={{ width: `${pct}%` }}
-                                        />
+                                        >
+                                            <div className="absolute inset-0 bg-white/20 w-full h-full animate-[shimmer_2s_infinite]"></div>
+                                        </div>
                                     </div>
-                                    <span className="text-sm font-black text-slate-800 w-8 text-right font-mono">{count as React.ReactNode}</span>
+                                    <span className="text-sm font-black text-slate-800 w-8 text-right font-mono group-hover:text-red-500 transition-colors">{count as React.ReactNode}</span>
                                 </div>
                             );
                         })}
                     </div>
                 </div>
 
-                {/* 6. 最新动态列表 (Recent Activity) */}
-                <div className="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/40">
-                    <div className="flex items-center justify-between mb-8">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400">
-                                <span className="material-icons-round text-sm">history</span>
+                {/* 6. 最新动态列表 (Recent Activity) - 同步后台简约列表 */}
+                <div className="bg-white p-8 rounded-[2.5rem] border border-red-50 shadow-xl shadow-red-500/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-8 opacity-[0.02] select-none pointer-events-none text-red-500">
+                        <span className="material-icons-round text-[120px]">schedule</span>
+                    </div>
+                    <div className="flex items-center justify-between mb-8 relative z-10">
+                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 shadow-inner">
+                                <span className="material-icons-round text-sm">schedule</span>
                             </div>
                             Recent Activity
                         </h3>
                         <button 
                             onClick={() => navigate('/admin/orders')}
-                            className="text-[10px] font-black text-primary hover:underline uppercase tracking-widest"
+                            className="text-[10px] font-black text-red-500 hover:underline uppercase tracking-widest"
                         >View All</button>
                     </div>
-                    <div className="space-y-4">
+                    <div className="space-y-4 relative z-10">
                         {statsLoading ? (
                             <div className="space-y-4 animate-pulse">
                                 {[1, 2, 3].map(i => <div key={i} className="h-16 bg-slate-50 rounded-2xl"></div>)}
                             </div>
                         ) : !stats?.recent_orders || stats.recent_orders.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-slate-300">
-                                <span className="material-icons-round text-4xl mb-4">radar</span>
-                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">暂无异常动态</p>
+                                <div className="w-20 h-20 rounded-full border border-slate-100 flex items-center justify-center animate-pulse mb-4">
+                                     <span className="material-icons-round text-3xl opacity-20">radar</span>
+                                </div>
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">系统监控中：暂无异常动态</p>
                             </div>
                         ) : (
                             stats.recent_orders.map(order => (
                                 <div 
                                     key={order.id}
                                     onClick={() => navigate('/admin/orders')}
-                                    className="flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 transition-all cursor-pointer group active:scale-[0.98] border border-transparent hover:border-slate-100"
+                                    className="flex items-center justify-between p-4 rounded-2xl hover:bg-white hover:shadow-xl hover:shadow-slate-200/50 transition-all cursor-pointer group active:scale-[0.98] border border-transparent hover:border-slate-100"
                                 >
                                     <div className="flex items-center gap-4 min-w-0 pr-4">
-                                        <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-primary group-hover:text-white transition-all">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 group-hover:bg-red-50 group-hover:text-red-500 border border-slate-100 transition-all">
                                             <span className="material-icons-round text-sm">local_mall</span>
                                         </div>
                                         <div className="min-w-0">
-                                            <p className="text-xs font-black text-slate-800 truncate group-hover:text-primary transition-colors">{order.customerName}</p>
-                                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{order.id.slice(-8)} • RM {Number(order.amount).toFixed(2)}</p>
+                                            <p className="text-xs font-black text-slate-800 truncate group-hover:text-red-600 transition-colors uppercaseTracking-widest">{order.customerName}</p>
+                                            <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 truncate">{order.id} • <span className="text-slate-600 font-black font-mono">RM {Number(order.amount).toFixed(2)}</span></p>
                                         </div>
                                     </div>
                                     <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${statusColors[order.status] || 'bg-slate-100 text-slate-600'}`}>

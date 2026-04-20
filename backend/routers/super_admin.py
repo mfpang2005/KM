@@ -104,6 +104,26 @@ async def get_stats_overview(
     # Ensure Recent Activity shows the latest 20 orders by sorting descending
     all_orders_data.sort(key=lambda x: str(x.get('created_at', '')), reverse=True)
 
+    # Monthly sales history (Last 12 months)
+    # buckets[0] is 11 months ago, buckets[11] is current month
+    buckets = [0.0] * 12
+    for o in all_orders_data:
+        amt = float(get_field(o, "amount", "Amount") or 0.0)
+        due_raw = get_field(o, "dueTime", "duetime")
+        ca_raw = get_field(o, "created_at", "createdAt")
+        dt = None
+        try:
+            if due_raw: dt = dateutil.parser.parse(str(due_raw))
+            elif ca_raw: dt = dateutil.parser.parse(str(ca_raw))
+        except: continue
+        if not dt: continue
+        dt_naive = dt.replace(tzinfo=None)
+        
+        # Calculate month offset relative to current month (0 = current, 1 = last month, ...)
+        month_diff = (now_naive.year - dt_naive.year) * 12 + (now_naive.month - dt_naive.month)
+        if 0 <= month_diff < 12:
+            buckets[11 - month_diff] = round(buckets[11 - month_diff] + amt, 2)
+    
     # 拉取用户总数
     users_resp = await run_in_threadpool(supabase.table("users").select("id", count="exact").execute)
     total_users = users_resp.count if hasattr(users_resp, "count") else len(users_resp.data or [])
@@ -118,7 +138,8 @@ async def get_stats_overview(
         "total_users": total_users,
         "total_unpaid": round(total_unpaid, 2),
         "orders_by_status": status_counts,
-        "recent_orders": all_orders_data[:20]  
+        "recent_orders": all_orders_data[:20],
+        "monthly_sales": buckets
     }
 
 

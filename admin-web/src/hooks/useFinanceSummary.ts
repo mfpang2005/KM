@@ -17,10 +17,13 @@ export const useFinanceSummary = () => {
         try {
             // 统一调用 SuperAdminService 并映射字段
             const data = await SuperAdminService.getFinanceSummary('month');
+            // We also need the global stats for the 12-month series
+            const globalStats = await SuperAdminService.getStats();
             setSummary({
                 daily: data.todayRevenue,
                 monthly: data.periodRevenue,
-                showFinance: true // 默认显示，或从 system_config 读取
+                monthly_sales: globalStats.monthly_sales,
+                showFinance: true 
             });
             setError(null);
         } catch (err: any) {

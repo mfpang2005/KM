@@ -135,6 +135,7 @@ export interface StatsOverview {
     month_orders: number;
     total_users: number;
     total_unpaid?: number;
+    monthly_sales?: number[];
     orders_by_status: Record<string, number>;
     recent_orders: Order[];
 }
@@ -181,6 +182,7 @@ export interface DriverAssignment {
 export interface FinanceSummary {
     daily: number;
     monthly: number;
+    monthly_sales?: number[];
     showFinance: boolean;
 }
 

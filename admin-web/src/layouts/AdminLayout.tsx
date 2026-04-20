@@ -10,12 +10,12 @@ type ServiceStatus = 'checking' | 'ok' | 'error';
 const StatusDot: React.FC<{ status: ServiceStatus; latency?: number }> = ({ status, latency }) => {
     const colors = { checking: 'bg-yellow-400 animate-pulse', ok: 'bg-emerald-400', error: 'bg-red-500' };
     return (
-        <span className="flex items-center gap-1.5">
-            <span className={`w-2 h-2 rounded-full ${colors[status]}`} />
+        <span className="flex items-center gap-1">
+            <span className={`w-1.5 h-1.5 rounded-full ${colors[status]}`} />
             {status === 'ok' && latency != null && (
-                <span className="text-emerald-400 text-[9px] font-black">{latency}ms</span>
+                <span className="text-emerald-400 text-[8px] font-black leading-none">{latency}ms</span>
             )}
-            {status === 'error' && <span className="text-red-400 text-[9px] font-black">ERR</span>}
+            {status === 'error' && <span className="text-red-400 text-[8px] font-black leading-none">ERR</span>}
         </span>
     );
 };
@@ -23,7 +23,7 @@ const StatusDot: React.FC<{ status: ServiceStatus; latency?: number }> = ({ stat
 import RealtimeStatus from '../components/RealtimeStatus';
 import { GoEasyProvider } from '../contexts/GoEasyContext';
 
-/** 徧边栏底部健康检查组件 */
+/** 侧边栏顶部极简监控组件 - 嵌入标题栏 */
 const HealthCheck: React.FC = () => {
     const [apiStatus, setApiStatus] = useState<ServiceStatus>('checking');
     const [supabaseStatus, setSupabaseStatus] = useState<ServiceStatus>('checking');
@@ -31,7 +31,6 @@ const HealthCheck: React.FC = () => {
     const [sbLatency, setSbLatency] = useState<number>();
 
     const check = useCallback(async () => {
-        // FastAPI check
         const t1 = Date.now();
         try {
             await api.get('/');
@@ -42,7 +41,6 @@ const HealthCheck: React.FC = () => {
             setApiLatency(undefined);
         }
 
-        // Supabase check: 轻量级查询
         const t2 = Date.now();
         try {
             await supabase.from('products').select('id').limit(1);
@@ -56,38 +54,20 @@ const HealthCheck: React.FC = () => {
 
     useEffect(() => {
         check();
-        const timer = setInterval(check, 120_000); // 120s
+        const timer = setInterval(check, 120_000);
         return () => clearInterval(timer);
     }, [check]);
 
     return (
-        <div className="mx-4 mb-3 px-4 py-3 bg-white/5 rounded-2xl border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-                <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">System Status</span>
-                <button
-                    onClick={check}
-                    title="手动刷新"
-                    className="text-slate-600 hover:text-slate-300 transition-colors"
-                >
-                    <span className="material-icons-round text-[12px]">refresh</span>
-                </button>
+        <div className="flex items-center gap-1.5 mt-2.5 opacity-70 hover:opacity-100 transition-opacity whitespace-nowrap">
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/5 rounded-md border border-white/5">
+                <StatusDot status={apiStatus} latency={apiLatency} />
             </div>
-            <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
-                        <span className="material-icons-round text-[11px]">bolt</span>FastAPI
-                    </span>
-                    <StatusDot status={apiStatus} latency={apiLatency} />
-                </div>
-                <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1.5">
-                        <span className="material-icons-round text-[11px]">storage</span>Supabase
-                    </span>
-                    <StatusDot status={supabaseStatus} latency={sbLatency} />
-                </div>
-                <div className="mt-2 pt-2 border-t border-white/5">
-                    <RealtimeStatus />
-                </div>
+            <div className="flex items-center gap-1 px-1.5 py-0.5 bg-white/5 rounded-md border border-white/5">
+                <StatusDot status={supabaseStatus} latency={sbLatency} />
+            </div>
+            <div className="px-1.5 py-0.5 bg-white/5 rounded-md border border-white/5 h-[18px] flex items-center">
+                <RealtimeStatus compact={true} />
             </div>
         </div>
     );
@@ -115,18 +95,21 @@ const AdminLayout: React.FC = () => {
     return (
         <GoEasyProvider>
             <div className="flex h-screen text-slate-800 font-sans bg-[#f8f9fc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/40 via-white to-purple-100/40 selection:bg-blue-200">
-            {/* 侧边栏 (Glass Dark Theme) - 改为 Antigravity 悬浮缩放模式 */}
+            {/* 侧边栏 (Glass Dark Theme) - 恢复自动收起/展开模式 */}
             <aside className="group fixed left-0 top-0 h-screen w-[75px] hover:w-[260px] bg-slate-900/95 backdrop-blur-2xl border-r border-white/10 flex flex-col sidebar-transition text-white z-50 shadow-[10px_0_40px_rgba(0,0,0,0.2)] overflow-hidden no-scrollbar">
-                <div className="h-24 px-5 border-b border-white/5 flex items-center shrink-0">
-                    <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/30 flex-shrink-0">
-                        <span className="font-black text-sm tracking-tighter">KL</span>
-                    </div>
-                    <div className="ml-4 opacity-0 group-hover:opacity-100 sidebar-transition keep-inline">
+                {/* 简易状态灯 (在收缩时显示) - 以极小的绿点表示 */}
+                <div className="absolute top-8 left-1/2 -translate-x-1/2 group-hover:hidden transition-all duration-300 pointer-events-none">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
+                </div>
+                <div className="py-6 px-6 border-b border-white/5 flex flex-col shrink-0 opacity-0 group-hover:opacity-100 sidebar-transition">
+                    <div className="sidebar-transition keep-inline">
                         <h1 className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400 tracking-tight">
-                            SuperAdmin
+                            KIM LONG
                         </h1>
-                        <p className="text-[10px] text-blue-400 font-bold uppercase tracking-[0.2em] mt-0.5">Control Center</p>
+                        <p className="text-[10px] text-blue-400 font-black uppercase tracking-[0.2em] mt-0.5">CENTRAL</p>
                     </div>
+                    
+                    <HealthCheck />
                 </div>
 
                 <nav className="flex-1 px-3 py-6 space-y-2 overflow-y-auto no-scrollbar">
@@ -158,15 +141,8 @@ const AdminLayout: React.FC = () => {
                     })}
                 </nav>
 
-                <div className="sidebar-transition group-hover:px-0">
-                    <div className="opacity-0 group-hover:opacity-100 sidebar-transition h-0 group-hover:h-auto overflow-hidden">
-                        <HealthCheck />
-                    </div>
-                    {/* 简易状态灯 (在收缩时显示) */}
-                    <div className="group-hover:hidden flex flex-col items-center gap-3 mb-6 py-2">
-                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.5)]"></div>
-                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                    </div>
+                <div className="px-0">
+                    {/* Old HealthCheck removed */}
                 </div>
 
                 <div className="p-4 border-t border-white/5 bg-black/20 mt-auto">
@@ -194,7 +170,7 @@ const AdminLayout: React.FC = () => {
                 </div>
             </aside>
 
-            {/* 主内容区 - 增加占位符防止被固定侧边栏遮挡 */}
+            {/* 主内容区 - 适配收缩/展开形态的基础间距 */}
             <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative pl-[75px]">
                 {/* 装饰性背景球 */}
                 <div className="absolute top-[-10%] right-[-5%] w-96 h-96 bg-blue-400/20 rounded-full blur-[100px] pointer-events-none"></div>

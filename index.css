@@ -68,9 +68,9 @@
 }
 
 /* Progress bar semantic colors */
-.progress-delivering { background-color: #8b5cf6 !important; }
+.progress-delivering { background-color: #0ea5e9 !important; }
 .progress-pending { background-color: #f59e0b !important; }
-.progress-preparing { background-color: #3b82f6 !important; }
+.progress-preparing { background-color: #0284c7 !important; }
 .progress-ready { background-color: #10b981 !important; }
 .progress-completed { background-color: #10b981 !important; }
 
@@ -83,7 +83,7 @@
 
 .animate-radar {
     animation: radar-scan 4s linear infinite;
-    background: conic-gradient(from 0deg, rgba(79, 70, 229, 0.2) 0%, rgba(79, 70, 229, 0) 25%, rgba(79, 70, 229, 0) 75%, rgba(79, 70, 229, 0.2) 100%);
+    background: conic-gradient(from 0deg, rgba(14, 165, 233, 0.2) 0%, rgba(14, 165, 233, 0) 25%, rgba(14, 165, 233, 0) 75%, rgba(14, 165, 233, 0.2) 100%);
 }
 
 @keyframes shimmer {
