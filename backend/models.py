@@ -284,10 +284,12 @@ class VehicleBase(BaseModel):
     type: Optional[str] = None
     status: Optional[VehicleStatus] = VehicleStatus.AVAILABLE
     road_tax_expiry: Optional[str] = None
+    manufacturing_date: Optional[str] = None
+    insurance_company: Optional[str] = None
     capacity: Optional[float] = None
     notes: Optional[str] = None
 
-    @field_validator('capacity', 'road_tax_expiry', mode='before')
+    @field_validator('capacity', 'road_tax_expiry', 'manufacturing_date', mode='before')
     @classmethod
     def empty_string_to_none(cls, v):
         if v == "":
@@ -303,10 +305,12 @@ class VehicleUpdate(BaseModel):
     type: Optional[str] = None
     status: Optional[VehicleStatus] = None
     road_tax_expiry: Optional[str] = None
+    manufacturing_date: Optional[str] = None
+    insurance_company: Optional[str] = None
     capacity: Optional[float] = None
     notes: Optional[str] = None
 
-    @field_validator('capacity', 'road_tax_expiry', mode='before')
+    @field_validator('capacity', 'road_tax_expiry', 'manufacturing_date', mode='before')
     @classmethod
     def empty_string_to_none(cls, v):
         if v == "":

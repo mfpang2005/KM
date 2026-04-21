@@ -393,18 +393,19 @@ async def get_financials(
         p_status = str(get_field(o, "paymentStatus", "paymentstatus", "payment_status") or "").lower()
         p_method = str(get_field(o, "paymentMethod", "paymentmethod", "payment_method") or "cash").lower()
         
-        due_time_raw = get_field(o, "dueTime", "duetime", "due_time")
+        # NOTE: 统一使用 created_at（下单日期）作为月份归类的基准
+        # 优先使用 created_at，与前端表格过滤逻辑保持一致
         created_at_raw = get_field(o, "created_at", "createdAt")
+        due_time_raw = get_field(o, "dueTime", "duetime", "due_time")
         
         # Robust Date Parsing - Using the more flexible dateutil.parser.parse
         dt = None
         try:
-            if due_time_raw:
-                dt = dateutil.parser.parse(str(due_time_raw))
-            elif created_at_raw:
+            if created_at_raw:
                 dt = dateutil.parser.parse(str(created_at_raw))
+            elif due_time_raw:
+                dt = dateutil.parser.parse(str(due_time_raw))
         except:
-            # Final fallback: Try to parse whatever date string we have without strict ISO
             continue
             
         if not dt: continue
@@ -418,9 +419,9 @@ async def get_financials(
         if range == "today":
             is_in_period = is_today
         elif range == "month":
-            # Change to last 31 days (inclusive)
-            thirty_days_ago = now_naive - timedelta(days=31)
-            is_in_period = (dt_naive >= thirty_days_ago)
+            # NOTE: 使用自然月（本月1日起），而不是过去31天
+            # 这样确保统计数字与前端 MONTH 过滤的表格完全一致
+            is_in_period = (dt_naive.year == now_naive.year and dt_naive.month == now_naive.month)
         else: # all
             is_in_period = True
             

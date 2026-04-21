@@ -17,30 +17,40 @@ const RealtimeStatus: React.FC<{ compact?: boolean }> = ({ compact }) => {
         console.log(`[Realtime] Connecting to ${channelName}...`);
         const channel = supabase.channel(channelName);
 
-        // 5秒监视器：如果5秒还未连上，强制转为离线以显示重连按钮
+        // 10秒监视器：给连接留出更多时间，防止在网络稍慢时误报
         const watchdog = setTimeout(() => {
-            if (isMounted && status !== 'online') {
-                setStatus('offline');
-                setLastError('Timeout');
+            if (isMounted) {
+                setStatus(current => {
+                    if (current !== 'online') {
+                        console.warn(`[Realtime] Watchdog timed out for ${channelName}`);
+                        setLastError('Connection Timeout (10s)');
+                        return 'offline';
+                    }
+                    return current;
+                });
             }
-        }, 5000);
+        }, 10000);
 
-        channel.subscribe((status, err) => {
+        channel.subscribe((subStatus, err) => {
             if (!isMounted) return;
+            console.log(`[Realtime] Channel ${channelName} status: ${subStatus}`, err || '');
             
-            if (status === 'SUBSCRIBED') {
+            if (subStatus === 'SUBSCRIBED') {
                 clearTimeout(watchdog);
                 setStatus('online');
                 setLastError(null);
-            } else if (status === 'CLOSED') {
+            } else if (subStatus === 'CLOSED') {
                 setStatus('offline');
-            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            } else if (subStatus === 'CHANNEL_ERROR' || subStatus === 'TIMED_OUT') {
                 clearTimeout(watchdog);
                 setStatus('offline');
-                setLastError(err?.message || status);
+                setLastError(err?.message || subStatus);
                 // 5秒后尝试自动重连
                 setTimeout(() => {
-                    if (isMounted) setRetryCount(prev => prev + 1);
+                    if (isMounted) {
+                        console.log(`[Realtime] Retrying connection...`);
+                        setRetryCount(prev => prev + 1);
+                    }
                 }, 5000);
             }
         });
@@ -48,9 +58,8 @@ const RealtimeStatus: React.FC<{ compact?: boolean }> = ({ compact }) => {
         return () => {
             isMounted = false;
             clearTimeout(watchdog);
-            setTimeout(() => {
-                supabase.removeChannel(channel);
-            }, 100);
+            console.log(`[Realtime] Cleaning up channel ${channelName}`);
+            supabase.removeChannel(channel);
         };
     }, [retryCount]);
 

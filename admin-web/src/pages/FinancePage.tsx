@@ -15,7 +15,8 @@ export const FinancePage: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const [statusFilter, setStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
-    const [eventDate, setEventDate] = useState<string>('');
+    const [dateFrom, setDateFrom] = useState<string>('');
+    const [dateTo, setDateTo] = useState<string>('');
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
     const { search } = useLocation();
@@ -26,14 +27,15 @@ export const FinancePage: React.FC = () => {
     const loadData = async (silent = false) => {
         if (!silent) setLoading(true);
         try {
-            const result = await SuperAdminService.getFinanceSummary(range, eventDate);
+            const result = await SuperAdminService.getFinanceSummary(range);
             setData(result as any);
 
             // Also fetch raw orders for the transaction list
             const ordersData = await AdminOrderService.getAll({
-                event_date: eventDate || undefined
+                range: range !== 'all' ? range : undefined
             });
-            setOrders(ordersData.slice(0, 50));
+            // NOTE: 不限制条数，确保统计数字完整
+            setOrders(ordersData);
         } catch (error) {
             console.error('Failed to load finance data', error);
         } finally {
@@ -87,7 +89,7 @@ export const FinancePage: React.FC = () => {
             scrollContainer.removeEventListener('scroll', handleScroll);
             supabase.removeChannel(channel);
         };
-    }, [range, eventDate]);
+    }, [range, dateFrom, dateTo]);
 
     if (loading && !data) {
         return (
@@ -228,23 +230,37 @@ export const FinancePage: React.FC = () => {
                                 <h4 className="font-bold text-slate-800 text-[13px] uppercase tracking-widest">Live Reconciliation</h4>
                                 
                                 <div className="flex items-center gap-4">
-                                    {/* Option B: Dedicated Date Filter Bar */}
-                                    <div className="flex items-center gap-2.5 bg-slate-100/60 px-4 py-2 rounded-full border border-slate-200/50 group focus-within:ring-4 focus-within:ring-indigo-500/10 focus-within:bg-white transition-all shadow-inner">
-                                        <span className="material-icons-round text-slate-400 text-[16px]">event</span>
-                                        <input
-                                            type="date"
-                                            value={eventDate}
-                                            onChange={(e) => setEventDate(e.target.value)}
-                                            className="bg-transparent border-none p-0 text-[11px] font-bold text-slate-700 focus:ring-0 outline-none uppercase tracking-wider cursor-pointer"
-                                            title="Filter by Event Date"
-                                        />
-                                        {eventDate && (
-                                            <button 
-                                                onClick={() => setEventDate('')} 
-                                                className="flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
-                                                title="Clear Date Filter"
+                                    {/* 日期范围选择器 - Premium Design */}
+                                    <div className={`flex items-center gap-0 rounded-2xl border overflow-hidden transition-all duration-300 shadow-sm ${(dateFrom || dateTo) ? 'border-indigo-300 bg-indigo-50/80 shadow-indigo-100' : 'border-slate-200 bg-white/70'}`}>
+                                        {/* FROM */}
+                                        <div className="flex flex-col px-4 py-2 min-w-[130px]">
+                                            <span className={`text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 ${(dateFrom || dateTo) ? 'text-indigo-400' : 'text-slate-400'}`}>FROM</span>
+                                            <input
+                                                type="date"
+                                                value={dateFrom}
+                                                onChange={(e) => setDateFrom(e.target.value)}
+                                                className={`bg-transparent border-none p-0 text-[12px] font-black focus:ring-0 outline-none cursor-pointer ${dateFrom ? 'text-indigo-700' : 'text-slate-400'}`}
+                                            />
+                                        </div>
+                                        <div className={`w-px self-stretch my-1.5 ${(dateFrom || dateTo) ? 'bg-indigo-200' : 'bg-slate-200'}`} />
+                                        {/* TO */}
+                                        <div className="flex flex-col px-4 py-2 min-w-[130px]">
+                                            <span className={`text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 ${(dateFrom || dateTo) ? 'text-indigo-400' : 'text-slate-400'}`}>TO</span>
+                                            <input
+                                                type="date"
+                                                value={dateTo}
+                                                onChange={(e) => setDateTo(e.target.value)}
+                                                className={`bg-transparent border-none p-0 text-[12px] font-black focus:ring-0 outline-none cursor-pointer ${dateTo ? 'text-indigo-700' : 'text-slate-400'}`}
+                                            />
+                                        </div>
+                                        {/* Clear */}
+                                        {(dateFrom || dateTo) && (
+                                            <button
+                                                onClick={() => { setDateFrom(''); setDateTo(''); }}
+                                                className="h-full px-3 flex items-center justify-center bg-indigo-100 hover:bg-red-100 text-indigo-400 hover:text-red-500 transition-all border-l border-indigo-200"
+                                                title="Clear date range"
                                             >
-                                                <span className="material-icons-round text-[16px]">cancel</span>
+                                                <span className="material-icons-round text-[16px]">close</span>
                                             </button>
                                         )}
                                     </div>
@@ -288,15 +304,36 @@ export const FinancePage: React.FC = () => {
                                     {orders
                                         .filter(o => statusFilter === 'all' || o.paymentStatus === statusFilter)
                                         .filter(o => {
+                                            // NOTE: 日期范围过滤器 (dateFrom → dateTo) 优先级最高
+                                            // 如果用户设置了日期范围，完全按该范围过滤，忽略 TODAY/MONTH 按钮
+                                            if (dateFrom || dateTo) {
+                                                const dateStr = o.created_at || (o as any).dueTime;
+                                                if (!dateStr) return false;
+                                                const orderDate = new Date(dateStr);
+                                                orderDate.setHours(0, 0, 0, 0);
+                                                if (dateFrom) {
+                                                    const from = new Date(dateFrom);
+                                                    from.setHours(0, 0, 0, 0);
+                                                    if (orderDate < from) return false;
+                                                }
+                                                if (dateTo) {
+                                                    const to = new Date(dateTo);
+                                                    to.setHours(23, 59, 59, 999);
+                                                    if (orderDate > to) return false;
+                                                }
+                                                return true;
+                                            }
+                                            // 没有选日期范围时，用 TODAY/MONTH 按钮的逻辑
                                             if (range === 'all') return true;
-                                            if (!o.dueTime) return false;
-                                            const orderDate = new Date(o.dueTime);
+                                            const dateStr = o.created_at || (o as any).dueTime;
+                                            if (!dateStr) return false;
+                                            const orderDate = new Date(dateStr);
                                             const now = new Date();
                                             if (range === 'today') {
                                                 return orderDate.toDateString() === now.toDateString();
                                             }
                                             if (range === 'month') {
-                                                return orderDate.getMonth() === now.getMonth() && 
+                                                return orderDate.getMonth() === now.getMonth() &&
                                                        orderDate.getFullYear() === now.getFullYear();
                                             }
                                             return true;

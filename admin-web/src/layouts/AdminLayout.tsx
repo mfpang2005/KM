@@ -88,7 +88,7 @@ const AdminLayout: React.FC = () => {
         { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice' },
         { path: '/kitchen-prep', label: 'Kitchen Management', icon: 'precision_manufacturing' },
         { path: '/products', label: 'Products', icon: 'inventory_2' },
-        { path: '/users', label: 'Users', icon: 'people' },
+        { path: '/users', label: 'Users', icon: 'people', roles: ['super_admin'] },
         { path: '/audit', label: 'Audit Logs', icon: 'history', roles: ['super_admin'] },
     ].filter(item => !item.roles || (user?.role && item.roles.includes(user.role)));
 

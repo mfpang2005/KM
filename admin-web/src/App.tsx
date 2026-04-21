@@ -16,6 +16,7 @@ import KitchenCalendarPage from './pages/KitchenCalendarPage';
 import KitchenPrepPage from './pages/KitchenPrepPage';
 import KitchenRecipesPage from './pages/KitchenRecipesPage';
 import { FinancePage } from './pages/FinancePage';
+import PublicReceiptPage from './pages/PublicReceiptPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading, logout } = useAuth();
@@ -58,6 +59,24 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
+// NOTE: 超管专属路由守卫 - 只有 super_admin 可以访问，防止直接输入 URL 绕过
+const SuperAdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user?.role !== 'super_admin') {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6">
+        <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 max-w-sm text-center">
+          <span className="material-icons-round text-5xl text-red-500 mb-4">lock</span>
+          <h2 className="text-xl font-bold text-slate-800 mb-2">权限不足</h2>
+          <p className="text-sm text-slate-500">此页面仅限超级管理员访问</p>
+        </div>
+      </div>
+    );
+  }
+  return <>{children}</>;
+};
+
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: React.ReactNode}) {
     super(props);
@@ -94,7 +113,7 @@ const App: React.FC = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
           <Route index element={<DashboardPage />} />
-          <Route path="users" element={<UsersPage />} />
+          <Route path="users" element={<SuperAdminRoute><UsersPage /></SuperAdminRoute>} />
           <Route path="orders" element={<OrdersPage />} />
           <Route path="fleet" element={<FleetCenterPage />} />
           <Route path="create-order" element={<CreateOrderPage />} />
@@ -107,6 +126,8 @@ const App: React.FC = () => {
           <Route path="config" element={<ConfigPage />} />
           <Route path="audit" element={<AuditLogsPage />} />
         </Route>
+        {/* NOTE: 公共路由 - 无需登录，供顾客扫码查看账单 */}
+        <Route path="/receipt/:id" element={<PublicReceiptPage />} />
       </Routes>
     </BrowserRouter>
     </ErrorBoundary>

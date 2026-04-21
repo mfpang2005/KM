@@ -16,6 +16,7 @@ import NotificationCenter from './pages/NotificationCenter';
 import Profile from './pages/Profile';
 import OrderDetail from './pages/OrderDetail';
 import SuperAdminPanel from './pages/SuperAdminPanel';
+import PublicReceipt from './pages/PublicReceipt';
 import MainLayout from './src/components/MainLayout';
 import { UserRole } from './types';
 
@@ -109,6 +110,9 @@ const App: React.FC = () => {
                             <Route path="/driver" element={user === UserRole.DRIVER ? <DriverSchedule /> : <Navigate to="/login" />} />
                             <Route path="/driver/confirm" element={user === UserRole.DRIVER ? <PhotoConfirmation /> : <Navigate to="/login" />} />
                         </Route>
+
+                        {/* NOTE: 公共路由 - 不需要登录，供顾客扫码查看账单 */}
+                        <Route path="/receipt/:id" element={<PublicReceipt />} />
 
                         <Route path="/" element={<Navigate to="/login" />} />
                     </Routes>

@@ -619,7 +619,7 @@ export const OrdersPage: React.FC = () => {
                                 </div>
                                 <div className="flex flex-col md:flex-row justify-between gap-6 print:gap-4 pb-4">
                                     <div className="flex-1 space-y-2">
-                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">Billed To</h3>
+                                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-200 pb-1 mb-2">Delivery To</h3>
                                         <div className="grid grid-cols-[80px_1fr] gap-x-2 gap-y-1 text-sm print:text-xs">
                                             <span className="text-slate-500 font-medium">Name:</span>
                                             <span className="font-bold text-slate-900">{selectedPrintOrder.customerName || '-'}</span>
@@ -641,8 +641,17 @@ export const OrdersPage: React.FC = () => {
                                                 <span className="font-bold text-slate-900">{selectedPrintOrder.dueTime ? new Date(selectedPrintOrder.dueTime).toLocaleString('en-MY', { hour12: false }) : '-'}</span>
                                             </div>
                                         </div>
-                                        <div className="shrink-0 pt-1">
-                                            <img src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(selectedPrintOrder.id)}&bgcolor=ffffff&color=0f172a&margin=0`} alt="Order QR Code" className="w-16 h-16 border border-slate-200 p-1" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                        <div className="shrink-0 pt-1 flex flex-col items-center gap-1">
+                                            {(() => {
+                                                // NOTE: 生成顾客可直接扫码访问的完整账单链接
+                                                const receiptUrl = `${window.location.origin}/#/receipt/${selectedPrintOrder.id}`;
+                                                return (
+                                                    <>
+                                                        <img src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(receiptUrl)}&bgcolor=ffffff&color=0f172a&margin=4`} alt="Order QR Code" className="w-20 h-20 border border-slate-200 p-1 rounded-lg" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                                        <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest">SCAN TO VIEW</span>
+                                                    </>
+                                                );
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -688,12 +697,7 @@ export const OrdersPage: React.FC = () => {
                                 )}
                                 <div className="flex flex-col sm:flex-row justify-between items-start gap-6 pt-6 border-t border-slate-200 mt-6 page-break-avoid">
                                     <div className="flex-1 space-y-3 w-full sm:w-auto">
-                                        <div className="grid grid-cols-[100px_1fr] gap-y-1.5 text-sm print:text-xs">
-                                            <span className="text-slate-500 font-medium">Payment:</span>
-                                            <span className="font-bold text-slate-900 uppercase">{selectedPrintOrder.paymentMethod || 'Cash'}</span>
-                                            <span className="text-slate-500 font-medium">Status:</span>
-                                            <span className="font-bold text-slate-900 uppercase tracking-wider">{selectedPrintOrder.status}</span>
-                                        </div>
+                                        {/* Payment and Status fields removed per user request */}
                                         {(selectedPrintOrder as any).remark && (
                                             <div className="mt-6 border-t border-slate-100 pt-6">
                                                 <span className="text-xs font-black text-slate-500 uppercase tracking-widest block mb-1">Remarks</span>
@@ -704,7 +708,7 @@ export const OrdersPage: React.FC = () => {
                                     <div className="w-full sm:w-64 shrink-0">
                                         <div className="bg-slate-50 border border-slate-200 p-4 rounded-xl space-y-2">
                                             <div className="flex justify-between items-center text-sm print:text-xs text-slate-600"><span>Subtotal</span><span className="font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span></div>
-                                            <div className="flex justify-between items-center text-sm print:text-xs text-slate-600"><span>Tax (0%)</span><span className="font-mono">RM 0.00</span></div>
+                                            <div className="text-[10px] text-slate-400 font-bold uppercase tracking-tight text-right italic">Prices are inclusive of 6% SST</div>
                                             <div className="pt-2 border-t border-slate-200 flex justify-between items-center"><span className="text-sm print:text-xs font-black text-slate-900 uppercase tracking-wider">Total</span><span className="text-2xl print:text-xl font-black text-slate-900 font-mono">RM {selectedPrintOrder.amount?.toFixed(2) || '0.00'}</span></div>
                                         </div>
                                     </div>

@@ -218,11 +218,11 @@ export const ProductService = {
 
 export const VehicleService = {
     getAll: async (): Promise<Vehicle[]> => {
-        const response = await api.get('/vehicles');
+        const response = await api.get('/vehicles/');
         return response.data;
     },
     create: async (vehicle: Partial<Vehicle>): Promise<Vehicle> => {
-        const response = await api.post('/vehicles', vehicle);
+        const response = await api.post('/vehicles/', vehicle);
         return response.data;
     },
     update: async (id: string, vehicle: Partial<Vehicle>): Promise<Vehicle> => {

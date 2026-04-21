@@ -135,6 +135,8 @@ export interface Vehicle {
     type?: string;
     status: 'available' | 'busy' | 'repair' | 'good' | 'maintenance';
     road_tax_expiry?: string;
+    manufacturing_date?: string;
+    insurance_company?: string;
     capacity?: number;
     notes?: string;
     driver_id?: string;

@@ -43,17 +43,11 @@ export const GoEasyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const goEasy = goEasyRef.current;
             const currentStatus = goEasy.getConnectionStatus ? goEasy.getConnectionStatus() : 'disconnected';
             
-            if (currentStatus === 'connected') {
-                setStatus('CONNECTED');
-                return;
-            }
-
-            setStatus('CONNECTING');
-            goEasy.connect({
+            goEasyRef.current.connect({
                 id: user.id,
                 data: { email: user.email, role: user.role },
                 onSuccess: () => {
-                    console.log('[GoEasyContext] Connected successfully.');
+                    console.log('[GoEasyContext] Connected successfully as', user.email);
                     setStatus('CONNECTED');
                     if (reconnectTimerRef.current) {
                         clearTimeout(reconnectTimerRef.current);
@@ -72,6 +66,9 @@ export const GoEasyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                         scheduleReconnect();
                     }
                 },
+                onProgress: (status: string) => {
+                    console.log('[GoEasyContext] Progress:', status);
+                }
             });
         } catch (err) {
             console.error('[GoEasyContext] Init error:', err);
