@@ -7,6 +7,16 @@ import { PageHeader } from '../components/PageHeader';
 import { NotificationBell } from '../components/NotificationBell';
 import { FinanceTableRow } from '../components/FinanceTableRow';
 import { useFinanceActions } from '../hooks/useFinanceActions';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+const formatDateObj = (date: Date | null) => {
+    if (!date) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 export const FinancePage: React.FC = () => {
     const [range, setRange] = useState<'today' | 'month' | 'all'>('month');
@@ -224,40 +234,37 @@ export const FinancePage: React.FC = () => {
                 
                 {/* 3a. Transaction Table (Full Width) */}
                 <div className="space-y-6">
-                    <div className="glass-card rounded-[40px] overflow-hidden">
-                        <div className="px-8 py-6 border-b border-white/60 flex items-center justify-between bg-white/30">
+                    <div className="glass-card rounded-[40px] overflow-visible">
+                        <div className="px-8 py-6 border-b border-white/60 flex items-center justify-between bg-white/30 rounded-t-[40px]">
                             <div className="flex items-center gap-8">
                                 <h4 className="font-bold text-slate-800 text-[13px] uppercase tracking-widest">Live Reconciliation</h4>
                                 
                                 <div className="flex items-center gap-4">
                                     {/* 日期范围选择器 - Premium Design */}
-                                    <div className={`flex items-center gap-0 rounded-2xl border overflow-hidden transition-all duration-300 shadow-sm ${(dateFrom || dateTo) ? 'border-indigo-300 bg-indigo-50/80 shadow-indigo-100' : 'border-slate-200 bg-white/70'}`}>
-                                        {/* FROM */}
-                                        <div className="flex flex-col px-4 py-2 min-w-[130px]">
-                                            <span className={`text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 ${(dateFrom || dateTo) ? 'text-indigo-400' : 'text-slate-400'}`}>FROM</span>
-                                            <input
-                                                type="date"
-                                                value={dateFrom}
-                                                onChange={(e) => setDateFrom(e.target.value)}
-                                                className={`bg-transparent border-none p-0 text-[12px] font-black focus:ring-0 outline-none cursor-pointer ${dateFrom ? 'text-indigo-700' : 'text-slate-400'}`}
-                                            />
-                                        </div>
-                                        <div className={`w-px self-stretch my-1.5 ${(dateFrom || dateTo) ? 'bg-indigo-200' : 'bg-slate-200'}`} />
-                                        {/* TO */}
-                                        <div className="flex flex-col px-4 py-2 min-w-[130px]">
-                                            <span className={`text-[9px] font-black uppercase tracking-[0.2em] mb-0.5 ${(dateFrom || dateTo) ? 'text-indigo-400' : 'text-slate-400'}`}>TO</span>
-                                            <input
-                                                type="date"
-                                                value={dateTo}
-                                                onChange={(e) => setDateTo(e.target.value)}
-                                                className={`bg-transparent border-none p-0 text-[12px] font-black focus:ring-0 outline-none cursor-pointer ${dateTo ? 'text-indigo-700' : 'text-slate-400'}`}
-                                            />
-                                        </div>
+                                    <div className={`flex items-center gap-0 rounded-2xl border transition-all duration-300 shadow-sm relative z-50 ${(dateFrom || dateTo) ? 'border-indigo-300 bg-indigo-50/80 shadow-indigo-100' : 'border-slate-200 bg-white/70'}`}>
+                                        <span className={`material-icons-round text-[16px] pl-3 ${(dateFrom || dateTo) ? 'text-indigo-500' : 'text-slate-400'}`}>calendar_month</span>
+                                        <DatePicker
+                                            selectsRange={true}
+                                            startDate={dateFrom ? new Date(dateFrom) : null}
+                                            endDate={dateTo ? new Date(dateTo) : null}
+                                            monthsShown={2}
+                                            onChange={(update: any) => {
+                                                const [start, end] = update;
+                                                setDateFrom(start ? formatDateObj(start) : '');
+                                                setDateTo(end ? formatDateObj(end) : '');
+                                            }}
+                                            placeholderText="EVENT DATE"
+                                            dateFormat="yyyy/MM/dd"
+                                            className={`bg-transparent border-none px-3 py-3 text-[11px] font-black focus:ring-0 outline-none cursor-pointer w-[200px] text-center ${(dateFrom || dateTo) ? 'text-indigo-700' : 'text-slate-500'}`}
+                                            calendarClassName="modern-datepicker-popover"
+                                            popperPlacement="bottom-start"
+                                            portalId="root"
+                                        />
                                         {/* Clear */}
                                         {(dateFrom || dateTo) && (
                                             <button
                                                 onClick={() => { setDateFrom(''); setDateTo(''); }}
-                                                className="h-full px-3 flex items-center justify-center bg-indigo-100 hover:bg-red-100 text-indigo-400 hover:text-red-500 transition-all border-l border-indigo-200"
+                                                className="h-full py-3 px-3 flex items-center justify-center bg-indigo-100 hover:bg-red-100 text-indigo-400 hover:text-red-500 transition-all border-l border-indigo-200 rounded-r-2xl"
                                                 title="Clear date range"
                                             >
                                                 <span className="material-icons-round text-[16px]">close</span>
@@ -285,19 +292,19 @@ export const FinancePage: React.FC = () => {
 
                         {/* High-Density Table */}
                         <div className="overflow-x-auto">
-                            <table className="w-full text-left border-collapse">
+                            <table className="w-full text-center border-collapse">
                                 <thead>
                                     <tr className="text-[11px] font-black text-slate-900 uppercase tracking-widest bg-slate-50/80">
-                                        <th className="px-5 py-5 text-left border-b border-slate-100"># (Order)</th>
-                                        <th className="px-4 py-5 text-left border-b border-slate-100 whitespace-nowrap">Event Date</th>
-                                        <th className="px-8 py-5 text-center border-b border-slate-100">Customer</th>
-                                        <th className="px-5 py-5 text-center border-b border-slate-100">Method</th>
-                                        <th className="px-5 py-5 text-right border-b border-slate-100">Total</th>
-                                        <th className="px-5 py-5 text-center border-b border-slate-100">Received</th>
-                                        <th className="px-5 py-5 text-right border-b border-slate-100">Balance</th>
-                                        <th className="px-5 py-5 text-center border-b border-slate-100 min-w-[120px]">Status</th>
-                                        <th className="px-5 py-5 text-left border-b border-slate-100">Photos</th>
-                                        <th className="px-8 py-5 text-left border-b border-slate-100 w-52">Remark</th>
+                                        <th className="px-5 py-5 border-b border-slate-100 whitespace-nowrap"># (Order)</th>
+                                        <th className="px-4 py-5 border-b border-slate-100 whitespace-nowrap">Event Date</th>
+                                        <th className="px-8 py-5 border-b border-slate-100">Customer</th>
+                                        <th className="px-5 py-5 border-b border-slate-100">Method</th>
+                                        <th className="px-5 py-5 border-b border-slate-100">Total</th>
+                                        <th className="px-5 py-5 border-b border-slate-100">Received</th>
+                                        <th className="px-5 py-5 border-b border-slate-100">Balance</th>
+                                        <th className="px-5 py-5 border-b border-slate-100 min-w-[120px]">Status</th>
+                                        <th className="px-5 py-5 border-b border-slate-100">Photos</th>
+                                        <th className="px-8 py-5 border-b border-slate-100 w-52">Remark</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100/50">

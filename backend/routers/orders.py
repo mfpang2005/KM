@@ -1,5 +1,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Query
 from typing import List, Optional
+import logging
+import re
 from database import supabase
 from models import Order, OrderCreate, OrderUpdate, OrderStatus, UserRole
 from fastapi.concurrency import run_in_threadpool
@@ -10,6 +12,8 @@ router = APIRouter(
     prefix="/orders",
     tags=["orders"]
 )
+
+logger = logging.getLogger(__name__)
 
 async def _sync_items_to_table(order_id: str, items: list):
     """
@@ -56,7 +60,9 @@ async def get_orders(
     status: Optional[str] = None, 
     sort_by: str = "created_at", 
     order: str = "desc",
-    event_date: Optional[str] = Query(None, description="特定活动日期筛选 (YYYY-MM-DD)")
+    event_date: Optional[str] = Query(None, description="特定活动日期筛选 (YYYY-MM-DD)"),
+    start_date: Optional[str] = Query(None, description="起始日期 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)")
 ):
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
@@ -70,6 +76,12 @@ async def get_orders(
     if event_date:
         # 只匹配 dueTime 的日期部分，因为 eventDate 列在数据库中不存在
         query = query.ilike("dueTime", f"{event_date}%")
+    
+    if start_date:
+        query = query.gte("dueTime", start_date)
+    if end_date:
+        # Ensure the entire end day is included
+        query = query.lte("dueTime", f"{end_date}T23:59:59")
     
     # Map 'asc'/'desc' to boolean for supabase-py (if needed) or use string
     is_desc = order.lower() == "desc"
@@ -352,6 +364,9 @@ async def approve_order(
     """
     管理员手动审批订单，直接标记为 ready (跳过厨房准备 / 快捷准备)。
     """
+    order_id = order_id.strip()
+    if order_id.endswith("/approve"): order_id = order_id[:-8]
+    
     from services.goeasy import notify_kitchen_complete
 
     # 1. 更新订单状态为 ready
@@ -730,6 +745,9 @@ async def assign_driver(
     """
     指派司机。接收 { "driver_id": "uuid" }。
     """
+    order_id = order_id.strip()
+    if order_id.endswith("/assign"): order_id = order_id[:-7]
+    
     driver_id = payload.get("driver_id")
     if not driver_id:
         raise HTTPException(status_code=400, detail="driver_id is required")
@@ -776,6 +794,9 @@ async def kitchen_complete(
     厨房确认整张订单完成，将 orders.status 更新为 ready，
     并通过 GoEasy 实时通知司机和管理员准备出发。
     """
+    order_id = order_id.strip()
+    if order_id.endswith("/kitchen-complete"): order_id = order_id[:-17]
+    
     from services.goeasy import notify_kitchen_complete
 
     response = await run_in_threadpool(
@@ -827,26 +848,30 @@ async def revert_order_to_production(
     2. 所有关联项 -> pending / is_prepared=False
     3. 同步 GoEasy 通知
     """
+    order_id = order_id.strip()
+    if order_id.endswith("/revert"): order_id = order_id[:-7]
+    
     if current_user.get("role") not in [UserRole.ADMIN.value, UserRole.SUPER_ADMIN.value, UserRole.KITCHEN.value]:
         raise HTTPException(
             status_code=403,
             detail="Insufficient permissions. Admin or Kitchen access required."
         )
-    from datetime import datetime, timezone
     from services.goeasy import notify_order_update
     from services.audit import record_audit, AuditActions
     import postgrest
 
     # 1. 更新订单状态为 preparing
-    response = await run_in_threadpool(
-        supabase.table("orders")
-        .update({
-            "status": "preparing",
-            "updated_at": datetime.now(timezone.utc).isoformat()
-        })
-        .eq("id", order_id)
-        .execute
-    )
+    try:
+        response = await run_in_threadpool(
+            supabase.table("orders")
+            .update({"status": "preparing"})
+            .eq("id", order_id)
+            .execute
+        )
+    except Exception as e:
+        logger.error(f"Failed to revert order {order_id}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database update failed: {str(e)}")
+        
     if not response.data:
         raise HTTPException(status_code=404, detail="Order not found")
 

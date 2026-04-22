@@ -79,18 +79,31 @@ const AdminLayout: React.FC = () => {
     const scrollRef = useRef<HTMLDivElement>(null);
     // 侧边栏导航项
     const navItems = [
-        { path: '/', label: 'Overview', icon: 'dashboard' },
-        { path: '/finance', label: 'Financials', icon: 'account_balance_wallet' },
-        { path: '/create-order', label: 'Create New Order', icon: 'add_shopping_cart' },
-        { path: '/orders', label: 'Orders', icon: 'receipt_long' },
-        { path: '/event-calendar', label: 'Event Calendar', icon: 'calendar_month' },
-        { path: '/fleet', label: 'Fleet Center', icon: 'local_shipping' },
-        { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice' },
-        { path: '/kitchen-prep', label: 'Kitchen Management', icon: 'precision_manufacturing' },
-        { path: '/products', label: 'Products', icon: 'inventory_2' },
-        { path: '/users', label: 'Users', icon: 'people', roles: ['super_admin'] },
-        { path: '/audit', label: 'Audit Logs', icon: 'history', roles: ['super_admin'] },
-    ].filter(item => !item.roles || (user?.role && item.roles.includes(user.role)));
+        { path: '/', label: 'Overview', icon: 'dashboard', id: 'overview' },
+        { path: '/finance', label: 'Financials', icon: 'account_balance_wallet', id: 'financial' },
+        { path: '/create-order', label: 'Create New Order', icon: 'add_shopping_cart', id: 'create_order' },
+        { path: '/orders', label: 'Orders', icon: 'receipt_long', id: 'order' },
+        { path: '/event-calendar', label: 'Event Calendar', icon: 'calendar_month', id: 'event_calendar' },
+        { path: '/fleet', label: 'Fleet Center', icon: 'local_shipping', id: 'fleet' },
+        { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice', id: 'walkie_talkie' },
+        { path: '/kitchen-prep', label: 'Kitchen Management', icon: 'precision_manufacturing', id: 'kitchen' },
+        { path: '/products', label: 'Products', icon: 'inventory_2', id: 'product' },
+        { path: '/users', label: 'Users', icon: 'people', roles: ['super_admin'], id: 'user' },
+        { path: '/audit', label: 'Audit Logs', icon: 'history', roles: ['super_admin'], id: 'audit' },
+    ].filter(item => {
+        // Super Admin has access to everything
+        if (user?.role === 'super_admin') return true;
+        
+        // Check if the page is explicitly disabled for this user
+        if (user?.permissions && item.id in user.permissions) {
+            return !!user.permissions[item.id];
+        }
+
+        // Role-based fallback for standard items (if no specific permission is set)
+        if (item.roles && (!user?.role || !item.roles.includes(user.role))) return false;
+        
+        return true;
+    });
 
     return (
         <GoEasyProvider>

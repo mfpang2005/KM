@@ -60,8 +60,8 @@ export const DashboardPage: React.FC = () => {
 
     const statusLabels: Record<string, string> = {
         pending: 'Pending',
-        preparing: 'Preparing',
-        ready: 'Ready',
+        preparing: 'Kitchen Process',
+        ready: 'Distribution',
         delivering: 'Delivering',
         completed: 'Completed',
     };

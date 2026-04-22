@@ -80,7 +80,9 @@ async def create_internal_user(
             "email": user_data.email,
             "role": user_data.role.value,
             "name": user_data.name,
-            "phone": user_data.phone
+            "phone": user_data.phone,
+            "department": user_data.department,
+            "position": user_data.position
         }
         
         # 过滤掉 None 值并插入
@@ -146,6 +148,51 @@ async def update_user_status(
     )
     if not response.data:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    # 如果用户不再是 ACTIVE 状态（如被删除或停用），自动释放其占用的车辆
+    if status != UserStatus.ACTIVE:
+        try:
+            # 1. 查找此人的活跃车辆分配
+            assign_resp = await run_in_threadpool(
+                supabase.table("driver_assignments")
+                .select("id, vehicle_id")
+                .eq("driver_id", user_id)
+                .eq("status", "active")
+                .execute
+            )
+            if assign_resp.data:
+                for assignment in assign_resp.data:
+                    # 2. 结束分配
+                    import datetime
+                    await run_in_threadpool(
+                        supabase.table("driver_assignments")
+                        .update({
+                            "status": "completed",
+                            "returned_at": datetime.datetime.utcnow().isoformat()
+                        })
+                        .eq("id", assignment["id"])
+                        .execute
+                    )
+                    # 3. 恢复车辆状态
+                    await run_in_threadpool(
+                        supabase.table("vehicles")
+                        .update({"status": "available", "updated_at": datetime.datetime.utcnow().isoformat()})
+                        .eq("id", assignment["vehicle_id"])
+                        .execute
+                    )
+            
+            # 4. 清理用户档案中的车辆冗余字段 (即使没有 active assignment 也要清理)
+            await run_in_threadpool(
+                supabase.table("users").update({
+                    "vehicle_plate": None,
+                    "vehicle_model": None,
+                    "vehicle_type": None,
+                    "vehicle_status": "idle"
+                }).eq("id", user_id).execute
+            )
+        except Exception as e:
+            # 清理过程中的错误不应阻止主状态更新，但应记录
+            print(f"Warning: Failed to cleanup vehicle resources for user {user_id}: {e}")
         
     # 记录审计日志
     await record_audit(

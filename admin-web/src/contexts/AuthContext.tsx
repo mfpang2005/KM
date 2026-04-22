@@ -5,6 +5,7 @@ interface AuthUser {
     id: string;
     role: string;
     email: string;
+    permissions?: Record<string, boolean>;
 }
 
 interface AuthContextType {
@@ -32,20 +33,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         try {
             const { data, error } = await supabase
                 .from('users')
-                .select('role')
+                .select('role, permissions')
                 .eq('id', userId)
                 .single();
 
             if (data && !error) {
                 console.log(`[AuthContext] Profile loaded: ${data.role}`);
-                setUser({ id: userId, email, role: data.role || 'user' });
+                setUser({ 
+                    id: userId, 
+                    email, 
+                    role: data.role || 'user',
+                    permissions: data.permissions || {}
+                });
             } else {
                 console.warn(`[AuthContext] Profile not found or error, defaulting to 'user'.`);
-                setUser({ id: userId, email, role: 'user' });
+                setUser({ id: userId, email, role: 'user', permissions: {} });
             }
         } catch (err) {
             console.error("[AuthContext] Catch: Profile fetch failed", err);
-            setUser(prev => prev ? { ...prev, role: 'user' } : null);
+            setUser(prev => prev ? { ...prev, role: 'user', permissions: {} } : null);
         } finally {
             fetchInProgress.current = null;
             setProfileLoading(false);
@@ -61,7 +67,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (session?.user) {
                     // Set a baseline user immediately using metadata role to unblock ProtectedRoute
                     const role = session.user.user_metadata?.role || '';
-                    setUser({ id: session.user.id, email: session.user.email || '', role });
+                    setUser({ id: session.user.id, email: session.user.email || '', role, permissions: {} });
                     setLoading(false);
                     // Then fetch the real role in background
                     fetchUserData(session.user.id, session.user.email || '');
@@ -84,7 +90,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (event === 'SIGNED_IN') {
                     // On sign in, give them a baseline user from metadata and unblock
                     const role = session.user.user_metadata?.role || '';
-                    setUser({ id: session.user.id, email: session.user.email || '', role });
+                    setUser({ id: session.user.id, email: session.user.email || '', role, permissions: {} });
                     setLoading(false);
                 }
                 fetchUserData(session.user.id, session.user.email || '');

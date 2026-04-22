@@ -103,6 +103,35 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
   }
 }
 
+const PermissionRoute = ({ children, id }: { children: React.ReactNode, id: string }) => {
+  const { user, loading } = useAuth();
+  if (loading) return null;
+  if (user?.role === 'super_admin') return <>{children}</>;
+  
+  const hasPermission = user?.permissions ? user.permissions[id] !== false : true;
+  
+  if (!hasPermission) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6">
+        <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 max-w-sm text-center animate-in zoom-in-95 duration-500">
+          <div className="w-20 h-20 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <span className="material-icons-round text-4xl text-red-500">block</span>
+          </div>
+          <h2 className="text-xl font-black text-slate-900 mb-2 tracking-tight">未获得访问授权</h2>
+          <p className="text-sm text-slate-400 font-bold leading-relaxed">您的账号尚未开通此页面的访问权限。请联系超级管理员为您开启。</p>
+          <button 
+            onClick={() => window.history.back()}
+            className="mt-8 w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-900/10"
+          >
+            返回上一页
+          </button>
+        </div>
+      </div>
+    );
+  }
+  return <>{children}</>;
+};
+
 const App: React.FC = () => {
   console.log("App: Rendering...");
   return (
@@ -112,19 +141,19 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
-          <Route index element={<DashboardPage />} />
-          <Route path="users" element={<SuperAdminRoute><UsersPage /></SuperAdminRoute>} />
-          <Route path="orders" element={<OrdersPage />} />
-          <Route path="fleet" element={<FleetCenterPage />} />
-          <Route path="create-order" element={<CreateOrderPage />} />
-          <Route path="products" element={<ProductsPage />} />
-          <Route path="walkie-talkie" element={<WalkieTalkiePage />} />
-          <Route path="kitchen-prep" element={<KitchenPrepPage />} />
-          <Route path="kitchen-recipes" element={<KitchenRecipesPage />} />
-          <Route path="event-calendar" element={<KitchenCalendarPage />} />
-          <Route path="finance" element={<FinancePage />} />
+          <Route index element={<PermissionRoute id="overview"><DashboardPage /></PermissionRoute>} />
+          <Route path="users" element={<SuperAdminRoute><PermissionRoute id="user"><UsersPage /></PermissionRoute></SuperAdminRoute>} />
+          <Route path="orders" element={<PermissionRoute id="order"><OrdersPage /></PermissionRoute>} />
+          <Route path="fleet" element={<PermissionRoute id="fleet"><FleetCenterPage /></PermissionRoute>} />
+          <Route path="create-order" element={<PermissionRoute id="create_order"><CreateOrderPage /></PermissionRoute>} />
+          <Route path="products" element={<PermissionRoute id="product"><ProductsPage /></PermissionRoute>} />
+          <Route path="walkie-talkie" element={<PermissionRoute id="walkie_talkie"><WalkieTalkiePage /></PermissionRoute>} />
+          <Route path="kitchen-prep" element={<PermissionRoute id="kitchen"><KitchenPrepPage /></PermissionRoute>} />
+          <Route path="kitchen-recipes" element={<PermissionRoute id="kitchen"><KitchenRecipesPage /></PermissionRoute>} />
+          <Route path="event-calendar" element={<PermissionRoute id="event_calendar"><KitchenCalendarPage /></PermissionRoute>} />
+          <Route path="finance" element={<PermissionRoute id="financial"><FinancePage /></PermissionRoute>} />
           <Route path="config" element={<ConfigPage />} />
-          <Route path="audit" element={<AuditLogsPage />} />
+          <Route path="audit" element={<SuperAdminRoute><PermissionRoute id="audit"><AuditLogsPage /></PermissionRoute></SuperAdminRoute>} />
         </Route>
         {/* NOTE: 公共路由 - 无需登录，供顾客扫码查看账单 */}
         <Route path="/receipt/:id" element={<PublicReceiptPage />} />

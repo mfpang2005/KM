@@ -16,7 +16,10 @@ const formatLogSummary = (log: AuditLog) => {
         case 'order_update':
             return `修改了订单 ${target} 的信息`;
         case 'order_status_change':
-            return `将订单 ${target} 的状态变更为 "${detail.status || '未知'}"`;
+            const statusLabel = detail.status === 'preparing' ? 'Kitchen Process' : 
+                               detail.status === 'ready' ? 'Distribution' : 
+                               detail.status || '未知';
+            return `将订单 ${target} 的状态变更为 "${statusLabel}"`;
         case 'order_assign_driver':
             return `为订单 ${target} 指派了司机 ${detail.driverId || '未知'}`;
         case 'order_unassign_driver':
@@ -297,7 +300,9 @@ export const AuditLogsPage: React.FC = () => {
                                                 </div>
                                                 <div className="flex flex-col">
                                                     <span className="text-[9px] font-black text-slate-300 group-hover:text-slate-600 uppercase tracking-tighter">Actor</span>
-                                                    <span className="text-[11px] font-black text-slate-800 group-hover:text-slate-300 max-w-[120px] truncate">{log.actor_id}</span>
+                                                    <span className="text-[11px] font-black text-slate-800 group-hover:text-slate-300 max-w-[150px] truncate">
+                                                        {log.actor_name || log.actor_email || log.actor_id}
+                                                    </span>
                                                 </div>
                                             </div>
                                             

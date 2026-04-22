@@ -30,7 +30,7 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                         window.location.href = `/orders?highlightOrder=${order.id}`;
                     }}
                     title="View in Order Status"
-                    className="text-indigo-600 font-bold font-mono-finance hover:underline decoration-2 underline-offset-4 flex items-center gap-1.5 group/btn"
+                    className="text-indigo-600 font-bold font-mono-finance hover:underline decoration-2 underline-offset-4 flex items-center gap-1.5 group/btn whitespace-nowrap"
                 >
                     {order.order_number || order.id}
                     <span className="material-icons-round text-[16px] opacity-0 group-hover/btn:opacity-100 transition-opacity">open_in_new</span>
@@ -43,22 +43,30 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                 <p className="text-[13px] font-bold text-slate-800 tracking-tight">{order.customerName || 'Walk-in'}</p>
                 <p className="text-[11px] text-slate-400 mt-1">{order.customerPhone || '-'}</p>
             </td>
-            <td className="px-5 py-4 align-middle text-slate-500">
-                <div className="flex items-center justify-center gap-2">
-                    <span className="material-icons-round text-sm">{getPaymentIcon(order.paymentMethod || 'cash')}</span>
-                    <select
-                        value={order.paymentMethod || 'cash'}
-                        onChange={(e) => onUpdateField(order.id, 'paymentMethod', e.target.value)}
-                        className="bg-transparent border-none p-0 text-[11px] font-bold uppercase tracking-tight focus:ring-0 cursor-pointer text-slate-600 hover:text-indigo-600 transition-colors outline-none appearance-none"
+            <td className="px-5 py-4 align-middle">
+                <div className="flex items-center justify-center">
+                    <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border transition-all shadow-sm
+                        ${order.paymentMethod === 'cash' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 
+                          order.paymentMethod === 'bank_transfer' ? 'bg-blue-50 text-blue-700 border-blue-200' : 
+                          order.paymentMethod === 'ewallet' ? 'bg-purple-50 text-purple-700 border-purple-200' : 
+                          'bg-slate-50 text-slate-600 border-slate-200'}`}
                     >
-                        <option value="cash">Cash</option>
-                        <option value="bank_transfer">Bank Transfer</option>
-                        <option value="ewallet">E-Wallet</option>
-                        <option value="cheque">Cheque</option>
-                    </select>
+                        <span className="material-icons-round text-[14px] shrink-0 opacity-70">{getPaymentIcon(order.paymentMethod || 'cash')}</span>
+                        <select
+                            value={order.paymentMethod || 'cash'}
+                            onChange={(e) => onUpdateField(order.id, 'paymentMethod', e.target.value)}
+                            className="bg-transparent border-none p-0 pr-4 text-[10px] font-bold uppercase tracking-wider cursor-pointer focus:ring-0 outline-none appearance-none bg-no-repeat bg-right"
+                            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundPosition: 'right -2px center' }}
+                        >
+                            <option value="cash" className="bg-white text-slate-900">Cash</option>
+                            <option value="bank_transfer" className="bg-white text-slate-900">Bank Transfer</option>
+                            <option value="ewallet" className="bg-white text-slate-900">E-Wallet</option>
+                            <option value="cheque" className="bg-white text-slate-900">Cheque</option>
+                        </select>
+                    </div>
                 </div>
             </td>
-            <td className="px-5 py-4 align-middle text-right font-mono-finance text-[12px] font-bold text-slate-800 whitespace-nowrap">
+            <td className="px-5 py-4 align-middle font-mono-finance text-[12px] font-bold text-slate-800 whitespace-nowrap">
                 <span className="text-[10px] text-slate-400 mr-1.5">RM</span>
                 {(order.amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </td>
@@ -83,18 +91,19 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
                     </div>
                 </div>
             </td>
-            <td className={`px-5 py-4 align-middle text-right font-mono-finance text-[12px] font-bold whitespace-nowrap ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+            <td className={`px-5 py-4 align-middle font-mono-finance text-[12px] font-bold whitespace-nowrap ${balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
                 <span className={`text-[10px] mr-1.5 ${balance > 0 ? 'text-red-400' : 'text-emerald-400'}`}>RM</span>
                 {balance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
             </td>
-            <td className="px-5 py-4 align-middle min-w-[130px]">
+            <td className="px-5 py-4 align-middle min-w-[120px]">
                 <select
                     value={order.paymentStatus || 'unpaid'}
                     onChange={(e) => onUpdateField(order.id, 'paymentStatus', e.target.value)}
-                    className={`text-[10px] font-bold px-1 py-2 rounded-full border-2 transition-all uppercase tracking-wider block text-center w-full appearance-none cursor-pointer outline-none shadow-sm
+                    className={`text-[10px] font-bold px-2 py-1 rounded-lg border transition-all uppercase tracking-wider block text-center w-full appearance-none cursor-pointer outline-none shadow-sm bg-no-repeat bg-right
                         ${isPaid
                             ? 'bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100' 
                             : 'bg-red-50 text-red-600 border-red-100 hover:bg-red-100'}`}
+                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundPosition: 'right 4px center' }}
                 >
                     <option value="paid" className="bg-white text-slate-900">PAID</option>
                     <option value="unpaid" className="bg-white text-slate-900">UNPAID</option>
@@ -133,12 +142,12 @@ export const FinanceTableRow: React.FC<FinanceTableRowProps> = React.memo(({
         {expandedOrderId === order.id && order.delivery_photos && order.delivery_photos.length > 0 && (
             <tr className="animate-in slide-in-from-top-4 duration-500">
                 <td colSpan={11} className="pb-8 bg-indigo-50/20 px-8">
-                    <div className="pt-4 border-t border-indigo-100/50 flex flex-col items-center">
-                        <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-4 flex items-center justify-center gap-2">
+                    <div className="pt-4 border-t border-indigo-100/50 flex flex-col items-start">
+                        <p className="text-[9px] font-black text-indigo-500 uppercase tracking-[0.2em] mb-4 flex items-center justify-start gap-2 pl-2">
                             <span className="material-icons-round text-[14px]">verified_user</span>
                             Delivery Evidence — {order.delivery_photos.length} Verified Records
                         </p>
-                        <div className="flex flex-wrap justify-center gap-4">
+                        <div className="flex flex-wrap justify-start gap-4 pl-2">
                             {order.delivery_photos?.map((url: string, idx: number) => (
                                 <button
                                     key={idx}

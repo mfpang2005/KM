@@ -220,7 +220,7 @@ const OrderCard: React.FC<{
                             <span className="material-icons-round text-sm">
                                 {allPrepared ? 'check_circle' : 'hourglass_empty'}
                             </span>
-                            {allPrepared ? 'Complete Production' : `${totalItems - doneItems} Items Remain`}
+                            {allPrepared ? 'Complete Kitchen Process' : `${totalItems - doneItems} Items Remain`}
                         </>
                     )}
                 </button>
@@ -235,6 +235,14 @@ const KitchenPrepPage: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'production' | 'history'>('production');
     const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
     const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
+    const [hiddenOrders, setHiddenOrders] = useState<Set<string>>(() => {
+        try {
+            const saved = localStorage.getItem('kitchen_hidden_orders');
+            return saved ? new Set(JSON.parse(saved)) : new Set();
+        } catch {
+            return new Set();
+        }
+    });
     const [loadingItems, setLoadingItems] = useState<Set<string>>(new Set());
     const [confirmingOrders, setConfirmingOrders] = useState<Set<string>>(new Set());
     const [currentTime, setCurrentTime] = useState(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -391,11 +399,22 @@ const KitchenPrepPage: React.FC = () => {
             await AdminOrderService.revertOrder(orderId);
             // Re-fetch to update lists
             fetchOrders();
-        } catch (e) {
+        } catch (e: any) {
             console.error('Revert order failed', e);
-            alert('撤回失败，请稍后重试');
+            const errorMsg = e.response?.data?.detail || e.message || '未知错误';
+            alert(`撤回失败：${errorMsg}`);
         }
     }, [fetchOrders]);
+
+    const handleDelete = useCallback((orderId: string) => {
+        if (!window.confirm('确定要在厨房看板中移除此记录吗？（不会影响其他部门卡片）')) return;
+        setHiddenOrders(prev => {
+            const newSet = new Set(prev);
+            newSet.add(orderId);
+            localStorage.setItem('kitchen_hidden_orders', JSON.stringify(Array.from(newSet)));
+            return newSet;
+        });
+    }, []);
 
     const handleKitchenComplete = useCallback(async (orderId: string) => {
         setConfirmingOrders(prev => new Set(prev).add(orderId));
@@ -434,6 +453,10 @@ const KitchenPrepPage: React.FC = () => {
     const activeCount = kitchenOrders.filter(o => !o.removing).length;
     const preparedCount = kitchenOrders.filter(o => o.items.every(i => i.is_prepared) && o.items.length > 0).length;
 
+    const visibleCompletedOrders = useMemo(() => {
+        return completedOrders.filter(o => !hiddenOrders.has(o.id));
+    }, [completedOrders, hiddenOrders]);
+
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
@@ -445,7 +468,7 @@ const KitchenPrepPage: React.FC = () => {
                             <span className="material-icons-round text-blue-600">precision_manufacturing</span>
                         </div>
                         <div>
-                            <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase">Kitchen Production Line</h1>
+                            <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase">Kitchen Process Line</h1>
                             <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{currentTime} • Real-time Monitoring</p>
                         </div>
                     </div>
@@ -456,7 +479,7 @@ const KitchenPrepPage: React.FC = () => {
                             <p className="text-xl font-black text-amber-700 leading-none">{activeCount}</p>
                         </div>
                         <div className="px-4 py-2 bg-green-50 border border-green-100 rounded-2xl text-center">
-                            <p className="text-[9px] font-black text-green-500 uppercase tracking-widest">Ready</p>
+                            <p className="text-[9px] font-black text-green-500 uppercase tracking-widest">Distribution</p>
                             <p className="text-xl font-black text-green-700 leading-none">{preparedCount}</p>
                         </div>
                     </div>
@@ -464,7 +487,7 @@ const KitchenPrepPage: React.FC = () => {
 
                 <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/50">
                     {[
-                        { id: 'production', label: 'In Production', icon: 'pending_actions' },
+                        { id: 'production', label: 'In Kitchen Process', icon: 'pending_actions' },
                         { id: 'history', label: 'Completed', icon: 'history' },
                     ].map(tab => (
                         <button
@@ -525,14 +548,14 @@ const KitchenPrepPage: React.FC = () => {
                     <div className="space-y-4 animate-in fade-in duration-500 max-w-2xl mx-auto">
                         <div className="flex items-center justify-between mb-4">
                             <h2 className="text-[11px] font-black text-slate-400 uppercase tracking-widest">Completed Orders</h2>
-                            <span className="text-[10px] font-black text-green-600 bg-green-50 px-3 py-1 rounded-full">Total: {completedOrders.length}</span>
+                            <span className="text-[10px] font-black text-green-600 bg-green-50 px-3 py-1 rounded-full">Total: {visibleCompletedOrders.length}</span>
                         </div>
-                        {completedOrders.length === 0 ? (
+                        {visibleCompletedOrders.length === 0 ? (
                             <div className="text-center py-20 text-slate-300">
                                 <p className="text-xs font-black uppercase tracking-widest">No completed orders yet</p>
                             </div>
                         ) : (
-                            completedOrders.map(order => (
+                            visibleCompletedOrders.map(order => (
                                 <div key={order.id} className="bg-white p-5 rounded-[28px] border border-slate-100 flex items-center justify-between hover:shadow-md transition-all group">
                                     <div className="flex items-center gap-4">
                                         <div className="w-10 h-10 bg-green-50 rounded-2xl flex items-center justify-center border border-green-100">
@@ -544,14 +567,26 @@ const KitchenPrepPage: React.FC = () => {
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-[9px] font-black text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-100 uppercase">{order.status}</span>
-                                        <button
-                                            onClick={() => handleRevert(order.id)}
-                                            className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-orange-500 hover:text-white transition-all flex items-center justify-center shadow-sm active:scale-90"
-                                            title="撤回订单"
-                                        >
-                                            <span className="material-icons-round text-sm">undo</span>
-                                        </button>
+                                        <span className="text-[9px] font-black text-green-600 bg-green-50 px-2.5 py-1 rounded-full border border-green-100 uppercase">
+                                            {order.status === 'ready' ? 'Distribution' : order.status === 'preparing' ? 'Kitchen Process' : order.status}
+                                        </span>
+                                        {order.status === 'completed' ? (
+                                            <button
+                                                onClick={() => handleDelete(order.id)}
+                                                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-red-500 hover:text-white transition-all flex items-center justify-center shadow-sm active:scale-90"
+                                                title="删除订单"
+                                            >
+                                                <span className="material-icons-round text-sm">delete</span>
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleRevert(order.id)}
+                                                className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 hover:bg-orange-500 hover:text-white transition-all flex items-center justify-center shadow-sm active:scale-90"
+                                                title="撤回订单"
+                                            >
+                                                <span className="material-icons-round text-sm">undo</span>
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
                             ))

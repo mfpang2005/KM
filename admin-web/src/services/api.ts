@@ -43,7 +43,7 @@ export const SuperAdminService = {
         const response = await api.get('/super-admin/users');
         return response.data;
     },
-    updateUser: async (userId: string, update: { role?: string; name?: string; is_disabled?: boolean }) => {
+    updateUser: async (userId: string, update: Partial<User> & { password?: string }) => {
         const response = await api.patch(`/super-admin/users/${userId}`, update);
         return response.data;
     },
@@ -124,7 +124,7 @@ export const SuperAdminService = {
 
 // 后续扩展 Order 接口
 export const AdminOrderService = {
-    getAll: async (params?: { status?: string; sort_by?: string; order?: string; event_date?: string }): Promise<Order[]> => {
+    getAll: async (params?: { status?: string; sort_by?: string; order?: string; event_date?: string; start_date?: string; end_date?: string; range?: string }): Promise<Order[]> => {
         const response = await api.get('/orders', { params });
         return response.data;
     },

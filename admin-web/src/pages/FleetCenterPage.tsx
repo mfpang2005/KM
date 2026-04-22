@@ -11,6 +11,7 @@ interface FleetDriver {
     email: string;
     phone: string;
     role: string;
+    employee_id?: string;
     activeAssignment?: DriverAssignment & { vehicle: Vehicle };
     activeOrders: Order[];
     completedToday: number;
@@ -73,7 +74,9 @@ export const FleetCenterPage: React.FC = () => {
             );
             setPendingOrders(pending);
 
-            const mappedDrivers: FleetDriver[] = (fleetData || []).map((d: any) => {
+            const mappedDrivers: FleetDriver[] = (fleetData || [])
+                .filter((d: any) => d.status !== 'deleted' && d.status !== 'pending' && d.is_disabled !== true)
+                .map((d: any) => {
                 const driverOrders = allOrders.filter(o => o.driverId === d.id);
                 const activeAssignment = d.assignments?.find((a: any) => a.status === 'active');
                 
@@ -210,9 +213,10 @@ export const FleetCenterPage: React.FC = () => {
     const filteredDrivers = useMemo(() => {
         return drivers.filter(d => {
             if (!d.name || d.name.trim() === '') return false;
-            return d.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                   d.phone?.includes(searchQuery) ||
-                   d.activeAssignment?.vehicle?.plate_no?.toLowerCase().includes(searchQuery.toLowerCase());
+            const displayName = String(d.name || d.employee_id || d.phone || d.email || 'UNNAMED DRIVER');
+            return displayName.toLowerCase().includes(searchQuery.toLowerCase()) || 
+                   String(d.phone || '').includes(searchQuery) ||
+                   String(d.activeAssignment?.vehicle?.plate_no || '').toLowerCase().includes(searchQuery.toLowerCase());
         });
     }, [drivers, searchQuery]);
 
@@ -328,7 +332,7 @@ export const FleetCenterPage: React.FC = () => {
                             <div className="flex items-center gap-2">
                                 <h2 className="text-xs font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
                                     <span className="w-1.5 h-1.5 rounded-full bg-blue-600"></span>
-                                    Mission Pool <span className="bg-blue-600 text-white px-2 py-0.5 rounded-md ml-1 text-[10px]">{pendingOrders.length}</span>
+                                    Distribution Pool <span className="bg-blue-600 text-white px-2 py-0.5 rounded-md ml-1 text-[10px]">{pendingOrders.length}</span>
                                 </h2>
                                 <div className="flex gap-1.5 ml-4 no-print-area">
                                     <button onClick={() => scroll('left')} className="w-7 h-7 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-blue-600 shadow-sm"><span className="material-icons-round text-base">chevron_left</span></button>
@@ -365,7 +369,7 @@ export const FleetCenterPage: React.FC = () => {
                             <div key={driver.id} className={`p-4 border rounded-2xl shadow-sm flex flex-col gap-3 group transition-all ${driver.activeOrders.length > 0 ? 'bg-slate-900 text-white border-slate-800' : 'bg-white text-slate-800 border-slate-200'}`}>
                                 <div className="flex items-start justify-between gap-2">
                                     <div className="flex-1 min-w-0">
-                                        <h3 className={`text-xl font-black truncate leading-tight ${driver.activeOrders.length > 0 ? 'text-white' : 'text-slate-800'}`}>{driver.name}</h3>
+                                        <h3 className={`text-xl font-black truncate leading-tight ${driver.activeOrders.length > 0 ? 'text-white' : 'text-slate-800'}`}>{driver.name || driver.employee_id || driver.phone || (driver.email ? driver.email.split('@')[0] : 'UNNAMED')}</h3>
                                         {driver.activeAssignment?.vehicle ? (
                                             <div className={`mt-2.5 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border ${driver.activeOrders.length > 0 ? 'bg-blue-500/20 border-blue-400/20 text-blue-300' : 'bg-blue-50 border-blue-100 text-blue-600'}`}>
                                                 <span className="material-icons-round text-[14px]">local_shipping</span>
@@ -394,7 +398,7 @@ export const FleetCenterPage: React.FC = () => {
                                                 <div key={o.id} className="p-2.5 rounded-xl bg-white/5 border border-white/10 space-y-1.5 hover:bg-white/10 transition-colors">
                                                     <div className="flex justify-between items-center text-xs">
                                                         <div className="flex flex-col gap-0.5">
-                                                            <span className="font-black text-blue-300 uppercase tracking-tight text-[13px]">#{o.order_number || o.id.slice(0,6)} • <span className="text-white/80 shrink-0">{o.status}</span></span>
+                                                            <span className="font-black text-blue-300 uppercase tracking-tight text-[13px]">#{o.order_number || o.id.slice(0,6)} • <span className="text-white/80 shrink-0">{o.status === 'ready' ? 'Distribution' : o.status === 'preparing' ? 'Kitchen Process' : o.status}</span></span>
                                                             <span className="text-[10px] font-black text-slate-400 font-mono italic">{formatOrderTime(o)}</span>
                                                         </div>
                                                         <div className="flex gap-2 text-base shrink-0 items-center justify-end">
@@ -426,7 +430,8 @@ export const FleetCenterPage: React.FC = () => {
             ) : (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
                     {filteredVehicles.map(v => {
-                        const assignedDriver = drivers.find(d => d.activeAssignment?.vehicle?.id === v.id);
+                        const assignedDriver = drivers.find(d => d.activeAssignment?.vehicle_id === v.id);
+                        const driverName = assignedDriver ? (assignedDriver.name || assignedDriver.employee_id || assignedDriver.phone || (assignedDriver.email ? assignedDriver.email.split('@')[0] : 'UNNAMED')) : 'UNNAMED DRIVER';
                         return (
                         <div key={v.id} className="bg-white border border-slate-200 p-4 rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group flex flex-col justify-between relative overflow-hidden">
                             {/* Decorative background element */}
@@ -492,7 +497,7 @@ export const FleetCenterPage: React.FC = () => {
                                     {assignedDriver && (
                                         <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-blue-50/80 border border-blue-100 text-blue-600 w-full sm:w-auto overflow-hidden">
                                             <span className="material-icons-round text-[14px] shrink-0">person</span>
-                                            <span className="text-[11px] font-black uppercase tracking-wider truncate" title={assignedDriver.name || 'UNNAMED'}>{assignedDriver.name || 'UNNAMED DRIVER'}</span>
+                                            <span className="text-[11px] font-black uppercase tracking-wider truncate" title={driverName}>{driverName}</span>
                                         </div>
                                     )}
                                 </div>

@@ -310,7 +310,7 @@ const KitchenCalendarPage: React.FC = () => {
                                                 </div>
                                                 <div className="mt-3 pt-2.5 border-t border-slate-100 flex items-center justify-between">
                                                     <span className={`text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${STATUS_STYLES[order.status] || 'bg-slate-100 text-slate-500'}`}>
-                                                        {order.status}
+                                                        {order.status === 'ready' ? 'Distribution' : order.status === 'preparing' ? 'Kitchen Process' : order.status}
                                                     </span>
                                                     <p className="text-[10px] font-black text-slate-900">RM {order.amount?.toFixed(2) || '0.00'}</p>
                                                 </div>

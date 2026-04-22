@@ -173,14 +173,38 @@ async def update_user(
     if not update_data:
         raise HTTPException(status_code=400, detail="No fields to update")
 
-    # NOTE: 如果 role 是枚举类型，需要转换为字符串值
+    # NOTE: 如果枚举类型存在，需要转换为字符串值
     if "role" in update_data:
         update_data["role"] = update_data["role"].value if hasattr(update_data["role"], "value") else update_data["role"]
+    if "status" in update_data:
+        update_data["status"] = update_data["status"].value if hasattr(update_data["status"], "value") else update_data["status"]
+
+    auth_updates = {}
+    if "email" in update_data:
+        auth_updates["email"] = update_data["email"]
+    if "password" in update_data and update_data["password"]:
+        auth_updates["password"] = update_data.pop("password")
+    elif "password" in update_data:
+        # 如果是空字符串，则直接从 update_data 中移除，不更新密码
+        update_data.pop("password")
 
     from fastapi.concurrency import run_in_threadpool
-    response = await run_in_threadpool(supabase.table("users").update(update_data).eq("id", user_id).execute)
-    if not response.data:
-        raise HTTPException(status_code=404, detail="User not found")
+    
+    if auth_updates:
+        try:
+            await run_in_threadpool(supabase.auth.admin.update_user_by_id, user_id, auth_updates)
+        except Exception as auth_err:
+            raise HTTPException(status_code=400, detail=f"Auth update failed: {str(auth_err)}")
+
+    if not update_data:
+        return {"id": user_id, "message": "Only auth fields updated"}
+
+    try:
+        response = await run_in_threadpool(supabase.table("users").update(update_data).eq("id", user_id).execute)
+        if not response.data:
+            raise HTTPException(status_code=404, detail="User not found in business table")
+    except Exception as db_err:
+        raise HTTPException(status_code=500, detail=f"Database update failed: {str(db_err)}")
 
     # GoEasy Notification
     from services.goeasy import publish_message
@@ -215,6 +239,44 @@ async def delete_user(
         raise HTTPException(status_code=400, detail="Cannot delete your own account")
 
     from fastapi.concurrency import run_in_threadpool
+    
+    # 物理删除用户前，先清理其关联的车辆分配，防止车辆被永久锁定
+    try:
+        assign_resp = await run_in_threadpool(
+            supabase.table("driver_assignments")
+            .select("id, vehicle_id")
+            .eq("driver_id", user_id)
+            .eq("status", "active")
+            .execute
+        )
+        if assign_resp.data:
+            for assignment in assign_resp.data:
+                await run_in_threadpool(
+                    supabase.table("driver_assignments")
+                    .update({
+                        "status": "completed",
+                        "returned_at": datetime.now(timezone.utc).isoformat()
+                    })
+                    .eq("id", assignment["id"])
+                    .execute
+                )
+                await run_in_threadpool(
+                    supabase.table("vehicles")
+                    .update({"status": "available", "updated_at": datetime.now(timezone.utc).isoformat()})
+                    .eq("id", assignment["vehicle_id"])
+                    .execute
+                )
+    except Exception as e:
+        print(f"Warning: Failed to cleanup vehicle resources during hard-delete for user {user_id}: {e}")
+
+    # 1. 从 Supabase Auth 系统彻底删除账号
+    try:
+        await run_in_threadpool(supabase.auth.admin.delete_user, user_id)
+    except Exception as auth_err:
+        # 如果 Auth 账号不存在（比如已经是幽灵 ID），记录警告并继续删除业务表数据
+        print(f"Warning: Auth user {user_id} not found or already deleted: {auth_err}")
+
+    # 2. 从业务数据库 users 表中删除
     response = await run_in_threadpool(supabase.table("users").delete().eq("id", user_id).execute)
 
     await record_audit(
@@ -307,10 +369,31 @@ async def get_audit_logs(
         .execute
     )
 
+    data = response.data or []
     total = response.count if hasattr(response, "count") and response.count is not None else 0
 
+    # 尝试关联查询操作人信息
+    actor_ids = list(set(row.get("actor_id") for row in data if row.get("actor_id")))
+    if actor_ids:
+        try:
+            users_resp = await run_in_threadpool(
+                supabase.table("users")
+                .select("id, name, email")
+                .in_("id", actor_ids)
+                .execute
+            )
+            user_map = {u["id"]: u for u in (users_resp.data or [])}
+            for row in data:
+                u = user_map.get(row.get("actor_id"))
+                if u:
+                    row["actor_name"] = u.get("name")
+                    row["actor_email"] = u.get("email")
+        except Exception as e:
+            # 即使关联查询失败，也返回基础日志，不影响核心功能
+            print(f"Warning: Failed to fetch actor details for audit logs: {e}")
+
     return {
-        "data": response.data or [],
+        "data": data,
         "page": page,
         "page_size": page_size,
         "total": total,

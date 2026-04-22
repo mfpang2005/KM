@@ -8,7 +8,23 @@ class UserRole(str, Enum):
     ADMIN = 'admin'
     KITCHEN = 'kitchen'
     DRIVER = 'driver'
+    ACCOUNT = 'account'
     SUPER_ADMIN = 'super_admin'
+
+class Department(str, Enum):
+    KITCHEN = 'Kitchen Department'
+    DRIVER = 'Driver Department'
+    ADMIN = 'Admin Department'
+    ACCOUNT = 'Account Department'
+
+class Position(str, Enum):
+    HOD = 'HEAD OF DEPARTMENT - HOD'
+    ASSISTANT_HOD = 'ASSITANT HOD'
+    EXECUTIVE = 'EXECUTIVE'
+    SENIOR = 'SENIOR'
+    JUNIOR = 'JUNIOR'
+    INTERN = 'INTERN'
+
 
 
 class VehicleStatus(str, Enum):
@@ -168,6 +184,9 @@ class User(BaseModel):
     vehicle_type: Optional[str] = None
     vehicle_status: Optional[str] = 'idle'
     employee_id: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    permissions: Optional[dict] = None
 
 
 class CustomerBase(BaseModel):
@@ -201,6 +220,8 @@ class UserUpdate(BaseModel):
     role: Optional[UserRole] = None
     status: Optional[UserStatus] = None
     name: Optional[str] = None
+    email: Optional[str] = None
+    password: Optional[str] = None
     phone: Optional[str] = None
     is_disabled: Optional[bool] = None
     vehicle_model: Optional[str] = None
@@ -208,6 +229,10 @@ class UserUpdate(BaseModel):
     vehicle_type: Optional[str] = None
     vehicle_status: Optional[str] = None
     employee_id: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    permissions: Optional[dict] = None
+    avatar_url: Optional[str] = None
 
 class UserCreateInternal(BaseModel):
     email: str
@@ -216,6 +241,10 @@ class UserCreateInternal(BaseModel):
     name: Optional[str] = None
     employee_id: Optional[str] = None
     phone: Optional[str] = None
+    department: Optional[str] = None
+    position: Optional[str] = None
+    permissions: Optional[dict] = None
+    avatar_url: Optional[str] = None
 
 
 class SystemConfig(BaseModel):

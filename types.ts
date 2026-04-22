@@ -125,6 +125,7 @@ export interface User {
     vehicle_plate?: string;
     vehicle_type?: string;
     vehicle_status?: string;
+    permissions?: Record<string, boolean>;
 }
 
 export interface Vehicle {

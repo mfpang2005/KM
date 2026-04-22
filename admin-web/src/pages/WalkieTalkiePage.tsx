@@ -584,21 +584,6 @@ export const WalkieTalkiePage: React.FC = () => {
                             </p>
                         </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                        <NotificationBell />
-                        <button
-                            onMouseDown={(e) => { e.preventDefault(); startRecording(); }}
-                            onMouseUp={(e) => { e.preventDefault(); stopRecording(); }}
-                            onMouseLeave={stopRecording}
-                            onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
-                            onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
-                            disabled={goEasyStatus !== 'CONNECTED'}
-                            className={`w-14 h-14 rounded-full flex flex-col items-center justify-center text-white font-black text-[9px] transition-all duration-200 select-none cursor-pointer outline-none gap-0.5 shadow-lg active:scale-95 ${goEasyStatus !== 'CONNECTED' ? 'bg-slate-300 cursor-not-allowed' : isRecording ? 'bg-red-600 animate-pulse' : 'bg-red-500 hover:bg-red-600'}`}
-                        >
-                            <span className="material-icons-round text-2xl">{isRecording ? 'mic' : 'mic_none'}</span>
-                            {isRecording ? 'PTT' : 'HOLD'}
-                        </button>
-                    </div>
                 </div>
 
                 {/* 聊天消息区 */}

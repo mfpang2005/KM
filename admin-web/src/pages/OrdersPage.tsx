@@ -6,6 +6,16 @@ import type { Order } from '../types';
 import { OrderStatus } from '../types';
 import { PageHeader } from '../components/PageHeader';
 import { NotificationBell } from '../components/NotificationBell';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+
+const formatDateObj = (date: Date | null) => {
+    if (!date) return '';
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
 export const OrdersPage: React.FC = () => {
     const [searchParams] = useSearchParams();
@@ -15,7 +25,8 @@ export const OrdersPage: React.FC = () => {
     const [statusFilter, setStatusFilter] = useState<string>(searchParams.get('status') || 'all');
     const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
     const [dateFilter, setDateFilter] = useState<string>(searchParams.get('date') || 'all');
-    const [eventDate, setEventDate] = useState<string>(searchParams.get('eventDate') || '');
+    const [dateFrom, setDateFrom] = useState<string>(searchParams.get('startDate') || '');
+    const [dateTo, setDateTo] = useState<string>(searchParams.get('endDate') || '');
     const [isHeaderCompact, setIsHeaderCompact] = useState(false);
 
     // Sync state with URL parameters when they change
@@ -23,7 +34,8 @@ export const OrdersPage: React.FC = () => {
         const status = searchParams.get('status');
         const search = searchParams.get('search');
         const date = searchParams.get('date');
-        const eDate = searchParams.get('eventDate');
+        const start = searchParams.get('startDate');
+        const end = searchParams.get('endDate');
         const isReset = searchParams.get('reset') === 'true';
         const isCreate = searchParams.get('create') === 'true';
 
@@ -31,14 +43,16 @@ export const OrdersPage: React.FC = () => {
             setStatusFilter('all');
             setSearchQuery('');
             setDateFilter('all');
-            setEventDate('');
+            setDateFrom('');
+            setDateTo('');
         } else if (isCreate) {
             navigate('/create-order');
         } else {
             if (status) setStatusFilter(status);
             if (search !== null) setSearchQuery(search);
             if (date) setDateFilter(date);
-            if (eDate !== null) setEventDate(eDate || '');
+            if (start !== null) setDateFrom(start || '');
+            if (end !== null) setDateTo(end || '');
         }
     }, [searchParams]);
 
@@ -61,7 +75,8 @@ export const OrdersPage: React.FC = () => {
         try {
             const params: any = {};
             if (statusFilter !== 'all') params.status = statusFilter;
-            if (eventDate) params.event_date = eventDate;
+            if (dateFrom) params.start_date = dateFrom;
+            if (dateTo) params.end_date = dateTo;
             
             const response = await api.get('/orders', { params });
             setOrders(Array.isArray(response.data) ? response.data : []);
@@ -70,7 +85,7 @@ export const OrdersPage: React.FC = () => {
         } finally {
             setLoading(false);
         }
-    }, [statusFilter, eventDate]);
+    }, [statusFilter, dateFrom, dateTo]);
 
     useEffect(() => {
         const findScrollContainer = () => {
@@ -155,8 +170,10 @@ export const OrdersPage: React.FC = () => {
             // Not found in current filter - Reset filters to ensure targeted order is visible
             setStatusFilter('all');
             setSearchQuery('');
+            setSearchQuery('');
             setDateFilter('all');
-            setEventDate('');
+            setDateFrom('');
+            setDateTo('');
             return;
         }
 
@@ -247,7 +264,7 @@ export const OrdersPage: React.FC = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchQuery, statusFilter, dateFilter, eventDate]);
+    }, [searchQuery, statusFilter, dateFilter, dateFrom, dateTo]);
 
     return (
         <div className="mt-10 mx-auto max-w-[1600px] px-4 pb-20">
@@ -275,26 +292,36 @@ export const OrdersPage: React.FC = () => {
                             >
                                 <option value="all">All Status</option>
                                 <option value={OrderStatus.PENDING}>Pending</option>
-                                <option value={OrderStatus.PREPARING}>Preparing</option>
-                                <option value={OrderStatus.READY}>Ready</option>
+                                <option value={OrderStatus.PREPARING}>Kitchen Process</option>
+                                <option value={OrderStatus.READY}>Distribution</option>
                                 <option value={OrderStatus.DELIVERING}>Delivering</option>
                                 <option value={OrderStatus.COMPLETED}>Completed</option>
                             </select>
 
                             <div className="flex items-center gap-2">
-                                <div className="relative flex items-center bg-white/50 backdrop-blur border border-slate-200 rounded-xl px-3 py-2 group focus-within:ring-2 focus-within:ring-blue-500/20 transition-all">
-                                    <span className="material-icons-round text-slate-400 text-[16px] mr-2">event</span>
-                                    <input
-                                        type="date"
-                                        value={eventDate}
-                                        onChange={(e) => setEventDate(e.target.value)}
-                                        className="bg-transparent border-none p-0 text-sm font-bold text-slate-600 focus:ring-0 outline-none uppercase tracking-tighter"
-                                        title="Filter by Event Date"
+                                <div className={`flex items-center gap-0 rounded-xl border transition-all duration-300 shadow-sm relative z-50 ${(dateFrom || dateTo) ? 'border-indigo-300 bg-indigo-50/80 shadow-indigo-100' : 'border-slate-200 bg-white/70'}`}>
+                                    <span className={`material-icons-round text-[16px] pl-3 ${(dateFrom || dateTo) ? 'text-indigo-500' : 'text-slate-400'}`}>calendar_month</span>
+                                    <DatePicker
+                                        selectsRange={true}
+                                        startDate={dateFrom ? new Date(dateFrom) : null}
+                                        endDate={dateTo ? new Date(dateTo) : null}
+                                        monthsShown={2}
+                                        onChange={(update: any) => {
+                                            const [start, end] = update;
+                                            setDateFrom(start ? formatDateObj(start) : '');
+                                            setDateTo(end ? formatDateObj(end) : '');
+                                        }}
+                                        placeholderText="EVENT DATE"
+                                        dateFormat="yyyy/MM/dd"
+                                        className={`bg-transparent border-none px-3 py-2 text-[11px] font-black focus:ring-0 outline-none cursor-pointer w-[180px] text-center ${(dateFrom || dateTo) ? 'text-indigo-700' : 'text-slate-500'}`}
+                                        calendarClassName="modern-datepicker-popover"
+                                        popperPlacement="bottom-start"
+                                        portalId="root"
                                     />
-                                    {eventDate && (
+                                    {(dateFrom || dateTo) && (
                                         <button 
-                                            onClick={() => setEventDate('')} 
-                                            className="ml-2 text-slate-300 hover:text-red-500 transition-colors"
+                                            onClick={() => { setDateFrom(''); setDateTo(''); }} 
+                                            className="h-full px-2 text-slate-300 hover:text-red-500 transition-colors border-l border-slate-100"
                                         >
                                             <span className="material-icons-round text-[16px]">cancel</span>
                                         </button>
@@ -310,17 +337,17 @@ export const OrdersPage: React.FC = () => {
 
             <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden text-sm relative">
                 <div className="h-[75vh] min-h-[500px] overflow-y-auto custom-scrollbar scroll-smooth relative">
-                    <table className="w-full text-left border-collapse min-w-max table-auto">
+                    <table className="w-full text-center border-collapse min-w-max table-auto">
                         <thead className={`sticky z-20 bg-slate-50/95 backdrop-blur-md shadow-sm border-b border-slate-200 transition-all duration-300 ${isHeaderCompact ? 'top-[-1px]' : 'top-0'}`}>
                             <tr className="text-slate-500 font-bold text-[11px] uppercase tracking-wider">
                                 <th className="px-6 py-4 whitespace-nowrap">Order ID</th>
-                                <th className="px-6 py-4">Customer</th>
+                                <th className="px-6 py-4 text-left">Customer</th>
                                 <th className="px-6 py-4">Total Amount</th>
                                 <th className="px-6 py-4">Status</th>
                                 <th className="px-6 py-4">Event Date</th>
                                 <th className="px-6 py-4">Created At</th>
                                 <th className="px-6 py-4">Photos</th>
-                                <th className="px-6 py-4 text-right">Actions</th>
+                                <th className="px-6 py-4">Actions</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white">
@@ -345,7 +372,7 @@ export const OrdersPage: React.FC = () => {
                                                 <p className="font-mono font-bold text-slate-800">{order.order_number || order.id}</p>
                                                 <p className="text-xs text-slate-500 uppercase">{order.type}</p>
                                             </td>
-                                            <td className="px-6 py-4 whitespace-nowrap">
+                                            <td className="px-6 py-4 whitespace-nowrap text-left">
                                                 <p className="font-bold text-slate-800">{order.customerName}</p>
                                                 <p className="text-xs text-slate-500">{order.customerPhone}</p>
                                             </td>
@@ -356,12 +383,12 @@ export const OrdersPage: React.FC = () => {
                                                 <select
                                                     value={order.status || 'pending'}
                                                     onChange={(e) => handleInlineStatusChange(order.id, e.target.value)}
-                                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer outline-none appearance-none bg-no-repeat bg-right pr-6 transition-all ${(statusColors as any)[order.status || 'pending'] || 'bg-slate-100 text-slate-600'}`}
-                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundPosition: 'right 4px center' }}
+                                                    className={`px-2.5 py-1.5 rounded-lg text-xs font-bold cursor-pointer outline-none appearance-none bg-no-repeat bg-right transition-all text-center ${(statusColors as any)[order.status || 'pending'] || 'bg-slate-100 text-slate-600'}`}
+                                                    style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='%23666'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundPosition: 'right 4px center', paddingRight: '20px' }}
                                                 >
                                                     <option value={OrderStatus.PENDING}>PENDING</option>
-                                                    <option value={OrderStatus.PREPARING}>PREPARING</option>
-                                                    <option value={OrderStatus.READY}>READY</option>
+                                                    <option value={OrderStatus.PREPARING}>KITCHEN PROCESS</option>
+                                                    <option value={OrderStatus.READY}>DISTRIBUTION</option>
                                                     <option value={OrderStatus.DELIVERING}>DELIVERING</option>
                                                     <option value={OrderStatus.COMPLETED}>COMPLETED</option>
                                                 </select>
@@ -396,7 +423,7 @@ export const OrdersPage: React.FC = () => {
                                                 {order.delivery_photos && order.delivery_photos.length > 0 ? (
                                                     <button
                                                         onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
-                                                        className={`flex items-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg transition-all ${expandedOrderId === order.id
+                                                        className={`flex items-center justify-center gap-1.5 text-xs font-bold px-2.5 py-1 rounded-lg transition-all mx-auto ${expandedOrderId === order.id
                                                             ? 'bg-indigo-100 text-indigo-700'
                                                             : 'bg-slate-100 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
                                                             }`}
@@ -408,7 +435,7 @@ export const OrdersPage: React.FC = () => {
                                                     <span className="text-xs text-slate-300">—</span>
                                                 )}
                                             </td>
-                                            <td className="px-6 py-4 pr-8 text-right space-x-1.5 whitespace-nowrap">
+                                            <td className="px-6 py-4 space-x-1.5 whitespace-nowrap">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); setSelectedPrintOrder(order); }}
                                                     title="View Bill / Print"

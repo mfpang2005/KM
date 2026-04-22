@@ -2,9 +2,28 @@ export const UserRole = {
     ADMIN: 'admin',
     KITCHEN: 'kitchen',
     DRIVER: 'driver',
+    ACCOUNT: 'account',
     SUPER_ADMIN: 'super_admin'
 } as const;
 export type UserRole = typeof UserRole[keyof typeof UserRole];
+
+export const Department = {
+    KITCHEN: 'Kitchen Department',
+    DRIVER: 'Driver Department',
+    ADMIN: 'Admin Department',
+    ACCOUNT: 'Account Department'
+} as const;
+export type Department = typeof Department[keyof typeof Department];
+
+export const Position = {
+    HOD: 'HEAD OF DEPARTMENT - HOD',
+    ASSISTANT_HOD: 'ASSITANT HOD',
+    EXECUTIVE: 'EXECUTIVE',
+    SENIOR: 'SENIOR',
+    JUNIOR: 'JUNIOR',
+    INTERN: 'INTERN'
+} as const;
+export type Position = typeof Position[keyof typeof Position];
 
 export const OrderStatus = {
     PENDING: 'pending',
@@ -107,6 +126,9 @@ export interface User {
     vehicle_plate?: string;
     vehicle_type?: string;
     vehicle_status?: string;
+    department?: string;
+    position?: string;
+    permissions?: Record<string, boolean>;
 }
 
 export interface SystemConfig {
@@ -120,6 +142,8 @@ export interface AuditLog {
     id: string;
     actor_id: string;
     actor_role: string;
+    actor_name?: string;
+    actor_email?: string;
     action: string;
     target?: string;
     detail?: Record<string, any>;
