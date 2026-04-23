@@ -31,10 +31,10 @@ interface ChatMessage {
 }
 
 const ROLE_CONFIG: Record<string, { label: string; color: string; icon: string; bubble: string }> = {
-    super_admin: { label: 'Super Admin', color: 'bg-purple-100 text-purple-700', icon: 'admin_panel_settings', bubble: 'bg-purple-500' },
-    admin: { label: 'Admin', color: 'bg-blue-100 text-blue-700', icon: 'manage_accounts', bubble: 'bg-blue-500' },
-    kitchen: { label: 'Kitchen', color: 'bg-orange-100 text-orange-700', icon: 'soup_kitchen', bubble: 'bg-orange-500' },
-    driver: { label: 'Driver', color: 'bg-green-100 text-green-700', icon: 'local_shipping', bubble: 'bg-green-500' },
+    super_admin: { label: 'Super Admin', color: 'bg-primary/10 text-primary', icon: 'admin_panel_settings', bubble: 'bg-primary' },
+    admin: { label: 'Admin', color: 'bg-primary-light/10 text-primary-light', icon: 'manage_accounts', bubble: 'bg-primary-light' },
+    kitchen: { label: 'Kitchen', color: 'bg-accent-gold/10 text-accent-gold', icon: 'soup_kitchen', bubble: 'bg-accent-gold' },
+    driver: { label: 'Driver', color: 'bg-emerald-100 text-emerald-700', icon: 'local_shipping', bubble: 'bg-emerald-500' },
     guest: { label: 'Guest', color: 'bg-slate-100 text-slate-600', icon: 'person', bubble: 'bg-slate-400' },
 };
 
@@ -571,15 +571,15 @@ export const WalkieTalkiePage: React.FC = () => {
             {/* ── 右侧：聊天区域 ── */}
             <div className="flex-1 bg-white rounded-[24px] shadow-sm border border-slate-100 flex flex-col overflow-hidden">
                 {/* 顶部标题栏 */}
-                <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/20">
+                <div className="px-6 py-4 border-b border-primary/5 flex items-center justify-between bg-background-beige/20">
                     <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-sm bg-indigo-500`}>
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white shadow-sm bg-primary`}>
                             <span className="material-icons-round text-[20px]">cell_tower</span>
                         </div>
                         <div className="flex-1 min-w-0">
-                            <h2 className="text-sm font-black text-slate-800 truncate">Global Dispatch Room</h2>
-                            <p className="text-[10px] text-emerald-500 font-black flex items-center gap-1">
-                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                            <h2 className="text-sm font-black text-primary truncate">Global Dispatch Room</h2>
+                            <p className="text-[10px] text-accent-gold font-black flex items-center gap-1">
+                                <span className="w-1.5 h-1.5 rounded-full bg-accent-gold animate-pulse"></span>
                                 ON AIR · ALL STATIONS
                             </p>
                         </div>
@@ -620,7 +620,7 @@ export const WalkieTalkiePage: React.FC = () => {
                                                 autoPlay={audioUnlocked && !msg.isMine && msg.id === latestIncomingId}
                                             />
                                         ) : (
-                                            <div className={`px-4 py-2.5 rounded-2xl text-sm font-medium shadow-sm transition-all ${msg.isMine ? 'bg-slate-800 text-white rounded-tr-none hover:bg-slate-900 border border-slate-700' : 'bg-slate-50 text-slate-800 rounded-tl-none hover:bg-white border border-slate-100'}`}>
+                                            <div className={`px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm transition-all ${msg.isMine ? 'bg-primary text-white rounded-tr-none border border-primary/10' : 'bg-background-beige/40 text-primary rounded-tl-none border border-primary/5'}`}>
                                                 {msg.content}
                                             </div>
                                         )}
@@ -651,6 +651,7 @@ export const WalkieTalkiePage: React.FC = () => {
                         onMouseUp={stopRecording}
                         onTouchStart={(e) => { e.preventDefault(); startRecording(); }}
                         onTouchEnd={(e) => { e.preventDefault(); stopRecording(); }}
+                        onContextMenu={(e) => e.preventDefault()}
                         disabled={goEasyStatus !== 'CONNECTED'}
                         className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all shadow-md active:scale-90 shrink-0 ${isRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white border border-slate-200 text-slate-400 hover:bg-slate-50'}`}
                         title="Hold to Record"
@@ -673,7 +674,7 @@ export const WalkieTalkiePage: React.FC = () => {
                     <button
                         onClick={sendTextMessage}
                         disabled={goEasyStatus !== 'CONNECTED' || !chatInput.trim()}
-                        className="w-11 h-11 rounded-2xl bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-200 text-white flex items-center justify-center transition-all shadow-md hover:shadow-lg active:scale-95 shrink-0"
+                        className="w-11 h-11 rounded-2xl bg-primary hover:bg-primary-warm disabled:bg-slate-200 text-white flex items-center justify-center transition-all shadow-md hover:shadow-lg active:scale-95 shrink-0"
                     >
                         <span className="material-icons-round">send</span>
                     </button>

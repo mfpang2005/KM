@@ -361,3 +361,42 @@ class DriverAssignment(DriverAssignmentBase):
     returned_at: Optional[datetime] = None
     status: str
 
+
+class InventoryItem(BaseModel):
+    id: str
+    code: str
+    name: str
+    category: Optional[str] = None
+    unit: Optional[str] = None
+    unit_price: float = 0.0
+    stock_quantity: float = 0.0
+    min_threshold: float = 0.0
+    max_threshold: float = 0.0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+class InventoryLog(BaseModel):
+    id: str
+    item_id: str
+    type: str # 'IN', 'OUT', 'ADJUST'
+    quantity: float
+    user_id: str
+    remark: Optional[str] = None
+    created_at: Optional[datetime] = None
+
+class InventoryItemCreate(BaseModel):
+    code: str
+    name: str
+    category: Optional[str] = None
+    unit: Optional[str] = "kg"
+    unit_price: float = 0.0
+    stock_quantity: float = 0.0
+    min_threshold: float = 0.0
+    max_threshold: float = 0.0
+
+class InventoryAdjustment(BaseModel):
+    item_id: str
+    type: str # 'IN', 'OUT', 'ADJUST'
+    quantity: float
+    remark: Optional[str] = None
+

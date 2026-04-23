@@ -19,6 +19,7 @@ import SuperAdminPanel from './pages/SuperAdminPanel';
 import PublicReceipt from './pages/PublicReceipt';
 import MainLayout from './src/components/MainLayout';
 import { UserRole } from './types';
+import WalkieTalkie from './pages/WalkieTalkie';
 
 const App: React.FC = () => {
     const [user, setUser] = useState<UserRole | null>(null);
@@ -95,6 +96,7 @@ const App: React.FC = () => {
                             <Route path="/admin/kitchen-summary" element={isAdminOrSuper ? <KitchenSummary /> : <Navigate to="/login" />} />
                             <Route path="/admin/notifications" element={isAdminOrSuper ? <NotificationCenter /> : <Navigate to="/login" />} />
                             <Route path="/admin/profile" element={isAdminOrSuper ? <Profile onLogout={() => setUser(null)} /> : <Navigate to="/login" />} />
+                            <Route path="/admin/walkie-talkie" element={isAdminOrSuper ? <WalkieTalkie /> : <Navigate to="/login" />} />
                             <Route path="/orders/:id" element={isAdminOrSuper || user === UserRole.DRIVER ? <OrderDetail /> : <Navigate to="/login" />} />
 
                             {/* Super Admin Routes — 仅 super_admin 可访问 */}

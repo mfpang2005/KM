@@ -15,6 +15,7 @@ const PERMISSION_ITEMS = [
     { id: 'walkie_talkie', label: 'Walkie Talkie', icon: 'settings_voice' },
     { id: 'kitchen', label: 'Kitchen Management', icon: 'precision_manufacturing' },
     { id: 'product', label: 'Product', icon: 'inventory_2' },
+    { id: 'inventory', label: 'Stock Inventory', icon: 'inventory' },
     { id: 'user', label: 'User', icon: 'people' },
     { id: 'audit', label: 'Audit Log', icon: 'history' },
 ];
@@ -50,7 +51,7 @@ export const UsersPage: React.FC = () => {
         if (search !== null) setSearchQuery(search);
     }, [searchParams]);
     const [showAddModal, setShowAddModal] = useState(false);
-    const [newUserForm, setNewUserForm] = useState<{ email: string; role: UserRole; name: string; password?: string; employee_id?: string; phone?: string; department?: string; position?: string; permissions?: Record<string, boolean> }>({
+    const [newUserForm, setNewUserForm] = useState<{ email: string; role: UserRole; name: string; password?: string; employee_id?: string; phone?: string; department?: string; position?: string; avatar_url?: string; permissions?: Record<string, boolean> }>({
         email: '',
         role: UserRole.DRIVER,
         name: '',
@@ -64,7 +65,7 @@ export const UsersPage: React.FC = () => {
     });
     
     const [showEditModal, setShowEditModal] = useState(false);
-    const [editUserForm, setEditUserForm] = useState<{ id: string; email: string; role: UserRole; name: string; password?: string; employee_id?: string; phone?: string; department?: string; position?: string; status?: 'active' | 'pending' | 'deleted'; permissions?: Record<string, boolean> }>({
+    const [editUserForm, setEditUserForm] = useState<{ id: string; email: string; role: UserRole; name: string; password?: string; employee_id?: string; phone?: string; department?: string; position?: string; status?: 'active' | 'pending' | 'deleted'; avatar_url?: string; permissions?: Record<string, boolean> }>({
         id: '',
         email: '',
         role: UserRole.DRIVER,
@@ -268,20 +269,10 @@ export const UsersPage: React.FC = () => {
                             </div>
                         </div>
                         
-                        <div className="flex flex-col">
-                            <div className={`flex items-center gap-2 transition-all duration-500 ${isScrolled ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100 h-5 mb-0.5'}`}>
-                                <span className="px-2.5 py-0.5 bg-white/80 backdrop-blur-md border border-slate-100 rounded-full text-[9px] font-black text-slate-400 uppercase tracking-[0.2em] shadow-sm">
-                                    Identity Management
-                                </span>
-                                {rtStatus === 'SUBSCRIBED' && (
-                                    <span className="px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[8px] font-black uppercase tracking-wider border border-emerald-100/50">
-                                        Live
-                                    </span>
-                                )}
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <h1 className={`font-black text-slate-900 tracking-tight transition-all duration-500 ${isScrolled ? 'text-lg' : 'text-xl lg:text-2xl'}`}>
-                                    用户管理 <span className="text-blue-600 font-serif italic text-lg">.</span>
+                        <div className="flex flex-col justify-center">
+                            <div className="flex items-center gap-4">
+                                <h1 className={`font-black text-slate-900 tracking-tight transition-all duration-500 flex items-center ${isScrolled ? 'text-lg' : 'text-xl lg:text-3xl'}`}>
+                                    用户管理 <span className="text-blue-600 ml-1">.</span>
                                 </h1>
                                 
                                 {/* Dynamic Search Bar - Smooth Expansion to the left */}
@@ -318,6 +309,18 @@ export const UsersPage: React.FC = () => {
                                         <span className="material-icons-round text-[20px]">{isSearchExpanded ? 'close' : 'search'}</span>
                                     </button>
                                 </div>
+                            </div>
+                            
+                            <div className={`flex items-center gap-2 transition-all duration-500 ${isScrolled ? 'opacity-0 h-0 overflow-hidden' : 'opacity-100 mt-1'}`}>
+                                <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded-lg text-[8px] font-black uppercase tracking-widest border border-indigo-100/50">
+                                    Identity Management
+                                </span>
+                                {rtStatus === 'SUBSCRIBED' && (
+                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50 text-emerald-600 rounded-lg text-[8px] font-black uppercase tracking-wider border border-emerald-100/50">
+                                        <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></span>
+                                        Live
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -444,6 +447,7 @@ export const UsersPage: React.FC = () => {
                                                         department: user.department || '',
                                                         position: user.position || '',
                                                         status: user.status || 'active',
+                                                        avatar_url: user.avatar_url || '',
                                                         permissions: user.permissions || {}
                                                     });
                                                     setShowEditModal(true);

@@ -799,6 +799,36 @@ const KitchenPrepPage: React.FC = () => {
                     </div>
                     <div className="flex items-center gap-6">
 
+                        {/* Walkie-Talkie Button */}
+                        <div className="flex items-center gap-3">
+                            <button
+                                onMouseDown={handlePttDown}
+                                onMouseUp={handlePttUp}
+                                onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
+                                onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
+                                onContextMenu={(e) => e.preventDefault()}
+                                disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'}
+                                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-xl active:scale-90 border relative group
+                                    ${isTransmitting 
+                                        ? 'bg-primary text-white animate-pulse border-primary-light shadow-primary/40' 
+                                        : pttStatus === 'CONNECTING' || pttStatus === 'IDLE'
+                                            ? 'bg-slate-100 text-slate-300 border-slate-200'
+                                            : 'bg-white text-primary border-primary/10 hover:bg-primary/5 hover:border-primary/20'
+                                    }`}
+                            >
+                                {isTransmitting && <div className="absolute inset-0 bg-white/20 animate-ping rounded-2xl"></div>}
+                                <span className="material-icons-round text-2xl relative z-10">
+                                    {isTransmitting ? 'mic' : pttStatus === 'LISTENING' ? 'volume_up' : 'mic_none'}
+                                </span>
+                            </button>
+                            <div className="hidden lg:block">
+                                <p className="text-[10px] font-black text-primary uppercase tracking-widest leading-tight">Walkie-Talkie</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">
+                                    {pttStatus === 'TALKING' ? 'Transmitting...' : pttStatus === 'LISTENING' ? 'Incoming Signal' : pttStatus === 'CONNECTED' ? 'Online · Global' : 'Connecting...'}
+                                </p>
+                            </div>
+                        </div>
+
                         {/* Stats badges */}
                         <div className="hidden md:flex items-center gap-3">
                         <div className="px-4 py-2 bg-amber-50 border border-amber-100 rounded-2xl text-center">
@@ -919,7 +949,7 @@ const KitchenPrepPage: React.FC = () => {
                     </div>
                     <div className="text-right">
                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Orders</span>
-                        <p className="text-3xl font-black text-blue-600 leading-none mt-1.5">{activeCount}</p>
+                        <p className="text-3xl font-black text-primary leading-none mt-1.5">{activeCount}</p>
                     </div>
                 </div>
             </div>

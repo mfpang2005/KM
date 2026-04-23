@@ -1210,6 +1210,7 @@ const DriverSchedule: React.FC = () => {
                                 onMouseUp={handlePttUp} 
                                 onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }} 
                                 onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }} 
+                                onContextMenu={(e) => e.preventDefault()}
                                 disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'} 
                                 className={`w-28 h-28 rounded-full border-2 transition-all flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative active:scale-95 z-10 ${isTransmitting ? 'bg-sky-500 border-white/40 scale-110 shadow-sky-500/40' : 'bg-slate-800 border-white/10 hover:bg-slate-700'}`}
                             >
@@ -1225,6 +1226,7 @@ const DriverSchedule: React.FC = () => {
                             onMouseUp={handlePttUp} 
                             onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }} 
                             onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
+                            onContextMenu={(e) => e.preventDefault()}
                             disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'}
                             className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 shrink-0 shadow-xl active:scale-90 ${isTransmitting 
                                 ? 'bg-sky-600 text-white animate-pulse ring-4 ring-sky-600/20' 

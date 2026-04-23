@@ -30,11 +30,11 @@ const OrderDetail: React.FC = () => {
     }, [id]);
 
     const statusLabels: Record<OrderStatus, string> = {
-        [OrderStatus.PENDING]: '分析中',
-        [OrderStatus.PREPARING]: '准备中',
-        [OrderStatus.READY]: '待取餐',
-        [OrderStatus.DELIVERING]: '配送中',
-        [OrderStatus.COMPLETED]: '已完成',
+        [OrderStatus.PENDING]: 'PENDING',
+        [OrderStatus.PREPARING]: 'KITCHEN PROCESS',
+        [OrderStatus.READY]: 'DISTRIBUTION',
+        [OrderStatus.DELIVERING]: 'DELIVERING',
+        [OrderStatus.COMPLETED]: 'COMPLETED',
     };
 
     const statusColors: Record<string, string> = {

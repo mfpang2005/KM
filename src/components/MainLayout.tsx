@@ -25,16 +25,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
     };
 
     return (
-        <div className="flex h-screen w-full bg-slate-100 overflow-hidden">
+        <div className="flex h-screen w-full bg-background-beige overflow-hidden">
             {/* Desktop Sidebar - Visible on lg screens */}
-            <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-slate-200 shadow-sm z-10 transition-all duration-300">
-                <div className="p-6 border-b border-slate-100 flex items-center gap-3">
+            <aside className="hidden lg:flex flex-col w-64 bg-white border-r border-primary/5 shadow-sm z-10 transition-all duration-300">
+                <div className="p-6 border-b border-primary/5 flex items-center gap-3">
                     <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
                         <span className="material-icons-round text-xl">restaurant_menu</span>
                     </div>
                     <div>
-                        <h1 className="font-bold text-slate-800 text-lg leading-tight">Kim Long</h1>
-                        <p className="text-[10px] text-slate-400 font-medium">SMART CATERING</p>
+                        <h1 className="font-black text-primary text-lg leading-tight uppercase tracking-tight italic">Kim Long</h1>
+                        <p className="text-[9px] text-primary-light font-bold uppercase tracking-widest">Smart Catering</p>
                     </div>
                 </div>
 
@@ -45,10 +45,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                             onClick={() => navigate(item.path)}
                             className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left transition-all duration-200 group ${isActive(item.path)
                                 ? 'bg-primary/5 text-primary shadow-sm ring-1 ring-primary/10'
-                                : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+                                : 'text-primary-light/60 hover:bg-primary/5 hover:text-primary'
                                 }`}
                         >
-                            <span className={`material-icons-round text-xl transition-transform group-hover:scale-110 ${isActive(item.path) ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'
+                            <span className={`material-icons-round text-xl transition-transform group-hover:scale-110 ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 group-hover:text-primary-light'
                                 }`}>
                                 {item.icon}
                             </span>
@@ -60,16 +60,16 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                     ))}
                 </div>
 
-                <div className="p-4 border-t border-slate-100">
+                <div className="p-4 border-t border-primary/5">
                     <button
                         onClick={async () => {
                             await supabase.auth.signOut();
                             navigate('/login');
                         }}
-                        className="flex items-center gap-3 w-full px-4 py-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all duration-200"
+                        className="flex items-center gap-3 w-full px-4 py-3 text-primary-light/60 hover:text-primary hover:bg-primary/5 rounded-xl transition-all duration-200"
                     >
                         <span className="material-icons-round">logout</span>
-                        <span className="text-sm font-medium">退出登录</span>
+                        <span className="text-sm font-bold">退出登录</span>
                     </button>
                 </div>
             </aside>
@@ -81,7 +81,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                 </div>
 
                 {/* Mobile Bottom Navigation - Visible on small screens */}
-                <nav className="lg:hidden absolute bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-6 py-2 safe-bottom z-50 flex justify-between items-center shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+                <nav className="lg:hidden absolute bottom-0 left-0 right-0 bg-white border-t border-primary/5 px-6 py-2 safe-bottom z-50 flex justify-between items-center shadow-[0_-10px_40px_rgba(128,0,0,0.08)]">
                     {/* We show max 5 items for mobile bottom nav to avoid clutter. 
                         If more, detailed menu should be handled via a "More" button or similar. 
                         For now, we slice the first 4 + Profile or just mapping important ones.*/}
@@ -90,7 +90,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                         <button
                             key={item.path}
                             onClick={() => navigate(item.path)}
-                            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 ${isActive(item.path) ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
+                            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 hover:text-primary-light'
                                 }`}
                         >
                             <span className={`material-icons-round text-2xl transition-transform active:scale-95 ${isActive(item.path) ? '' : 'opacity-70'
@@ -113,7 +113,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                             user === UserRole.SUPER_ADMIN ? '/super-admin' :
                                 user === UserRole.ADMIN ? '/admin' : '/login'
                         )}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-xl text-slate-400 hover:text-slate-600`}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-xl text-primary-light/40 hover:text-primary-light`}
                     >
                         <span className="material-icons-round text-2xl opacity-70">apps</span>
                         <span className="text-[10px] font-medium">更多</span>

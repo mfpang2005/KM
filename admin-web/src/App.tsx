@@ -16,6 +16,7 @@ import KitchenCalendarPage from './pages/KitchenCalendarPage';
 import KitchenPrepPage from './pages/KitchenPrepPage';
 import KitchenRecipesPage from './pages/KitchenRecipesPage';
 import { FinancePage } from './pages/FinancePage';
+import { InventoryPage } from './pages/InventoryPage';
 import PublicReceiptPage from './pages/PublicReceiptPage';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -152,6 +153,7 @@ const App: React.FC = () => {
           <Route path="kitchen-recipes" element={<PermissionRoute id="kitchen"><KitchenRecipesPage /></PermissionRoute>} />
           <Route path="event-calendar" element={<PermissionRoute id="event_calendar"><KitchenCalendarPage /></PermissionRoute>} />
           <Route path="finance" element={<PermissionRoute id="financial"><FinancePage /></PermissionRoute>} />
+          <Route path="inventory" element={<PermissionRoute id="inventory"><InventoryPage /></PermissionRoute>} />
           <Route path="config" element={<ConfigPage />} />
           <Route path="audit" element={<SuperAdminRoute><PermissionRoute id="audit"><AuditLogsPage /></PermissionRoute></SuperAdminRoute>} />
         </Route>

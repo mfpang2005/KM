@@ -68,11 +68,11 @@
 }
 
 /* Progress bar semantic colors */
-.progress-delivering { background-color: #0ea5e9 !important; }
-.progress-pending { background-color: #f59e0b !important; }
-.progress-preparing { background-color: #0284c7 !important; }
-.progress-ready { background-color: #10b981 !important; }
-.progress-completed { background-color: #10b981 !important; }
+.progress-delivering { background-color: #800000 !important; }
+.progress-pending { background-color: #A52A2A !important; }
+.progress-preparing { background-color: #CD5C5C !important; }
+.progress-ready { background-color: #D4AF37 !important; }
+.progress-completed { background-color: #D4AF37 !important; }
 
 /* Radar scanning animation for empty states */
 @keyframes radar-scan {

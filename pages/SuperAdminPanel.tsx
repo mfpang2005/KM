@@ -167,11 +167,11 @@ const OverviewSection: React.FC = () => {
     };
 
     const statusLabels: Record<string, string> = {
-        pending: '待处理',
-        preparing: '准备中',
-        ready: '待取餐',
-        delivering: '配送中',
-        completed: '已完成',
+        pending: 'PENDING',
+        preparing: 'KITCHEN PROCESS',
+        ready: 'DISTRIBUTION',
+        delivering: 'DELIVERING',
+        completed: 'COMPLETED',
     };
 
     const statusColors: Record<string, string> = {

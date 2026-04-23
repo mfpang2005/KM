@@ -10,6 +10,7 @@ export const NAV_CONFIG: Record<UserRole, NavItem[]> = {
     [UserRole.ADMIN]: [
         { label: '控制台 (Dashboard)', path: '/admin', icon: 'dashboard' },
         { label: '订单追踪 (Orders)', path: '/admin/orders', icon: 'list_alt' },
+        { label: '对讲机 (Walkie)', path: '/admin/walkie-talkie', icon: 'settings_voice' },
         { label: '账目管理 (Account)', path: '/admin/finance', icon: 'account_balance_wallet' },
         { label: '司机调度 (Drivers)', path: '/admin/drivers', icon: 'local_shipping' },
         { label: '商品管理 (Products)', path: '/admin/products', icon: 'inventory_2' },
@@ -26,6 +27,7 @@ export const NAV_CONFIG: Record<UserRole, NavItem[]> = {
     [UserRole.SUPER_ADMIN]: [
         { label: '总览', path: '/super-admin', icon: 'shield' },
         { label: '用户管理', path: '/super-admin/users', icon: 'group' },
+        { label: '对讲机', path: '/admin/walkie-talkie', icon: 'settings_voice' },
         { label: '审计日志', path: '/super-admin/audit', icon: 'history' },
         { label: '订单管理', path: '/admin/orders', icon: 'list_alt' },
         { label: '商品管理', path: '/admin/products', icon: 'inventory_2' },

@@ -91,7 +91,7 @@ const OrderManagement: React.FC = () => {
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const pageSize = 10;
 
-    // Equipment state
+    const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
     const [customEquipments, setCustomEquipments] = useState<string[]>([]);
     const [isAddingCustom, setIsAddingCustom] = useState(false);
     const [newCustomName, setNewCustomName] = useState('');
@@ -106,11 +106,11 @@ const OrderManagement: React.FC = () => {
     };
 
     const statusLabels: Record<OrderStatus, string> = {
-        [OrderStatus.PENDING]: '待处理',
-        [OrderStatus.PREPARING]: '准备中',
-        [OrderStatus.READY]: '待取餐',
-        [OrderStatus.DELIVERING]: '配送中',
-        [OrderStatus.COMPLETED]: '已完成',
+        [OrderStatus.PENDING]: 'PENDING',
+        [OrderStatus.PREPARING]: 'KITCHEN PROCESS',
+        [OrderStatus.READY]: 'DISTRIBUTION',
+        [OrderStatus.DELIVERING]: 'DELIVERING',
+        [OrderStatus.COMPLETED]: 'COMPLETED',
     };
 
     const filteredOrders = useMemo(() => {
@@ -659,12 +659,24 @@ const OrderManagement: React.FC = () => {
                         className={`py-4 text-[11px] font-black whitespace-nowrap transition-all relative ${tab === t ? 'text-primary' : 'text-slate-400 hover:text-slate-600'
                             }`}
                     >
-                        {t === 'all' ? '全部订单' : statusLabels[t as OrderStatus]}
+                        <span className="relative z-10">{t === 'all' ? 'ALL ORDERS' : statusLabels[t as OrderStatus]}</span>
                         {tab === t && (
                             <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-primary rounded-t-full animate-in slide-in-from-bottom-1 duration-300"></div>
                         )}
                     </button>
                 ))}
+            </div>
+
+            {/* Summary Bar (Super Admin Style) */}
+            <div className="bg-white px-6 py-3 border-b border-slate-50 flex items-center justify-between no-print">
+                <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">总计项目</span>
+                    <span className="text-xs font-black text-slate-700">{filteredOrders.length}</span>
+                </div>
+                <div className="flex items-center gap-2 text-right">
+                    <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">流水总额</span>
+                    <span className="text-xs font-black text-primary">RM {filteredOrders.reduce((sum, o) => sum + (o.amount || 0), 0).toFixed(2)}</span>
+                </div>
             </div>
 
             {/* List */}
@@ -696,8 +708,8 @@ const OrderManagement: React.FC = () => {
                                         </div>
                                     </div>
                                 </div>
-                            ))
-                        ) : paginatedOrders.length === 0 ? (
+                            )))
+                        : paginatedOrders.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-24 text-slate-200">
                                 <span className="material-icons-round text-7xl opacity-20">receipt_long</span>
                                 <p className="text-sm font-black mt-4 uppercase tracking-widest text-slate-300">暂无匹配订单</p>
@@ -712,16 +724,19 @@ const OrderManagement: React.FC = () => {
                             paginatedOrders.map(order => (
                                 <div
                                     key={order.id}
-                                    className="bg-white p-6 rounded-[32px] shadow-sm flex flex-col gap-5 animate-in fade-in zoom-in duration-300 border border-slate-100 hover:shadow-md hover:border-slate-200/60 transition-all group"
+                                    onClick={() => setExpandedOrderId(expandedOrderId === order.id ? null : order.id)}
+                                    className={`bg-white p-6 rounded-[32px] shadow-sm flex flex-col gap-5 animate-in fade-in zoom-in duration-300 border transition-all group cursor-pointer ${expandedOrderId === order.id ? 'border-primary ring-2 ring-primary/5 shadow-xl' : 'border-slate-100 hover:shadow-md hover:border-slate-200/60'}`}
                                 >
                                     <div className="flex justify-between items-start">
                                         <div className="flex flex-col gap-1">
                                             <div className="flex items-center gap-2.5">
                                                 <div className={`w-3.5 h-3.5 rounded-full shrink-0 ${['completed', 'ready'].includes(order.status) ? 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : ['preparing', 'delivering'].includes(order.status) ? 'bg-cyan-500 shadow-[0_0_8px_rgba(6,182,212,0.5)] animate-pulse' : 'bg-yellow-400 shadow-[0_0_8px_rgba(250,204,21,0.5)]'}`} />
-                                                <h3 className="text-lg font-black text-slate-900 tracking-tight">{order.customerName}</h3>
+                                                <h3 className="text-lg font-black text-slate-900 tracking-tight group-hover:text-primary transition-colors">{order.customerName}</h3>
                                             </div>
                                             <div className="flex items-center gap-1.5 pl-6">
                                                 <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{order.order_number || order.id}</span>
+                                                <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
+                                                <span className="text-[10px] font-black text-primary/60 uppercase tracking-widest">{order.type || 'delivery'}</span>
                                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
                                                 <span className="text-[10px] font-bold text-slate-400">
                                                     {(() => {
@@ -740,7 +755,7 @@ const OrderManagement: React.FC = () => {
                                         </div>
                                         
                                         {/* Inline Status Dropdown (Aligned with Backend) */}
-                                        <div className="relative">
+                                        <div className="relative" onClick={e => e.stopPropagation()}>
                                             <select
                                                 value={order.status}
                                                 onChange={(e) => handleUpdateStatus(order.id, e.target.value as OrderStatus)}
@@ -755,24 +770,131 @@ const OrderManagement: React.FC = () => {
                                     </div>
 
                                     {/* Items List Snapshot */}
-                                    <div className="bg-[#f8f9fa] p-4 rounded-2xl space-y-2 border border-slate-50">
-                                        {order.items.slice(0, 3).map((item, idx) => (
+                                    <div className="bg-[#f8f9fa] p-4 rounded-2xl space-y-2 border border-slate-50 relative">
+                                        {order.items.slice(0, expandedOrderId === order.id ? 99 : 3).map((item, idx) => (
                                             <div key={idx} className="flex justify-between items-center text-[13px] font-bold text-slate-700">
                                                 <span className="truncate max-w-[200px]">{item.name}</span>
                                                 <span className="text-slate-400 font-black shrink-0 ml-2">x{item.quantity}</span>
                                             </div>
                                         ))}
-                                        {order.items.length > 3 && (
+                                        {order.items.length > 3 && expandedOrderId !== order.id && (
                                             <p className="text-[10px] text-slate-400 font-black text-center mt-2 uppercase tracking-wide">... 及其他 {order.items.length - 3} 项项目</p>
                                         )}
+                                        {expandedOrderId !== order.id && (
+                                            <div className="absolute bottom-1 right-2 opacity-20 group-hover:opacity-40 transition-opacity">
+                                                <span className="material-icons-round text-sm">expand_more</span>
+                                            </div>
+                                        )}
                                     </div>
+
+                                    {/* Detailed View (Super Admin Style) */}
+                                    {expandedOrderId === order.id && (
+                                        <div className="space-y-6 animate-in slide-in-from-top-4 duration-500 pt-2">
+                                            {/* Delivery Details */}
+                                            <div className="grid grid-cols-1 gap-4">
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest pl-1">Delivery Info</p>
+                                                    <div className="bg-slate-50 p-4 rounded-[20px] border border-slate-100 flex flex-col gap-3">
+                                                        <a 
+                                                            href={getGoogleMapsUrl(order.address)}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            onClick={e => e.stopPropagation()}
+                                                            className="flex items-start gap-2 group/link"
+                                                        >
+                                                            <span className="material-icons-round text-slate-300 text-sm mt-0.5 group-hover/link:text-blue-500 transition-colors">place</span>
+                                                            <p className="text-xs font-bold text-slate-700 leading-snug group-hover/link:text-blue-600 transition-colors">{order.address || 'Self Pickup'}</p>
+                                                        </a>
+                                                        <a 
+                                                            href={`https://wa.me/60${order.customerPhone?.replace(/\D/g, '').replace(/^60/, '').replace(/^0/, '')}`}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            onClick={e => e.stopPropagation()}
+                                                            className="flex items-center gap-2 group/link"
+                                                        >
+                                                            <span className="material-icons-round text-slate-300 text-sm group-hover/link:text-green-500 transition-colors">phone</span>
+                                                            <p className="text-xs font-black text-primary font-mono group-hover/link:text-green-600 transition-colors">{order.customerPhone}</p>
+                                                            <span className="text-[8px] font-black bg-green-100 text-green-600 px-1.5 py-0.5 rounded uppercase ml-auto">WhatsApp</span>
+                                                        </a>
+                                                    </div>
+                                                </div>
+
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest pl-1">Financial Audit</p>
+                                                    <div className="bg-slate-50 p-4 rounded-[20px] border border-slate-100 grid grid-cols-2 gap-y-3 gap-x-4">
+                                                        <div>
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase block leading-none mb-1">Billing Unit</span>
+                                                            <span className="text-xs font-black text-slate-800">{order.billingUnit || 'PAX'} x {order.billingQuantity || '-'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase block leading-none mb-1">Payment Status</span>
+                                                            <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-tighter ${order.paymentStatus === 'paid' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>
+                                                                {order.paymentStatus || 'pending'}
+                                                            </span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase block leading-none mb-1">Method</span>
+                                                            <span className="text-xs font-bold text-slate-600 uppercase">{order.paymentMethod || '-'}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[8px] font-black text-slate-400 uppercase block leading-none mb-1">Balance Due</span>
+                                                            <span className="text-xs font-black text-red-500 font-mono">RM {(Number(order.amount || 0) - Number((order as any).payment_received || 0)).toFixed(2)}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Driver Info */}
+                                            {order.driverId && (
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest pl-1">Dispatcher / Driver</p>
+                                                    <div className="bg-primary/5 p-4 rounded-[20px] border border-primary/10 flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
+                                                            <span className="material-icons-round text-sm">local_shipping</span>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-xs font-black text-primary uppercase">ASSIGNED TO: {order.driverId}</p>
+                                                            <p className="text-[9px] text-primary/60 font-bold">Transit Status Syncing...</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Remarks */}
+                                            {(order as any).remark && (
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest pl-1">Special Instruction (Remarks)</p>
+                                                    <div className="bg-amber-50 p-4 rounded-[20px] border border-amber-100">
+                                                        <p className="text-xs font-bold text-amber-700 italic">"{(order as any).remark}"</p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Equipments */}
+                                            {(order as any).equipments && Object.entries((order as any).equipments).filter(([_, q]) => Number(q) > 0).length > 0 && (
+                                                <div className="space-y-1.5">
+                                                    <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest pl-1">Equipment Ledger</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {Object.entries((order as any).equipments)
+                                                            .filter(([_, q]) => Number(q) > 0)
+                                                            .map(([name, qty]) => (
+                                                                <span key={name} className="px-3 py-1.5 bg-slate-100 rounded-xl text-[9px] font-black text-slate-600 uppercase border border-slate-200">
+                                                                    {name} x{qty as string}
+                                                                </span>
+                                                            ))
+                                                        }
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
 
                                     <div className="flex items-center justify-between mt-auto pt-2">
                                         <div className="flex flex-col">
                                             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1.5">结算总额</span>
                                             <span className="text-xl font-black text-primary leading-none tracking-tight">RM {order.amount.toFixed(2)}</span>
                                         </div>
-                                        <div className="flex gap-2.5">
+                                        <div className="flex gap-2.5" onClick={e => e.stopPropagation()}>
                                             {/* Lightbox Trigger for Photos */}
                                             {order.delivery_photos && order.delivery_photos.length > 0 && (
                                                 <button
@@ -830,8 +952,8 @@ const OrderManagement: React.FC = () => {
                                         </div>
                                     </div>
                                 </div>
-                            ))
-                        )}
+                            )))
+                        }
                     </div>
                 </PullToRefresh>
                 

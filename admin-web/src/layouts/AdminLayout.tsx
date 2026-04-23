@@ -87,7 +87,8 @@ const AdminLayout: React.FC = () => {
         { path: '/fleet', label: 'Fleet Center', icon: 'local_shipping', id: 'fleet' },
         { path: '/walkie-talkie', label: 'Walkie-Talkie', icon: 'settings_voice', id: 'walkie_talkie' },
         { path: '/kitchen-prep', label: 'Kitchen Management', icon: 'precision_manufacturing', id: 'kitchen' },
-        { path: '/products', label: 'Products', icon: 'inventory_2', id: 'product' },
+        { path: '/inventory', label: 'Stock Inventory', icon: 'inventory', id: 'inventory' },
+        { path: '/products', label: 'Products (Menu)', icon: 'inventory_2', id: 'product' },
         { path: '/users', label: 'Users', icon: 'people', roles: ['super_admin'], id: 'user' },
         { path: '/audit', label: 'Audit Logs', icon: 'history', roles: ['super_admin'], id: 'audit' },
     ].filter(item => {

@@ -20,11 +20,11 @@ const AdminDashboard: React.FC = () => {
     }, []);
 
     const statusLabels: Record<string, string> = {
-        [OrderStatus.PENDING]: '待处理',
-        [OrderStatus.PREPARING]: '准备中',
-        [OrderStatus.READY]: '已就绪',
-        [OrderStatus.DELIVERING]: '配送中',
-        [OrderStatus.COMPLETED]: '已完成',
+        [OrderStatus.PENDING]: 'PENDING',
+        [OrderStatus.PREPARING]: 'KITCHEN PROCESS',
+        [OrderStatus.READY]: 'DISTRIBUTION',
+        [OrderStatus.DELIVERING]: 'DELIVERING',
+        [OrderStatus.COMPLETED]: 'COMPLETED',
     };
 
     const statusColors: Record<string, string> = {
@@ -37,36 +37,34 @@ const AdminDashboard: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-slate-50">
+        <div className="flex flex-col h-full bg-background-beige">
             {/* 顶部导航栏 - System Overview Mode */}
-            <header className="pt-12 pb-8 px-6 bg-white/80 backdrop-blur-3xl border-b border-slate-100 flex items-center justify-between sticky top-0 z-30">
-                <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center text-white shadow-xl shadow-indigo-600/20">
-                        <span className="material-icons-round text-2xl">dashboard</span>
+            <header className="pt-12 pb-8 px-6 bg-white/40 backdrop-blur-3xl border-b border-primary/5 sticky top-0 z-30">
+                <div className="max-w-4xl mx-auto flex flex-col items-center gap-4">
+                    <div className="w-14 h-14 rounded-2xl bg-primary flex items-center justify-center text-white shadow-xl shadow-primary/20 mb-1">
+                        <span className="material-icons-round text-3xl">dashboard</span>
                     </div>
-                    <div>
-                        <h1 className="text-2xl font-black text-slate-900 tracking-tight">System Overview</h1>
-                        <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.2em] mt-0.5 flex items-center gap-2">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                            Real-time Performance & Linkage
-                        </p>
+                    <div className="text-center">
+                        <h1 className="text-2xl font-black text-primary tracking-tight italic uppercase">Kim Long System Overview</h1>
+                        <p className="text-[10px] text-primary-light/40 font-black uppercase tracking-[0.4em] mt-1">Administrative Intelligence</p>
                     </div>
                 </div>
-                <div className="flex items-center gap-2">
+                
+                {/* 浮动操作按钮 - 保持功能但不破坏居中感 */}
+                <div className="absolute top-12 right-6 flex items-center gap-2">
                     <button
                         onClick={() => refresh()}
-                        className="p-3 bg-white border border-slate-100 rounded-2xl text-slate-400 hover:text-indigo-600 hover:border-indigo-100 hover:shadow-lg transition-all group active:scale-90"
+                        className="p-3 bg-white/60 border border-primary/5 rounded-2xl text-primary-light hover:text-primary transition-all active:scale-90"
                         title="Manual Refresh"
                     >
-                        <span className="material-icons-round text-xl group-hover:rotate-180 transition-transform duration-700">autorenew</span>
+                        <span className="material-icons-round text-xl">autorenew</span>
                     </button>
                     {userRole === UserRole.SUPER_ADMIN && (
                         <button
                             onClick={() => window.open('http://localhost:5174', '_blank')}
-                            className="p-3 rounded-2xl bg-indigo-50 text-indigo-600 border border-indigo-100 active:scale-95 transition-all flex items-center gap-2 group shadow-sm hover:shadow-indigo-500/10"
+                            className="p-3 rounded-2xl bg-primary/5 text-primary border border-primary/10 active:scale-95 transition-all shadow-sm"
                         >
-                            <span className="material-icons-round text-sm group-hover:rotate-12 transition-transform">shield</span>
-                            <span className="text-[10px] font-black uppercase tracking-widest leading-none pt-0.5 hidden md:block">Super Console</span>
+                            <span className="material-icons-round text-sm">shield</span>
                         </button>
                     )}
                 </div>
@@ -82,32 +80,28 @@ const AdminDashboard: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div
                             onClick={() => navigate('/admin/orders')}
-                            className="bg-white p-5 rounded-3xl border border-red-50 shadow-xl shadow-red-500/5 hover:-translate-y-1 transition-all group active:scale-95"
+                            className="bg-white p-5 rounded-3xl border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 flex flex-col items-center text-center"
                         >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-red-500 to-rose-600 text-white flex items-center justify-center shadow-lg shadow-red-500/20 group-hover:scale-110 transition-transform">
-                                    <span className="material-icons-round text-sm">receipt_long</span>
-                                </div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Today Orders</span>
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-warm text-white flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform mb-3">
+                                <span className="material-icons-round text-sm">receipt_long</span>
                             </div>
-                            <p className="text-3xl font-black text-slate-800 tracking-tighter">
+                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-2">Today Orders</span>
+                            <p className="text-3xl font-black text-primary tracking-tighter">
                                 {statsLoading ? '...' : stats?.today_orders || 0}
                             </p>
                         </div>
 
                         <div
                             onClick={() => navigate('/admin/finance')}
-                            className="bg-white p-5 rounded-3xl border border-orange-50 shadow-xl shadow-orange-500/5 hover:-translate-y-1 transition-all group active:scale-95"
+                            className="bg-white p-5 rounded-3xl border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 flex flex-col items-center text-center"
                         >
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-400 to-amber-500 text-white flex items-center justify-center shadow-lg shadow-orange-500/20 group-hover:scale-110 transition-transform">
-                                    <span className="material-icons-round text-sm">payments</span>
-                                </div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Monthly Revenue</span>
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-gold to-orange-400 text-white flex items-center justify-center shadow-lg shadow-accent-gold/20 group-hover:scale-110 transition-transform mb-3">
+                                <span className="material-icons-round text-sm">payments</span>
                             </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-xs font-bold text-orange-400">RM</span>
-                                <p className="text-2xl font-black text-slate-800 tracking-tighter">
+                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-2">Monthly Revenue</span>
+                            <div className="flex items-baseline justify-center gap-1">
+                                <span className="text-xs font-bold text-accent-gold">RM</span>
+                                <p className="text-2xl font-black text-primary tracking-tighter">
                                     {statsLoading ? '...' : Number(stats?.month_revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </p>
                             </div>
@@ -116,21 +110,19 @@ const AdminDashboard: React.FC = () => {
 
                     <div
                         onClick={() => navigate('/admin/finance')}
-                        className="bg-white p-6 rounded-3xl border border-rose-50 shadow-xl shadow-rose-500/5 hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden"
+                        className="bg-white p-6 rounded-3xl border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden flex flex-col items-center text-center"
                     >
-                        <div className="absolute top-0 right-0 p-6 opacity-[0.05] text-rose-500">
+                        <div className="absolute top-0 right-0 p-6 opacity-[0.05] text-primary">
                             <span className="material-icons-round text-7xl">account_balance_wallet</span>
                         </div>
-                        <div className="relative z-10">
-                            <div className="flex items-center gap-3 mb-4">
-                                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-400 to-pink-500 text-white flex items-center justify-center shadow-lg shadow-rose-500/20 group-hover:scale-110 transition-transform">
-                                    <span className="material-icons-round text-sm">pending_actions</span>
-                                </div>
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total Unpaid</span>
+                        <div className="relative z-10 flex flex-col items-center">
+                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-warm to-primary-light text-white flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform mb-3">
+                                <span className="material-icons-round text-sm">pending_actions</span>
                             </div>
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-xs font-bold text-rose-400">RM</span>
-                                <p className="text-4xl font-black text-rose-600 tracking-tighter">
+                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-2">Total Unpaid</span>
+                            <div className="flex items-baseline justify-center gap-1">
+                                <span className="text-xs font-bold text-primary-warm">RM</span>
+                                <p className="text-4xl font-black text-primary tracking-tighter">
                                     {statsLoading ? '...' : Number(stats?.total_unpaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </p>
                             </div>
@@ -139,26 +131,26 @@ const AdminDashboard: React.FC = () => {
                 </div>
 
                 {/* 4. 快捷功能面板 (Quick Actions) - 同步后台设置 */}
-                <div className="bg-white p-8 rounded-[2.5rem] border border-red-50 shadow-xl shadow-red-500/5 relative overflow-hidden">
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-6 flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-xl bg-red-50 text-red-500 flex items-center justify-center shadow-inner">
+                <div className="bg-white p-8 rounded-[2.5rem] border border-primary/5 shadow-xl shadow-primary/5 relative overflow-hidden">
+                    <h3 className="text-[10px] font-black text-primary-light/40 uppercase tracking-[0.3em] mb-6 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-primary/5 text-primary flex items-center justify-center shadow-inner">
                             <span className="material-icons-round text-sm">bolt</span>
                         </div>
                         Quick Actions
                     </h3>
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                         {[
-                            { icon: 'add_shopping_cart', label: 'Create Order', color: 'bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50', path: '/admin/create-order' },
-                            { icon: 'local_shipping', label: 'Assign Driver', color: 'bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50', path: '/admin/drivers' },
-                            { icon: 'inventory_2', label: 'Manage Products', color: 'bg-slate-50 text-slate-400 hover:text-red-500 hover:bg-red-50', path: '/admin/products' },
-                            { icon: 'settings_voice', label: 'Walkie-Talkie', color: 'bg-gradient-to-br from-red-500 to-rose-600 text-white shadow-lg shadow-red-500/20 hover:scale-105', path: '/admin/walkie-talkie' }
+                            { icon: 'add_shopping_cart', label: 'Create Order', color: 'bg-primary/5 text-primary-light hover:text-primary hover:bg-primary/10', path: '/admin/create-order' },
+                            { icon: 'local_shipping', label: 'Assign Driver', color: 'bg-primary/5 text-primary-light hover:text-primary hover:bg-primary/10', path: '/admin/drivers' },
+                            { icon: 'inventory_2', label: 'Manage Products', color: 'bg-primary/5 text-primary-light hover:text-primary hover:bg-primary/10', path: '/admin/products' },
+                            { icon: 'settings_voice', label: 'Walkie-Talkie', color: 'bg-gradient-to-br from-primary to-primary-warm text-white shadow-lg shadow-primary/20 hover:scale-105', path: '/admin/walkie-talkie' }
                         ].map((func, idx) => (
                             <button
                                 key={idx}
                                 onClick={() => navigate(func.path)}
                                 className={`flex flex-col items-center justify-center p-6 rounded-3xl transition-all group active:scale-95 border border-transparent ${func.color}`}
                             >
-                                <span className={`material-icons-round text-3xl mb-3 transition-transform group-hover:scale-110 ${!func.color.includes('gradient') ? 'text-slate-400 group-hover:text-red-500' : ''}`}>{func.icon}</span>
+                                <span className={`material-icons-round text-3xl mb-3 transition-transform group-hover:scale-110 ${!func.color.includes('gradient') ? 'text-primary-light/40 group-hover:text-primary' : ''}`}>{func.icon}</span>
                                 <span className="text-[10px] font-black tracking-widest uppercase">{func.label}</span>
                             </button>
                         ))}
@@ -166,12 +158,12 @@ const AdminDashboard: React.FC = () => {
                 </div>
 
                 {/* 5. 订单分布状态图 (Order Status Breakdown) - 同步后台渐变条 */}
-                <div className="bg-white p-8 rounded-[2.5rem] border border-red-50 shadow-xl shadow-red-500/5 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-8 opacity-[0.03] select-none pointer-events-none text-red-500">
+                <div className="bg-white p-8 rounded-[2.5rem] border border-primary/5 shadow-xl shadow-primary/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-8 opacity-[0.03] select-none pointer-events-none text-primary">
                         <span className="material-icons-round text-[120px]">donut_large</span>
                     </div>
-                    <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-8 flex items-center gap-3 relative z-10">
-                        <div className="w-8 h-8 rounded-xl bg-red-50 flex items-center justify-center text-red-500">
+                    <h3 className="text-[10px] font-black text-primary-light/40 uppercase tracking-[0.3em] mb-8 flex items-center gap-3 relative z-10">
+                        <div className="w-8 h-8 rounded-xl bg-primary/5 flex items-center justify-center text-primary">
                             <span className="material-icons-round text-sm">analytics</span>
                         </div>
                         Orders by Status
@@ -186,7 +178,7 @@ const AdminDashboard: React.FC = () => {
                             const pct = Math.round(((count as number) / total) * 100);
                             return (
                                 <div key={status} className="flex items-center gap-4 group cursor-pointer hover:bg-slate-50/50 p-2 -m-2 rounded-2xl transition-all">
-                                    <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest w-24 text-center transition-transform group-hover:scale-105 ${statusColors[status] || 'bg-slate-100 text-slate-600'}`}>
+                                    <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest min-w-[80px] whitespace-nowrap text-center transition-transform group-hover:scale-105 ${statusColors[status] || 'bg-slate-100 text-slate-600'}`}>
                                         {statusLabels[status] || status}
                                     </span>
                                     <div className="flex-1 h-3 bg-slate-50 rounded-full overflow-hidden border border-slate-100 shadow-inner">
@@ -205,20 +197,20 @@ const AdminDashboard: React.FC = () => {
                 </div>
 
                 {/* 6. 最新动态列表 (Recent Activity) - 同步后台简约列表 */}
-                <div className="bg-white p-8 rounded-[2.5rem] border border-red-50 shadow-xl shadow-red-500/5 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-8 opacity-[0.02] select-none pointer-events-none text-red-500">
+                <div className="bg-white p-8 rounded-[2.5rem] border border-primary/5 shadow-xl shadow-primary/5 relative overflow-hidden">
+                    <div className="absolute top-0 right-0 p-8 opacity-[0.02] select-none pointer-events-none text-primary">
                         <span className="material-icons-round text-[120px]">schedule</span>
                     </div>
                     <div className="flex items-center justify-between mb-8 relative z-10">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-xl bg-orange-50 flex items-center justify-center text-orange-500 shadow-inner">
+                        <h3 className="text-[10px] font-black text-primary-light/40 uppercase tracking-[0.3em] flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-xl bg-accent-gold/10 flex items-center justify-center text-accent-gold shadow-inner">
                                 <span className="material-icons-round text-sm">schedule</span>
                             </div>
                             Recent Activity
                         </h3>
                         <button 
                             onClick={() => navigate('/admin/orders')}
-                            className="text-[10px] font-black text-red-500 hover:underline uppercase tracking-widest"
+                            className="text-[10px] font-black text-primary hover:underline uppercase tracking-widest"
                         >View All</button>
                     </div>
                     <div className="space-y-4 relative z-10">
@@ -249,7 +241,7 @@ const AdminDashboard: React.FC = () => {
                                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 truncate">{order.id} • <span className="text-slate-600 font-black font-mono">RM {Number(order.amount).toFixed(2)}</span></p>
                                         </div>
                                     </div>
-                                    <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest ${statusColors[order.status] || 'bg-slate-100 text-slate-600'}`}>
+                                    <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap ${statusColors[order.status] || 'bg-slate-100 text-slate-600'}`}>
                                         {statusLabels[order.status] || order.status}
                                     </span>
                                 </div>

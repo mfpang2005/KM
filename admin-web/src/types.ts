@@ -261,3 +261,30 @@ export interface AiSummary {
     anomalies: AiAnomaly[];
     warnings: AiWarning[];
 }
+
+export interface InventoryItem {
+    id: string;
+    code: string;
+    name: string;
+    category?: string;
+    unit?: string;
+    unit_price: number;
+    stock_quantity: number;
+    min_threshold: number;
+    max_threshold: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface InventoryLog {
+    id: string;
+    item_id: string;
+    type: 'IN' | 'OUT' | 'ADJUST';
+    quantity: number;
+    user_id: string;
+    remark?: string;
+    created_at: string;
+    inventory_items?: {
+        name: string;
+    };
+}
