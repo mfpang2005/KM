@@ -25,24 +25,24 @@ const FinanceWidget: React.FC<FinanceWidgetProps> = ({ user }) => {
             {/* 1. 顶部核心卡片：今日总收入 (Premium Gradient & Glassmorphism) */}
             <div
                 onClick={() => setIsExpanded(!isExpanded)}
-                className="group relative cursor-pointer overflow-hidden rounded-[2.5rem] p-7 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/20 active:scale-[0.98] bg-gradient-to-br from-primary via-primary-warm to-primary shadow-xl"
+                className="group relative cursor-pointer overflow-hidden rounded-[2rem] p-5 transition-all duration-500 hover:shadow-2xl hover:shadow-primary/20 active:scale-[0.98] bg-gradient-to-br from-primary via-primary-warm to-primary shadow-xl"
             >
                 {/* 装饰性背景 */}
-                <div className="absolute top-0 right-0 w-40 h-40 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-white/20 transition-all duration-700" />
-                <div className="absolute bottom-0 left-0 w-32 h-32 bg-primary-light/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/2 blur-2xl group-hover:bg-white/20 transition-all duration-700" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-primary-light/10 rounded-full translate-y-1/2 -translate-x-1/2 blur-2xl" />
 
-                <div className="relative flex justify-between items-start mb-6">
-                    <div className="flex flex-col items-center gap-2 flex-1">
-                        <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner mb-2">
-                            <span className="material-icons-round text-white text-2xl">account_balance_wallet</span>
+                <div className="relative flex justify-between items-start mb-4">
+                    <div className="flex flex-col items-center gap-1.5 flex-1">
+                        <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/30 shadow-inner mb-1">
+                            <span className="material-icons-round text-white text-xl">account_balance_wallet</span>
                         </div>
                         <div className="text-center">
                             <p className="text-[10px] text-white/60 font-black uppercase tracking-[0.2em]">Today Revenue</p>
-                            <h2 className="text-white font-black tracking-tight text-xl italic uppercase">今日总收入</h2>
+                            <h2 className="text-white font-black tracking-tight text-xl italic uppercase leading-none">今日总收入</h2>
                         </div>
                     </div>
-                    <div className={`w-10 h-10 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 transition-transform duration-500 ${isExpanded ? 'rotate-180 bg-white/30' : ''}`}>
-                        <span className="material-icons-round text-white">expand_more</span>
+                    <div className={`w-8 h-8 rounded-full bg-white/10 backdrop-blur-md flex items-center justify-center border border-white/20 transition-transform duration-500 ${isExpanded ? 'rotate-180 bg-white/30' : ''}`}>
+                        <span className="material-icons-round text-white text-sm">expand_more</span>
                     </div>
                 </div>
 

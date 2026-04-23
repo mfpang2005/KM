@@ -11,6 +11,7 @@ interface MainLayoutProps {
 const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
     const navigate = useNavigate();
     const location = useLocation();
+    const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
     // Determine active menu items based on user role
     // Default to empty list if user is null (though protected route should handle this)
@@ -109,16 +110,64 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                         Let's just show top 4 for now and assume users use dashboard for others.
                     */}
                     <button
-                        onClick={() => navigate(
-                            user === UserRole.SUPER_ADMIN ? '/super-admin' :
-                                user === UserRole.ADMIN ? '/admin' : '/login'
-                        )}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-xl text-primary-light/40 hover:text-primary-light`}
+                        onClick={() => setIsMoreMenuOpen(true)}
+                        className={`flex flex-col items-center gap-1 p-2 rounded-xl text-primary-light/40 hover:text-primary-light transition-all active:scale-95`}
                     >
                         <span className="material-icons-round text-2xl opacity-70">apps</span>
                         <span className="text-[10px] font-medium">更多</span>
                     </button>
                 </nav>
+
+                {/* More Menu Drawer - Premium Overlay */}
+                {isMoreMenuOpen && (
+                    <div className="lg:hidden fixed inset-0 z-[100] flex items-end animate-in fade-in duration-300">
+                        {/* Backdrop */}
+                        <div 
+                            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+                            onClick={() => setIsMoreMenuOpen(false)}
+                        />
+                        
+                        {/* Drawer Content */}
+                        <div className="relative w-full bg-white/90 backdrop-blur-2xl rounded-t-[40px] p-8 pb-12 shadow-[0_-20px_60px_rgba(0,0,0,0.15)] animate-in slide-in-from-bottom duration-500 ease-[cubic-bezier(0.23,1,0.32,1)]">
+                            {/* Drag Indicator */}
+                            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-200 rounded-full" />
+                            
+                            <div className="flex items-center justify-between mb-8">
+                                <div>
+                                    <h4 className="text-sm font-black text-primary uppercase tracking-widest">功能大全</h4>
+                                    <p className="text-[9px] text-primary-light/60 font-bold uppercase mt-1 tracking-tight">Explore All Admin Modules</p>
+                                </div>
+                                <button 
+                                    onClick={() => setIsMoreMenuOpen(false)}
+                                    className="w-10 h-10 flex items-center justify-center bg-primary/5 rounded-full text-primary/40"
+                                >
+                                    <span className="material-icons-round">close</span>
+                                </button>
+                            </div>
+
+                            {/* Icons Grid */}
+                            <div className="grid grid-cols-3 gap-y-8 gap-x-4">
+                                {navItems.slice(4).map((item) => (
+                                    <button
+                                        key={item.path}
+                                        onClick={() => {
+                                            navigate(item.path);
+                                            setIsMoreMenuOpen(false);
+                                        }}
+                                        className="flex flex-col items-center gap-3 transition-all active:scale-90 group"
+                                    >
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${isActive(item.path) ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-primary/5 text-primary-light hover:bg-primary/10'}`}>
+                                            <span className="material-icons-round text-2xl">{item.icon}</span>
+                                        </div>
+                                        <span className={`text-[10px] font-black uppercase tracking-tight text-center leading-tight ${isActive(item.path) ? 'text-primary' : 'text-primary-light/70'}`}>
+                                            {item.label.split(' ')[0]}
+                                        </span>
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
             </main>
         </div>
     );

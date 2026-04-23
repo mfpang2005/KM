@@ -204,7 +204,7 @@ export const SuperAdminService = {
     },
 
     /** 获取财务统计总览 (今日/本月/全部)，range 传 today/month/all */
-    getFinanceSummary: async (range: 'today' | 'month' | 'all' = 'month'): Promise<{
+    getFinanceSummary: async (range: 'today' | 'month' | 'all' | 'custom' = 'month', dateFrom?: string, dateTo?: string): Promise<{
         periodRevenue: number;
         periodOrders: number;
         todayRevenue: number;
@@ -212,7 +212,10 @@ export const SuperAdminService = {
         totalUnpaidBalance: number;
         collections: Array<{ method: string; amount: number; count: number }>;
     }> => {
-        const response = await api.get(`/super-admin/financials?range=${range}`);
+        let url = `/super-admin/financials?range=${range}`;
+        if (dateFrom) url += `&date_from=${dateFrom}`;
+        if (dateTo) url += `&date_to=${dateTo}`;
+        const response = await api.get(url);
         return response.data;
     },
 

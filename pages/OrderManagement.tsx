@@ -15,7 +15,7 @@ const INITIAL_ORDERS: Order[] = [
     { id: 'KL-468169', customerName: 'John Doe', customerPhone: '017-2233445', address: 'Taman Melawati', items: [{ id: '1', name: 'Nasi Lemak Special', quantity: 2 }], status: OrderStatus.COMPLETED, amount: 24.00, dueTime: '11:00 AM', type: 'delivery', driverId: 'tan', paymentMethod: PaymentMethod.EWALLET },
 ];
 
-import { OrderService, ProductService } from '../src/services/api';
+import { OrderService, ProductService, FleetService } from '../src/services/api';
 import type { Product } from '../types';
 import { getGoogleMapsUrl } from '../src/utils/maps';
 import { supabase } from '../src/lib/supabase';
@@ -26,10 +26,12 @@ const OrderManagement: React.FC = () => {
     const [orders, setOrders] = useState<Order[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [realProducts, setRealProducts] = useState<Product[]>([]);
+    const [drivers, setDrivers] = useState<Record<string, string>>({});
 
     useEffect(() => {
         loadOrders();
         loadProducts();
+        loadDrivers();
 
         const channel = supabase
             .channel('app-order-management')
@@ -46,6 +48,27 @@ const OrderManagement: React.FC = () => {
         };
     }, []);
 
+
+    const loadDrivers = async () => {
+        try {
+            const fleetData = await FleetService.getFleetStatus();
+            const mapping: Record<string, string> = {};
+            if (Array.isArray(fleetData)) {
+                fleetData.forEach((item: any) => {
+                    // Try to resolve name from common user fields
+                    const dId = item.id || item.driver_id;
+                    const dName = item.name || item.driver_name;
+                    if (dId && dName) {
+                        mapping[dId] = dName;
+                    }
+                });
+            }
+            setDrivers(mapping);
+        } catch (error) {
+            console.error('Failed to load drivers for mapping', error);
+        }
+    };
+
     /**
      * 从后端加载真实产品列表，用于扫码/编号搜索
      */
@@ -61,12 +84,13 @@ const OrderManagement: React.FC = () => {
     const loadOrders = async () => {
         try {
             setIsLoading(true);
+            // Reload drivers first to ensure mapping is ready
+            await loadDrivers();
             const data = await OrderService.getAll();
             const sorted = data.sort((a: any, b: any) => new Date(b.created_at || '').getTime() - new Date(a.created_at || '').getTime());
             setOrders(sorted as any);
         } catch (error) {
             console.error("Failed to load orders", error);
-            // Fallback to initial mock data if backend fails/empty for demo purposes
             if (orders.length === 0) setOrders(INITIAL_ORDERS as any);
         } finally {
             setIsLoading(false);
@@ -97,19 +121,18 @@ const OrderManagement: React.FC = () => {
     const [newCustomName, setNewCustomName] = useState('');
 
     const statusColors: Record<string, string> = {
-        [OrderStatus.PENDING]: 'bg-yellow-50 text-yellow-600 border border-yellow-200',
-        [OrderStatus.PREPARING]: 'bg-blue-50 text-blue-600 border border-blue-200',
-        [OrderStatus.READY]: 'bg-cyan-50 text-cyan-600 border border-cyan-200',
-        [OrderStatus.DELIVERING]: 'bg-purple-50 text-purple-600 border border-purple-200',
-        [OrderStatus.COMPLETED]: 'bg-green-50 text-green-600 border border-green-200',
-        delayed: 'bg-red-50 text-red-600 border border-red-200',
+        [OrderStatus.PENDING]: 'bg-amber-400/10 text-amber-600 border border-amber-200/50 shadow-[inset_0_1px_1px_rgba(251,191,36,0.1)]',
+        [OrderStatus.PREPARING]: 'bg-sky-400/10 text-sky-600 border border-sky-200/50 shadow-[inset_0_1px_1px_rgba(56,189,248,0.1)]',
+        [OrderStatus.READY]: 'bg-emerald-400/10 text-emerald-600 border border-emerald-200/50 shadow-[inset_0_1px_1px_rgba(52,211,153,0.1)]',
+        [OrderStatus.DELIVERING]: 'bg-violet-400/10 text-violet-600 border border-violet-200/50 shadow-[inset_0_1px_1px_rgba(167,139,250,0.1)]',
+        [OrderStatus.COMPLETED]: 'bg-green-400/10 text-green-600 border border-green-200/50 shadow-[inset_0_1px_1px_rgba(74,222,128,0.1)]',
     };
 
     const statusLabels: Record<OrderStatus, string> = {
         [OrderStatus.PENDING]: 'PENDING',
-        [OrderStatus.PREPARING]: 'KITCHEN PROCESS',
-        [OrderStatus.READY]: 'DISTRIBUTION',
-        [OrderStatus.DELIVERING]: 'DELIVERING',
+        [OrderStatus.PREPARING]: 'KITCHEN',
+        [OrderStatus.READY]: 'READY',
+        [OrderStatus.DELIVERING]: 'DELIVER',
         [OrderStatus.COMPLETED]: 'COMPLETED',
     };
 
@@ -734,38 +757,35 @@ const OrderManagement: React.FC = () => {
                                                 <h3 className="text-lg font-black text-slate-900 tracking-tight group-hover:text-primary transition-colors">{order.customerName}</h3>
                                             </div>
                                             <div className="flex items-center gap-1.5 pl-6">
-                                                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">{order.order_number || order.id}</span>
+                                                <span className="text-[9px] font-bold text-slate-400/80 uppercase tracking-wider">{order.order_number || order.id}</span>
                                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
-                                                <span className="text-[10px] font-black text-primary/60 uppercase tracking-widest">{order.type || 'delivery'}</span>
+                                                <span className="text-[9px] font-bold text-primary/60 uppercase tracking-wider">
+                                                    {order.eventDate || (order.dueTime ? new Date(order.dueTime).toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit' }) : '-')}
+                                                </span>
                                                 <span className="w-1.5 h-1.5 rounded-full bg-slate-200" />
-                                                <span className="text-[10px] font-bold text-slate-400">
-                                                    {(() => {
-                                                        const d = order.dueTime ? new Date(order.dueTime) : (order as any).created_at ? new Date((order as any).created_at) : null;
-                                                        if (!d || isNaN(d.getTime())) return '-';
-                                                        return d.toLocaleString('zh-CN', { 
-                                                            month: '2-digit',
-                                                            day: '2-digit',
-                                                            hour: '2-digit', 
-                                                            minute: '2-digit',
-                                                            hour12: false 
-                                                        });
-                                                    })()}
+                                                <span className="text-[9px] font-semibold text-slate-400">
+                                                    {order.eventTime || (order.dueTime ? new Date(order.dueTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false }) : '-')}
                                                 </span>
                                             </div>
                                         </div>
                                         
                                         {/* Inline Status Dropdown (Aligned with Backend) */}
-                                        <div className="relative" onClick={e => e.stopPropagation()}>
+                                        <div className="relative group" onClick={e => e.stopPropagation()}>
                                             <select
                                                 value={order.status}
                                                 onChange={(e) => handleUpdateStatus(order.id, e.target.value as OrderStatus)}
-                                                className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider outline-none appearance-none cursor-pointer border hover:scale-105 transition-all shadow-sm ${(statusColors as any)[order.status] || 'bg-slate-100 text-slate-600 border-slate-200'}`}
-                                                style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='currentColor'%3E%3Cpath d='M7 10l5 5 5-5z'/%3E%3C/svg%3E")`, backgroundPosition: 'right 4px center', backgroundRepeat: 'no-repeat' }}
+                                                className={`px-3 py-1.5 rounded-full text-[9px] font-bold uppercase tracking-[0.1em] outline-none appearance-none cursor-pointer border transition-all text-center min-w-[75px] backdrop-blur-md ${(statusColors as any)[order.status] || 'bg-slate-50 text-slate-400 border-slate-100'}`}
                                             >
                                                 {Object.values(OrderStatus).map(st => (
                                                     <option key={st} value={st}>{statusLabels[st]}</option>
                                                 ))}
                                             </select>
+                                            {/* Subtle Indicator Dot for interactivity */}
+                                            <div className={`absolute right-1.5 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full opacity-40 group-hover:opacity-100 transition-opacity ${
+                                                order.status === OrderStatus.COMPLETED ? 'bg-green-400' :
+                                                order.status === OrderStatus.PENDING ? 'bg-amber-400' :
+                                                'bg-sky-400'
+                                            }`} />
                                         </div>
                                     </div>
 
@@ -845,7 +865,7 @@ const OrderManagement: React.FC = () => {
                                             </div>
 
                                             {/* Driver Info */}
-                                            {order.driverId && (
+                                            {(order.driverId || (order as any).driver_id) && (
                                                 <div className="space-y-1.5">
                                                     <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest pl-1">Dispatcher / Driver</p>
                                                     <div className="bg-primary/5 p-4 rounded-[20px] border border-primary/10 flex items-center gap-3">
@@ -853,8 +873,24 @@ const OrderManagement: React.FC = () => {
                                                             <span className="material-icons-round text-sm">local_shipping</span>
                                                         </div>
                                                         <div>
-                                                            <p className="text-xs font-black text-primary uppercase">ASSIGNED TO: {order.driverId}</p>
-                                                            <p className="text-[9px] text-primary/60 font-bold">Transit Status Syncing...</p>
+                                                            <p className="text-xs font-black text-primary uppercase">
+                                                                ASSIGNED TO: {(() => {
+                                                                    const o = order as any;
+                                                                    return o.driver_name || 
+                                                                           o.driver?.name || 
+                                                                           o.driver_info?.name || 
+                                                                           drivers[order.driverId || o.driver_id] || 
+                                                                           order.driverId || 
+                                                                           o.driver_id;
+                                                                })()}
+                                                            </p>
+                                                            <p className="text-[9px] text-primary/60 font-bold">
+                                                                {(() => {
+                                                                    const o = order as any;
+                                                                    const hasName = o.driver_name || o.driver?.name || o.driver_info?.name || drivers[order.driverId || o.driver_id];
+                                                                    return hasName ? 'Dispatcher Linked • Ready for Transit' : 'Transit Status Syncing...';
+                                                                })()}
+                                                            </p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -894,60 +930,31 @@ const OrderManagement: React.FC = () => {
                                             <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest leading-none mb-1.5">结算总额</span>
                                             <span className="text-xl font-black text-primary leading-none tracking-tight">RM {order.amount.toFixed(2)}</span>
                                         </div>
-                                        <div className="flex gap-2.5" onClick={e => e.stopPropagation()}>
-                                            {/* Lightbox Trigger for Photos */}
-                                            {order.delivery_photos && order.delivery_photos.length > 0 && (
-                                                <button
-                                                    onClick={() => setLightboxUrl(order.delivery_photos![0])}
-                                                    className="w-10 h-10 bg-indigo-50 border border-indigo-100 rounded-2xl flex items-center justify-center text-indigo-500 active:scale-90 transition-all shadow-sm group/btn"
-                                                >
-                                                    <span className="material-icons-round text-lg group/btn:scale-110 transition-transform">photo_library</span>
-                                                </button>
-                                            )}
-                                            
-                                            {/* Quick Actions */}
-                                            {order.status === OrderStatus.PENDING && (
-                                                <button
-                                                    onClick={() => handleUpdateStatus(order.id, OrderStatus.PREPARING, { automated: true })}
-                                                    className="w-10 h-10 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-center text-green-500 active:scale-90 transition-all shadow-sm group/btn"
-                                                    title="一键接单 (开始准备)"
-                                                >
-                                                    <span className="material-icons-round text-lg group/btn:scale-110 transition-transform">check_circle</span>
-                                                </button>
-                                            )}
-                                            {order.status === OrderStatus.PREPARING && (
-                                                <button
-                                                    onClick={() => handleUpdateStatus(order.id, OrderStatus.READY, { automated: true })}
-                                                    className="w-10 h-10 bg-orange-50 border border-orange-100 rounded-2xl flex items-center justify-center text-orange-500 active:scale-90 transition-all shadow-sm group/btn"
-                                                    title="厨房完成 (出餐就绪)"
-                                                >
-                                                    <span className="material-icons-round text-lg group/btn:scale-110 transition-transform">restaurant</span>
-                                                </button>
-                                            )}
-
+                                        <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                                            {/* Remaining Quick Actions */}
                                             <button
                                                 onClick={() => handleOpenEdit(order)}
-                                                className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"
+                                                className="w-8 h-8 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-slate-400 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[18px]">edit</span>
+                                                <span className="material-icons-round text-[15px]">edit</span>
                                             </button>
                                             <button
                                                 onClick={() => handleShareToWhatsApp(order)}
-                                                className="w-10 h-10 bg-green-50 border border-green-100 rounded-2xl flex items-center justify-center text-green-500 active:scale-90 transition-all shadow-sm"
+                                                className="w-8 h-8 bg-green-50 border border-green-100 rounded-xl flex items-center justify-center text-green-500 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-4.5 h-4.5 opacity-80" alt="WA" />
+                                                <img src="https://upload.wikimedia.org/wikipedia/commons/6/6b/WhatsApp.svg" className="w-3.5 h-3.5 opacity-80" alt="WA" />
                                             </button>
                                             <button
                                                 onClick={() => handleDownloadPDF(order)}
-                                                className="w-10 h-10 bg-red-50 border border-red-100 rounded-2xl flex items-center justify-center text-primary active:scale-90 transition-all shadow-sm"
+                                                className="w-8 h-8 bg-red-50 border border-red-100 rounded-xl flex items-center justify-center text-primary active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[18px]">picture_as_pdf</span>
+                                                <span className="material-icons-round text-[15px]">picture_as_pdf</span>
                                             </button>
                                             <button
                                                 onClick={() => setOrderToDelete(order.id)}
-                                                className="w-10 h-10 bg-slate-50 border border-slate-100 rounded-2xl flex items-center justify-center text-red-500 active:scale-90 transition-all shadow-sm"
+                                                className="w-8 h-8 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-center text-red-500 active:scale-90 transition-all shadow-sm"
                                             >
-                                                <span className="material-icons-round text-[18px]">delete_outline</span>
+                                                <span className="material-icons-round text-[15px]">delete_outline</span>
                                             </button>
                                         </div>
                                     </div>

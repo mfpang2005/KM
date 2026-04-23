@@ -21,19 +21,18 @@ const AdminDashboard: React.FC = () => {
 
     const statusLabels: Record<string, string> = {
         [OrderStatus.PENDING]: 'PENDING',
-        [OrderStatus.PREPARING]: 'KITCHEN PROCESS',
-        [OrderStatus.READY]: 'DISTRIBUTION',
-        [OrderStatus.DELIVERING]: 'DELIVERING',
+        [OrderStatus.PREPARING]: 'KITCHEN',
+        [OrderStatus.READY]: 'READY',
+        [OrderStatus.DELIVERING]: 'DELIVER',
         [OrderStatus.COMPLETED]: 'COMPLETED',
     };
 
     const statusColors: Record<string, string> = {
-        [OrderStatus.PENDING]: 'bg-amber-50 text-amber-600 border border-amber-200',
-        [OrderStatus.PREPARING]: 'bg-blue-50 text-blue-600 border border-blue-200',
-        [OrderStatus.READY]: 'bg-emerald-50 text-emerald-600 border border-emerald-200',
-        [OrderStatus.DELIVERING]: 'bg-purple-50 text-purple-600 border border-purple-200',
-        [OrderStatus.COMPLETED]: 'bg-green-50 text-green-600 border border-green-200',
-        delayed: 'bg-red-50 text-red-600 border border-red-200',
+        [OrderStatus.PENDING]: 'bg-amber-400/10 text-amber-600 border border-amber-200/50 shadow-[inset_0_1px_1px_rgba(251,191,36,0.1)]',
+        [OrderStatus.PREPARING]: 'bg-sky-400/10 text-sky-600 border border-sky-200/50 shadow-[inset_0_1px_1px_rgba(56,189,248,0.1)]',
+        [OrderStatus.READY]: 'bg-emerald-400/10 text-emerald-600 border border-emerald-200/50 shadow-[inset_0_1px_1px_rgba(52,211,153,0.1)]',
+        [OrderStatus.DELIVERING]: 'bg-violet-400/10 text-violet-600 border border-violet-200/50 shadow-[inset_0_1px_1px_rgba(167,139,250,0.1)]',
+        [OrderStatus.COMPLETED]: 'bg-green-400/10 text-green-600 border border-green-200/50 shadow-[inset_0_1px_1px_rgba(74,222,128,0.1)]',
     };
 
     return (
@@ -45,8 +44,8 @@ const AdminDashboard: React.FC = () => {
                         <span className="material-icons-round text-3xl">dashboard</span>
                     </div>
                     <div className="text-center">
-                        <h1 className="text-2xl font-black text-primary tracking-tight italic uppercase">Kim Long System Overview</h1>
-                        <p className="text-[10px] text-primary-light/40 font-black uppercase tracking-[0.4em] mt-1">Administrative Intelligence</p>
+                        <h1 className="text-2xl font-black text-primary tracking-tight uppercase">Kim Long System Overview</h1>
+                        <p className="text-[9px] text-primary-light/40 font-black uppercase tracking-[0.3em] mt-1">Administrative Intelligence</p>
                     </div>
                 </div>
                 
@@ -80,12 +79,12 @@ const AdminDashboard: React.FC = () => {
                     <div className="grid grid-cols-2 gap-4">
                         <div
                             onClick={() => navigate('/admin/orders')}
-                            className="bg-white p-5 rounded-3xl border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 flex flex-col items-center text-center"
+                            className="bg-white p-3.5 rounded-[2rem] border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 flex flex-col items-center text-center"
                         >
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-primary-warm text-white flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary to-primary-warm text-white flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform mb-2">
                                 <span className="material-icons-round text-sm">receipt_long</span>
                             </div>
-                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-2">Today Orders</span>
+                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-1.5">Today Orders</span>
                             <p className="text-3xl font-black text-primary tracking-tighter">
                                 {statsLoading ? '...' : stats?.today_orders || 0}
                             </p>
@@ -93,12 +92,12 @@ const AdminDashboard: React.FC = () => {
 
                         <div
                             onClick={() => navigate('/admin/finance')}
-                            className="bg-white p-5 rounded-3xl border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 flex flex-col items-center text-center"
+                            className="bg-white p-3.5 rounded-[2rem] border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 flex flex-col items-center text-center"
                         >
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-accent-gold to-orange-400 text-white flex items-center justify-center shadow-lg shadow-accent-gold/20 group-hover:scale-110 transition-transform mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-accent-gold to-orange-400 text-white flex items-center justify-center shadow-lg shadow-accent-gold/20 group-hover:scale-110 transition-transform mb-2">
                                 <span className="material-icons-round text-sm">payments</span>
                             </div>
-                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-2">Monthly Revenue</span>
+                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-1.5">Monthly Revenue</span>
                             <div className="flex items-baseline justify-center gap-1">
                                 <span className="text-xs font-bold text-accent-gold">RM</span>
                                 <p className="text-2xl font-black text-primary tracking-tighter">
@@ -110,19 +109,19 @@ const AdminDashboard: React.FC = () => {
 
                     <div
                         onClick={() => navigate('/admin/finance')}
-                        className="bg-white p-6 rounded-3xl border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden flex flex-col items-center text-center"
+                        className="bg-white p-4 rounded-[2rem] border border-primary/5 shadow-xl shadow-primary/5 hover:-translate-y-1 transition-all group active:scale-95 relative overflow-hidden flex flex-col items-center text-center"
                     >
-                        <div className="absolute top-0 right-0 p-6 opacity-[0.05] text-primary">
-                            <span className="material-icons-round text-7xl">account_balance_wallet</span>
+                        <div className="absolute top-0 right-0 p-4 opacity-[0.05] text-primary">
+                            <span className="material-icons-round text-6xl">account_balance_wallet</span>
                         </div>
                         <div className="relative z-10 flex flex-col items-center">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary-warm to-primary-light text-white flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform mb-3">
+                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-primary-warm to-primary-light text-white flex items-center justify-center shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform mb-2">
                                 <span className="material-icons-round text-sm">pending_actions</span>
                             </div>
-                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-2">Total Unpaid</span>
+                            <span className="text-[10px] font-black text-primary-light/40 uppercase tracking-widest mb-1.5">Total Unpaid</span>
                             <div className="flex items-baseline justify-center gap-1">
                                 <span className="text-xs font-bold text-primary-warm">RM</span>
-                                <p className="text-4xl font-black text-primary tracking-tighter">
+                                <p className="text-4xl font-black text-primary tracking-tighter leading-none">
                                     {statsLoading ? '...' : Number(stats?.total_unpaid || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
                                 </p>
                             </div>
@@ -241,7 +240,7 @@ const AdminDashboard: React.FC = () => {
                                             <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-0.5 truncate">{order.id} • <span className="text-slate-600 font-black font-mono">RM {Number(order.amount).toFixed(2)}</span></p>
                                         </div>
                                     </div>
-                                    <span className={`px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest whitespace-nowrap ${statusColors[order.status] || 'bg-slate-100 text-slate-600'}`}>
+                                    <span className={`px-3 py-1 rounded-full text-[9px] font-bold uppercase tracking-[0.1em] whitespace-nowrap backdrop-blur-sm ${statusColors[order.status] || 'bg-slate-100 text-slate-600'}`}>
                                         {statusLabels[order.status] || order.status}
                                     </span>
                                 </div>

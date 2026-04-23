@@ -31,18 +31,18 @@ const OrderDetail: React.FC = () => {
 
     const statusLabels: Record<OrderStatus, string> = {
         [OrderStatus.PENDING]: 'PENDING',
-        [OrderStatus.PREPARING]: 'KITCHEN PROCESS',
-        [OrderStatus.READY]: 'DISTRIBUTION',
-        [OrderStatus.DELIVERING]: 'DELIVERING',
+        [OrderStatus.PREPARING]: 'KITCHEN',
+        [OrderStatus.READY]: 'READY',
+        [OrderStatus.DELIVERING]: 'DELIVER',
         [OrderStatus.COMPLETED]: 'COMPLETED',
     };
 
     const statusColors: Record<string, string> = {
-        [OrderStatus.PENDING]: 'text-amber-400 bg-amber-400/10 border-amber-400/20',
-        [OrderStatus.PREPARING]: 'text-sky-400 bg-sky-400/10 border-sky-400/20',
-        [OrderStatus.READY]: 'text-emerald-400 bg-emerald-400/10 border-emerald-400/20',
-        [OrderStatus.DELIVERING]: 'text-blue-400 bg-blue-400/10 border-blue-400/20',
-        [OrderStatus.COMPLETED]: 'text-slate-400 bg-slate-400/10 border-slate-400/20',
+        [OrderStatus.PENDING]: 'bg-amber-400/10 text-amber-500 border border-amber-400/20 shadow-glow',
+        [OrderStatus.PREPARING]: 'bg-sky-400/10 text-sky-500 border border-sky-400/20 shadow-glow',
+        [OrderStatus.READY]: 'bg-emerald-400/10 text-emerald-500 border border-emerald-400/20 shadow-glow',
+        [OrderStatus.DELIVERING]: 'bg-violet-400/10 text-violet-500 border border-violet-400/20 shadow-glow',
+        [OrderStatus.COMPLETED]: 'bg-green-400/10 text-green-500 border border-green-400/20 shadow-glow',
     };
 
 
@@ -85,7 +85,7 @@ const OrderDetail: React.FC = () => {
                         <p className="text-[10px] text-sky-400 font-black uppercase tracking-[0.3em] font-mono">#{order.order_number || order.id.slice(0, 12)}</p>
                     </div>
                 </div>
-                <div className={`px-5 py-2 rounded-full text-[9px] font-black uppercase tracking-[0.2em] border shadow-glow ${statusColors[order.status]}`}>
+                <div className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-[0.2em] border shadow-glow ${statusColors[order.status]}`}>
                     {statusLabels[order.status]}
                 </div>
             </header>
