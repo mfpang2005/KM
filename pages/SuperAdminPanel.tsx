@@ -3,12 +3,18 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { SuperAdminService } from '../src/services/api';
 import { UserRole, AiSummary } from '../types';
 
+import { supabase } from '../src/lib/supabase';
+
 // ── 类型定义 ──
 
 interface StatsData {
     total_orders: number;
     total_revenue: number;
+    today_orders?: number;
+    today_revenue?: number;
+    month_revenue?: number;
     total_users: number;
+    total_unpaid?: number;
     orders_by_status: Record<string, number>;
 }
 
@@ -19,6 +25,8 @@ interface UserRecord {
     name?: string;
     phone?: string;
     is_disabled?: boolean;
+    permissions?: Record<string, boolean>;
+    employee_id?: string;
 }
 
 interface ConfigItem {
@@ -57,24 +65,37 @@ const SuperAdminPanel: React.FC = () => {
         return 'overview';
     }, [location.pathname]);
 
+    const handleLogout = async () => {
+        if (window.confirm('确定要退出超级管理员控制台吗？')) {
+            await supabase.auth.signOut();
+            window.location.href = '/login';
+        }
+    };
+
     return (
         <div className="flex flex-col h-full bg-slate-50">
             {/* 顶部标题栏 */}
             <header className="pt-12 pb-4 px-6 bg-gradient-to-r from-slate-900 to-slate-800 text-white">
                 <div className="flex items-center justify-between">
-                    <div>
-                        <h1 className="text-xl font-bold flex items-center gap-2">
-                            <span className="material-icons-round text-amber-400">shield</span>
-                            超级管理员控制台
-                        </h1>
-                        <p className="text-[10px] text-slate-400 uppercase tracking-widest mt-1">
-                            SUPER ADMIN PANEL · 全局管控
-                        </p>
+                    <div className="flex items-center gap-3">
+                        <span className="material-icons-round text-amber-400 text-2xl">shield</span>
+                        <div>
+                            <h1 className="text-xl font-black leading-none">超级管理员控制台</h1>
+                            <p className="text-[9px] text-slate-400 uppercase tracking-[0.2em] mt-1.5 font-bold">
+                                SUPER ADMIN PANEL · 全局管控
+                            </p>
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                         <span className="px-2 py-1 text-[9px] font-bold bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30 uppercase tracking-wider">
                             Super Admin
                         </span>
+                        <button 
+                            onClick={handleLogout}
+                            className="w-8 h-8 rounded-full bg-red-500/10 text-red-400 border border-red-500/20 flex items-center justify-center active:scale-90 transition-all hover:bg-red-500 hover:text-white"
+                        >
+                            <span className="material-icons-round text-sm">logout</span>
+                        </button>
                     </div>
                 </div>
 
@@ -83,7 +104,6 @@ const SuperAdminPanel: React.FC = () => {
                     {([
                         { key: 'overview', label: '总览', icon: 'dashboard', path: '/super-admin' },
                         { key: 'users', label: '用户', icon: 'group', path: '/super-admin/users' },
-                        { key: 'config', label: '配置', icon: 'settings', path: '/super-admin/config' },
                         { key: 'audit', label: '日志', icon: 'history', path: '/super-admin/audit' },
                     ] as const).map(tab => (
                         <button
@@ -101,11 +121,9 @@ const SuperAdminPanel: React.FC = () => {
                 </div>
             </header>
 
-            {/* 内容区域 */}
             <main className="flex-1 overflow-y-auto p-4 no-scrollbar">
                 {currentView === 'overview' && <OverviewSection />}
                 {currentView === 'users' && <UsersSection />}
-                {currentView === 'config' && <ConfigSection />}
                 {currentView === 'audit' && <AuditSection />}
             </main>
         </div>
@@ -121,21 +139,47 @@ const OverviewSection: React.FC = () => {
     const [aiSummary, setAiSummary] = useState<string>('');
     const [loading, setLoading] = useState(true);
     const [isResetting, setIsResetting] = useState(false);
+    const [isAppAuthorized, setIsAppAuthorized] = useState(true);
+    const [isUpdatingAuth, setIsUpdatingAuth] = useState(false);
     const navigate = useNavigate();
 
     const loadStats = async () => {
         try {
             setLoading(true);
-            const [statsData, aiData] = await Promise.all([
+            const [statsData, aiData, configData] = await Promise.all([
                 SuperAdminService.getStats(),
-                SuperAdminService.getAiSummary().catch(() => ({ summary: '' } as AiSummary))
+                SuperAdminService.getAiSummary().catch(() => ({ summary: '' } as AiSummary)),
+                SuperAdminService.getConfig().catch(() => [])
             ]);
             setStats(statsData);
             setAiSummary(aiData.summary || '');
+            
+            // 查找授权配置
+            const authConfig = configData.find((c: any) => c.key === 'admin_app_auth');
+            if (authConfig) {
+                setIsAppAuthorized(!!authConfig.value?.authorized);
+            }
         } catch (error) {
             console.error('Failed to load stats:', error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleToggleAuth = async () => {
+        try {
+            setIsUpdatingAuth(true);
+            const nextStatus = !isAppAuthorized;
+            await SuperAdminService.updateConfig('admin_app_auth', { 
+                authorized: nextStatus,
+                updated_at: new Date().toISOString()
+            });
+            setIsAppAuthorized(nextStatus);
+        } catch (error) {
+            console.error('Failed to update auth status:', error);
+            alert('授权状态更新失败，请重试');
+        } finally {
+            setIsUpdatingAuth(false);
         }
     };
 
@@ -191,7 +235,22 @@ const OverviewSection: React.FC = () => {
     }
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-1.5">
+            {/* 系统访问授权控制 (EXTREME SHRINK) */}
+            <div className="bg-white rounded-xl px-3 py-1.5 shadow-sm border border-primary/5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                    <div className={`w-5 h-5 rounded-lg flex items-center justify-center ${isAppAuthorized ? 'bg-emerald-500' : 'bg-red-500'} text-white`}>
+                        <span className="material-icons-round text-[12px]">{isAppAuthorized ? 'verified_user' : 'gpp_maybe'}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">访问授权</span>
+                        <span className={`text-[9px] font-bold ${isAppAuthorized ? 'text-emerald-600' : 'text-red-600'} bg-slate-50 px-2 py-0.5 rounded-full`}>
+                            {isAppAuthorized ? '已开放 (AUTHORIZED)' : '已锁定 (LOCKED)'}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
             {/* AI 智能简报 */}
             {aiSummary && (
                 <div className="bg-indigo-900 rounded-2xl p-5 shadow-lg border border-indigo-700 relative overflow-hidden">
@@ -209,38 +268,64 @@ const OverviewSection: React.FC = () => {
                     </div>
                 </div>
             )}
+            {/* 核心指标总汇 - Admin App Style */}
+            <div className="space-y-2 py-1">
+                <div className="grid grid-cols-2 divide-x divide-primary/10">
+                    <div className="py-2 flex flex-col items-center justify-center text-center">
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Today Orders 今日订单</span>
+                        <p className="text-3xl font-black text-slate-900 tracking-tighter leading-none">
+                            {stats?.today_orders ?? 0}
+                        </p>
+                    </div>
 
-            {/* 核心指标卡片 */}
-            <div className="grid grid-cols-3 gap-3">
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center mb-3">
-                        <span className="material-icons-round text-primary text-xl">receipt_long</span>
+                    <div className="py-2 flex flex-col items-center justify-center text-center">
+                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">Today Sales 今日销售</span>
+                        <div className="flex items-baseline justify-center gap-0.5">
+                            <span className="text-[10px] font-bold text-emerald-500">RM</span>
+                            <p className="text-xl font-black text-slate-900 tracking-tighter">
+                                {(stats?.today_revenue ?? 0).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                            </p>
+                        </div>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">订单总数</p>
-                    <p className="text-2xl font-black text-slate-900 mt-1">{stats?.total_orders ?? 0}</p>
                 </div>
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                    <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center mb-3">
-                        <span className="material-icons-round text-green-600 text-xl">payments</span>
+
+                {/* Total Unpaid Section */}
+                <div className="py-3 border-y border-slate-100 relative overflow-hidden flex flex-col items-center justify-center text-center bg-white/50 rounded-lg">
+                    <div className="relative z-10 flex flex-col items-center">
+                        <div className="flex items-center gap-2 mb-1">
+                            <span className="flex h-1.5 w-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                            <span className="text-[9px] font-black text-red-800 uppercase tracking-widest">Total Unpaid 未收账目 (欠款)</span>
+                        </div>
+                        <div className="flex items-baseline justify-center gap-1">
+                            <span className="text-xs font-bold text-red-600/60 uppercase tracking-tighter">RM</span>
+                            <p className="text-4xl font-black text-red-900 tracking-tighter leading-none">
+                                {(stats?.total_unpaid ?? 0).toLocaleString(undefined, { minimumFractionDigits: 0 })}
+                            </p>
+                        </div>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">总营收</p>
-                    <p className="text-2xl font-black text-green-600 mt-1">
-                        <span className="text-xs font-bold text-green-400">RM</span> {(stats?.total_revenue ?? 0).toLocaleString()}
-                    </p>
                 </div>
-                <div className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                    <div className="w-10 h-10 rounded-xl bg-blue-50 flex items-center justify-center mb-3">
-                        <span className="material-icons-round text-blue-600 text-xl">people</span>
+
+                {/* 其他次要指标 - TIGHTENED & BOLDER */}
+                <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-white rounded-xl p-2.5 border border-slate-100 flex flex-col items-center shadow-sm">
+                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-tight mb-1">本月营收</span>
+                        <span className="text-[12px] font-black text-amber-600">RM{(stats?.month_revenue ?? 0).toLocaleString()}</span>
                     </div>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">用户数</p>
-                    <p className="text-2xl font-black text-blue-600 mt-1">{stats?.total_users ?? 0}</p>
+                    <div className="bg-white rounded-xl p-2.5 border border-slate-100 flex flex-col items-center shadow-sm">
+                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-tight mb-1">总用户数</span>
+                        <span className="text-[12px] font-black text-indigo-600">{stats?.total_users ?? 0}</span>
+                    </div>
+                    <div className="bg-white rounded-xl p-2.5 border border-slate-100 flex flex-col items-center shadow-sm">
+                        <span className="text-[8px] font-black text-slate-500 uppercase tracking-tight mb-1">累计订单</span>
+                        <span className="text-[12px] font-black text-slate-900">{stats?.total_orders ?? 0}</span>
+                    </div>
                 </div>
             </div>
 
             {/* 订单状态分布 */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">订单状态分布</h3>
-                <div className="space-y-3">
+            <div className="bg-white rounded-xl p-3 shadow-sm border border-slate-100">
+                <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">订单分布</h3>
+                <div className="space-y-1.5">
                     {Object.entries(stats?.orders_by_status ?? {}).map(([status, count]) => {
                         const total = stats?.total_orders || 1;
                         const percentage = Math.round((Number(count) / total) * 100);
@@ -263,9 +348,9 @@ const OverviewSection: React.FC = () => {
             </div>
 
             {/* 快捷导航 */}
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100">
-                <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">权限操作</h3>
-                <div className="grid grid-cols-2 gap-3">
+            <div className="bg-white rounded-xl p-3 shadow-sm border border-slate-100">
+                <h3 className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mb-2">权限操作</h3>
+                <div className="grid grid-cols-2 gap-2">
                     {[
                         { icon: 'group', label: '用户管理', desc: '角色分配与权限', path: '/super-admin/users', color: 'bg-blue-50 text-blue-600' },
                         { icon: 'settings', label: '系统配置', desc: '全局参数设置', path: '/super-admin/config', color: 'bg-purple-50 text-purple-600' },
@@ -275,30 +360,29 @@ const OverviewSection: React.FC = () => {
                         <button
                             key={idx}
                             onClick={() => navigate(item.path)}
-                            className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all group active:scale-95 text-left"
+                            className="flex items-center gap-2 p-2 rounded-lg border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all group active:scale-95 text-left"
                         >
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${item.color} transition-transform group-hover:scale-105`}>
-                                <span className="material-icons-round text-lg">{item.icon}</span>
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${item.color} transition-transform group-hover:scale-105`}>
+                                <span className="material-icons-round text-base">{item.icon}</span>
                             </div>
                             <div>
-                                <p className="text-xs font-bold text-slate-800">{item.label}</p>
-                                <p className="text-[10px] text-slate-400">{item.desc}</p>
+                                <p className="text-[10px] font-bold text-slate-800">{item.label}</p>
+                                <p className="text-[8px] text-slate-400 truncate w-24">{item.desc}</p>
                             </div>
                         </button>
                     ))}
                 </div>
             </div>
 
-            {/* 危险操作区 */}
-            <div className="bg-red-50/30 rounded-2xl p-5 shadow-sm border border-red-100/50">
-                <div className="flex items-center gap-2 mb-4">
-                    <span className="material-icons-round text-red-500 text-lg">warning</span>
-                    <h3 className="text-xs font-black text-red-600 uppercase tracking-wider">危险区域 (DANGER ZONE)</h3>
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-red-100 flex items-center justify-between gap-4">
-                    <div>
-                        <p className="text-sm font-bold text-slate-800">重置全系统数据</p>
-                        <p className="text-[10px] text-slate-400 mt-1">清空所有订单、交易记录，并将所有司机状态设为空闲 (Idle)。</p>
+            {/* 危险区域 (ULTRA COMPACT) */}
+            <div className="bg-red-50/50 rounded-xl p-2 border border-red-100/50">
+                <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                        <span className="material-icons-round text-red-500 text-sm">warning</span>
+                        <div>
+                            <p className="text-[10px] font-black text-red-600 uppercase tracking-tight">重置全系统数据</p>
+                            <p className="text-[8px] text-red-400 leading-tight">清空所有订单、交易记录与司机状态</p>
+                        </div>
                     </div>
                     <button
                         onClick={handleReset}
@@ -381,6 +465,24 @@ const UsersSection: React.FC = () => {
     };
 
     /**
+     * 切换细分权限
+     */
+    const handleTogglePermission = async (user: UserRecord, permissionId: string) => {
+        try {
+            const currentPerms = user.permissions || {};
+            const nextPerms = { ...currentPerms, [permissionId]: !currentPerms[permissionId] };
+            
+            await SuperAdminService.updateUser(user.id, { 
+                permissions: nextPerms 
+            });
+            await loadUsers();
+        } catch (error) {
+            console.error('Failed to toggle permission:', error);
+            alert('权限更新失败');
+        }
+    };
+
+    /**
      * 保存用户信息修改
      */
     const handleSaveUser = async (userId: string) => {
@@ -449,9 +551,9 @@ const UsersSection: React.FC = () => {
                                 <div>
                                     <p className="text-sm font-bold text-slate-800 flex items-center gap-2">
                                         {user.name || '未命名'}
-                                        {(user as any).employee_id && (
+                                        {user.employee_id && (
                                             <span className="text-[9px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded uppercase font-mono tracking-tighter">
-                                                {(user as any).employee_id}
+                                                {user.employee_id}
                                             </span>
                                         )}
                                     </p>
@@ -461,6 +563,41 @@ const UsersSection: React.FC = () => {
                             <span className={`px-2 py-1 text-[10px] font-bold rounded-lg border ${roleColors[user.role] || 'bg-slate-50 text-slate-500 border-slate-200'}`}>
                                 {roleLabels[user.role] || user.role}
                             </span>
+                        </div>
+
+                        {/* 细分权限管理 (NEW) */}
+                        <div className="mt-4 pt-3 border-t border-slate-50">
+                            <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mb-3">模块访问授权 / Module Permissions</p>
+                            <div className="flex flex-wrap gap-2">
+                                {[
+                                    { id: 'overview', icon: 'dashboard', label: '总览' },
+                                    { id: 'financial', icon: 'payments', label: '财务' },
+                                    { id: 'create_order', icon: 'add_shopping_cart', label: '开单' },
+                                    { id: 'order', icon: 'list_alt', label: '订单' },
+                                    { id: 'product', icon: 'inventory_2', label: '产品' },
+                                    { id: 'fleet', icon: 'local_shipping', label: '车队' },
+                                    { id: 'kitchen', icon: 'restaurant', label: '后厨' },
+                                    { id: 'walkie_talkie', icon: 'settings_input_antenna', label: '对讲' },
+                                    { id: 'event_calendar', icon: 'event', label: '日历' },
+                                ].map(perm => {
+                                    const hasPerm = user.permissions?.[perm.id] === true;
+                                    return (
+                                        <button
+                                            key={perm.id}
+                                            onClick={() => handleTogglePermission(user, perm.id)}
+                                            className={`flex items-center gap-1.5 px-2 py-1.5 rounded-lg border transition-all active:scale-90 ${
+                                                hasPerm 
+                                                ? 'bg-emerald-50 border-emerald-100 text-emerald-600' 
+                                                : 'bg-slate-50 border-slate-100 text-slate-300'
+                                            }`}
+                                            title={perm.label}
+                                        >
+                                            <span className="material-icons-round text-sm">{perm.icon}</span>
+                                            <span className="text-[9px] font-black uppercase tracking-tighter">{perm.id.split('_')[0]}</span>
+                                        </button>
+                                    );
+                                })}
+                            </div>
                         </div>
 
                         {/* 编辑模式 */}
@@ -637,159 +774,6 @@ const UsersSection: React.FC = () => {
     );
 };
 
-// ═══════════════════════════════════════════
-// 3. 系统配置
-// ═══════════════════════════════════════════
-
-const ConfigSection: React.FC = () => {
-    const [configs, setConfigs] = useState<ConfigItem[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [editingKey, setEditingKey] = useState<string | null>(null);
-    const [editValue, setEditValue] = useState('');
-    const [newKey, setNewKey] = useState('');
-    const [newValue, setNewValue] = useState('');
-    const [showAddForm, setShowAddForm] = useState(false);
-
-    const loadConfig = useCallback(async () => {
-        try {
-            const data = await SuperAdminService.getConfig();
-            setConfigs(data);
-        } catch (error) {
-            console.error('Failed to load config:', error);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
-    useEffect(() => { loadConfig(); }, [loadConfig]);
-
-    /**
-     * 保存配置修改
-     */
-    const handleSaveConfig = async (key: string) => {
-        try {
-            const parsed = JSON.parse(editValue);
-            await SuperAdminService.updateConfig(key, parsed);
-            setEditingKey(null);
-            await loadConfig();
-        } catch {
-            alert('JSON 格式无效，请检查输入');
-        }
-    };
-
-    /**
-     * 新增配置项
-     */
-    const handleAddConfig = async () => {
-        if (!newKey.trim()) { alert('请输入配置键名'); return; }
-        try {
-            const parsed = JSON.parse(newValue || '{}');
-            await SuperAdminService.updateConfig(newKey.trim(), parsed);
-            setNewKey('');
-            setNewValue('');
-            setShowAddForm(false);
-            await loadConfig();
-        } catch {
-            alert('JSON 格式无效，请检查输入');
-        }
-    };
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-40">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-            </div>
-        );
-    }
-
-    return (
-        <div className="space-y-3">
-            <div className="flex items-center justify-between mb-2">
-                <h3 className="text-sm font-bold text-slate-700">系统配置 ({configs.length})</h3>
-                <button
-                    onClick={() => setShowAddForm(!showAddForm)}
-                    className="flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold text-primary bg-primary/5 rounded-lg active:scale-95 transition-transform"
-                >
-                    <span className="material-icons-round text-sm">add</span>
-                    新增
-                </button>
-            </div>
-
-            {/* 新增表单 */}
-            {showAddForm && (
-                <div className="bg-white rounded-2xl p-4 shadow-sm border-2 border-primary/20">
-                    <p className="text-xs font-bold text-slate-600 mb-3">新增配置项</p>
-                    <input
-                        value={newKey}
-                        onChange={(e) => setNewKey(e.target.value)}
-                        placeholder="配置键名（如：business_hours）"
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-bold mb-2 outline-none focus:ring-2 focus:ring-primary/10"
-                    />
-                    <textarea
-                        value={newValue}
-                        onChange={(e) => setNewValue(e.target.value)}
-                        placeholder='配置值（JSON 格式，如：{"open": "08:00", "close": "22:00"}）'
-                        rows={3}
-                        className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono mb-3 outline-none focus:ring-2 focus:ring-primary/10 resize-none"
-                    />
-                    <div className="flex gap-2 justify-end">
-                        <button onClick={() => setShowAddForm(false)} className="px-3 py-2 bg-slate-100 text-slate-600 rounded-xl text-xs font-bold active:scale-95 transition-transform">取消</button>
-                        <button onClick={handleAddConfig} className="px-3 py-2 bg-primary text-white rounded-xl text-xs font-bold active:scale-95 transition-transform">保存</button>
-                    </div>
-                </div>
-            )}
-
-            {/* 已有配置列表 */}
-            {configs.length === 0 && !showAddForm ? (
-                <div className="bg-white rounded-2xl p-8 text-center border border-slate-100">
-                    <span className="material-icons-round text-4xl text-slate-200">settings</span>
-                    <p className="text-xs text-slate-400 mt-2">暂无配置项，点击「新增」添加</p>
-                </div>
-            ) : (
-                configs.map(config => (
-                    <div key={config.key} className="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
-                        <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-bold text-slate-800 font-mono">{config.key}</span>
-                            {config.updated_at && (
-                                <span className="text-[10px] text-slate-300">
-                                    {new Date(config.updated_at).toLocaleString('zh-CN')}
-                                </span>
-                            )}
-                        </div>
-
-                        {editingKey === config.key ? (
-                            <div>
-                                <textarea
-                                    value={editValue}
-                                    onChange={(e) => setEditValue(e.target.value)}
-                                    rows={4}
-                                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono mb-2 outline-none focus:ring-2 focus:ring-primary/10 resize-none"
-                                />
-                                <div className="flex gap-2 justify-end">
-                                    <button onClick={() => setEditingKey(null)} className="px-3 py-1.5 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold active:scale-95 transition-transform">取消</button>
-                                    <button onClick={() => handleSaveConfig(config.key)} className="px-3 py-1.5 bg-primary text-white rounded-lg text-[10px] font-bold active:scale-95 transition-transform">保存</button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <pre className="text-[10px] text-slate-500 bg-slate-50 p-3 rounded-xl overflow-x-auto font-mono">
-                                    {JSON.stringify(config.value, null, 2)}
-                                </pre>
-                                <button
-                                    onClick={() => { setEditingKey(config.key); setEditValue(JSON.stringify(config.value, null, 2)); }}
-                                    className="mt-2 flex items-center gap-1 px-3 py-1.5 text-[10px] font-bold text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors active:scale-95"
-                                >
-                                    <span className="material-icons-round text-sm">edit</span>
-                                    编辑
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                ))
-            )}
-        </div>
-    );
-};
 
 // ═══════════════════════════════════════════
 // 4. 审计日志

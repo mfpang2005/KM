@@ -75,29 +75,29 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
 
     return (
         <div className="flex flex-col h-full bg-background-light">
-            <header className="pt-12 pb-6 px-6 bg-white flex flex-col items-center border-b border-slate-100">
-                <div className="w-24 h-24 rounded-full border-4 border-primary/10 p-1 mb-4 relative overflow-hidden group">
+            <header className="pt-8 pb-4 px-6 bg-white flex flex-col items-center border-b border-slate-100">
+                <div className="w-20 h-20 rounded-full border-4 border-primary/10 p-0.5 mb-3 relative overflow-hidden group">
                     <div className="w-full h-full bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
                         {user?.avatar_url ? (
                             <img src={user.avatar_url} alt="Profile" className="w-full h-full object-cover" />
                         ) : (
-                            <span className="material-icons-round text-slate-400 text-4xl">
+                            <span className="material-icons-round text-slate-400 text-3xl">
                                 {user?.role === 'driver' ? 'local_shipping' : 'person'}
                             </span>
                         )}
                     </div>
                     {/* Badge for role */}
-                    <div className="absolute bottom-0 right-0 w-8 h-8 bg-primary rounded-full border-2 border-white flex items-center justify-center shadow-lg">
-                        <span className="material-icons-round text-white text-[14px]">
+                    <div className="absolute bottom-0 right-0 w-7 h-7 bg-primary rounded-full border-2 border-white flex items-center justify-center shadow-lg">
+                        <span className="material-icons-round text-white text-[12px]">
                             {user?.role === 'super_admin' ? 'verified_user' : 'badge'}
                         </span>
                     </div>
                 </div>
-                <h2 className="text-xl font-black text-slate-900 tracking-tight">
+                <h2 className="text-lg font-black text-slate-900 tracking-tight">
                     {user?.name || user?.email?.split('@')[0] || '加载中...'}
                 </h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1.5 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-[0.2em] mt-1 flex items-center gap-1.5">
+                    <span className="w-1 h-1 rounded-full bg-emerald-500"></span>
                     {user?.role?.replace('_', ' ')} ID: #{user?.employee_id || '000'}
                 </p>
             </header>
@@ -106,10 +106,10 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                 {!isEditingMode ? (
                     /* Display Mode - Simple & Clean */
                     <div className="flex flex-col items-center justify-center pt-8 space-y-8 animate-in fade-in duration-500">
-                        <div className="w-full bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm flex flex-col items-center gap-6">
+                        <div className="w-full bg-white rounded-[24px] p-5 border border-slate-100 shadow-sm flex flex-col items-center gap-4">
                             <div className="flex flex-col items-center text-center">
-                                <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-2">Account Status</span>
-                                <div className="flex items-center gap-2 px-3 py-1 bg-emerald-50 text-emerald-600 rounded-full text-[10px] font-black uppercase">
+                                <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest mb-1">Account Status</span>
+                                <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-emerald-50 text-emerald-600 rounded-full text-[8px] font-black uppercase">
                                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                                     Active & Verified
                                 </div>
@@ -119,7 +119,7 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                             
                             <button 
                                 onClick={() => setIsEditingMode(true)}
-                                className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl shadow-slate-900/20 active:scale-95 transition-all flex items-center justify-center gap-3"
+                                className="w-full py-2.5 bg-slate-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-xl shadow-slate-900/20 active:scale-95 transition-all flex items-center justify-center gap-2"
                             >
                                 <span className="material-icons-round text-lg">edit</span>
                                 编辑资料 (Edit Profile)
@@ -193,27 +193,19 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                                     )}
                                 </div>
                             </div>
-
-                            <button className="w-full p-6 flex items-center justify-between bg-slate-50/50 border-t border-slate-50">
-                                <div className="flex items-center gap-3">
-                                    <span className="material-icons-round text-slate-400 text-lg">language</span>
-                                    <span className="text-xs font-black uppercase tracking-widest text-slate-600">语言设置 (Language)</span>
-                                </div>
-                                <span className="text-[10px] font-black text-primary bg-primary/5 px-2 py-1 rounded-md">中文</span>
-                            </button>
                         </div>
 
                         <button 
                             onClick={handleSave}
                             disabled={saving}
-                            className="w-full py-5 bg-primary text-white rounded-[24px] font-black text-sm uppercase tracking-[0.1em] shadow-2xl shadow-primary/30 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-3"
+                            className="w-fit mx-auto px-6 py-2 bg-primary text-white rounded-full font-black text-[10px] uppercase tracking-[0.2em] shadow-lg shadow-primary/20 active:scale-95 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
                         >
                             {saving ? (
-                                <span className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
                             ) : (
                                 <>
-                                    <span className="material-icons-round text-xl">save</span>
-                                    保存更改 (Save Profile)
+                                    <span className="material-icons-round text-sm">edit</span>
+                                    编辑资料 (Edit Profile)
                                 </>
                             )}
                         </button>
@@ -223,32 +215,13 @@ const Profile: React.FC<ProfileProps> = ({ onLogout }) => {
                 <div className="mt-12 px-2">
                     <button 
                         onClick={handleLogout}
-                        className="w-full py-4 text-slate-400 font-bold text-xs uppercase tracking-widest hover:text-primary transition-colors flex items-center justify-center gap-2"
+                        className="w-full py-4 bg-white border border-slate-200 text-slate-500 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-sm hover:bg-red-50 hover:border-red-100 hover:text-red-500 transition-all duration-300 flex items-center justify-center gap-3 active:scale-[0.98]"
                     >
                         <span className="material-icons-round text-lg">logout</span>
                         退出登录 (Sign Out)
                     </button>
                 </div>
             </main>
-
-            <nav className="bg-white border-t border-slate-100 px-6 py-4 flex justify-between items-center safe-bottom">
-                <button onClick={() => navigate('/admin')} className="flex flex-col items-center gap-1 text-slate-400">
-                    <span className="material-icons-round">dashboard</span>
-                    <span className="text-[10px] font-medium">控制台</span>
-                </button>
-                <button onClick={() => navigate('/admin/finance')} className="flex flex-col items-center gap-1 text-slate-400">
-                    <span className="material-icons-round">analytics</span>
-                    <span className="text-[10px] font-medium">报表</span>
-                </button>
-                <button onClick={() => navigate('/admin/notifications')} className="flex flex-col items-center gap-1 text-slate-400">
-                    <span className="material-icons-round">notifications</span>
-                    <span className="text-[10px] font-medium">消息</span>
-                </button>
-                <button className="flex flex-col items-center gap-1 text-primary">
-                    <span className="material-icons-round">person</span>
-                    <span className="text-[10px] font-bold">我的</span>
-                </button>
-            </nav>
         </div>
     );
 };

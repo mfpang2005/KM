@@ -122,16 +122,16 @@ const FinancialSummary: React.FC = () => {
     return (
         <div className="flex flex-col min-h-full pb-32 bg-background-beige">
             
-            {/* 1. Header Section */}
-            <div className="pt-14 pb-8 px-6 no-print">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
-                    <div>
-                        <p className="text-[9px] font-black text-primary/40 tracking-[0.3em] uppercase mb-1">Unified Financials</p>
-                        <h1 className="text-3xl font-black text-primary tracking-tight">Account Viewer</h1>
+            {/* 1. Header Section - Compact & Centered */}
+            <div className="pt-10 pb-6 px-6 no-print">
+                <div className="flex flex-col items-center gap-6 mb-6">
+                    <div className="text-center w-full">
+                        <h1 className="text-xl font-black text-primary tracking-tight">查看账目</h1>
+                        <p className="text-[10px] font-black text-primary-light/40 uppercase tracking-[0.3em] mt-1">Account Viewer</p>
                     </div>
                     
-                    {/* Range Selector & Date Picker Group */}
-                    <div className="flex items-center gap-2 self-start flex-nowrap">
+                    {/* Range Selector & Date Picker Group - Balanced Alignment */}
+                    <div className="flex items-center justify-between w-full flex-nowrap gap-4">
                         <div className="flex bg-white/60 backdrop-blur-xl p-1 rounded-2xl border border-primary/5 shadow-xl">
                             {(['today', 'month', 'all'] as const).map((r) => (
                                 <button

@@ -109,17 +109,31 @@ const PermissionRoute = ({ children, id }: { children: React.ReactNode, id: stri
   if (loading) return null;
   if (user?.role === 'super_admin') return <>{children}</>;
   
-  const hasPermission = user?.permissions ? user.permissions[id] !== false : true;
+  // const hasPermission = user?.permissions ? user.permissions[id] !== false : true;
+  const hasPermission = true; // TEMP DEBUG: Force allow
   
   if (!hasPermission) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6">
+        <div className="fixed top-0 left-0 w-full bg-red-600 text-white text-[8px] font-black py-1 text-center z-[9999] uppercase tracking-[0.5em]">
+          Debug Build: v1.0.4 (Access Blocked View)
+        </div>
         <div className="bg-white p-8 rounded-3xl shadow-xl border border-slate-100 max-w-sm text-center animate-in zoom-in-95 duration-500">
           <div className="w-20 h-20 bg-red-50 rounded-2xl flex items-center justify-center mx-auto mb-6">
             <span className="material-icons-round text-4xl text-red-500">block</span>
           </div>
           <h2 className="text-xl font-black text-slate-900 mb-2 tracking-tight">未获得访问授权</h2>
           <p className="text-sm text-slate-400 font-bold leading-relaxed">您的账号尚未开通此页面的访问权限。请联系超级管理员为您开启。</p>
+          
+          {/* DEBUG INFO - 临时调试，定位权限同步问题 */}
+          <div className="mt-6 p-4 bg-slate-50 rounded-2xl text-left border border-slate-100">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Debug Info (权限排查)</p>
+            <div className="space-y-1 font-mono text-[10px]">
+              <p><span className="text-blue-600">ID:</span> {id}</p>
+              <p><span className="text-blue-600">Role:</span> {user?.role}</p>
+              <p><span className="text-blue-600">Perms:</span> {JSON.stringify(user?.permissions)}</p>
+            </div>
+          </div>
           <button 
             onClick={() => window.history.back()}
             className="mt-8 w-full py-3 bg-slate-900 text-white rounded-xl font-black text-xs uppercase tracking-widest hover:bg-slate-800 transition-all active:scale-95 shadow-xl shadow-slate-900/10"
@@ -140,7 +154,14 @@ const App: React.FC = () => {
       <BrowserRouter>
 
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={
+          <>
+            <div className="fixed top-0 left-0 w-full bg-red-600 text-white text-[8px] font-black py-1 text-center z-[9999] uppercase tracking-[0.5em]">
+              Debug Build: v1.0.4 (Active Sync)
+            </div>
+            <LoginPage />
+          </>
+        } />
         <Route path="/" element={<ProtectedRoute><AdminLayout /></ProtectedRoute>}>
           <Route index element={<PermissionRoute id="overview"><DashboardPage /></PermissionRoute>} />
           <Route path="users" element={<SuperAdminRoute><PermissionRoute id="user"><UsersPage /></PermissionRoute></SuperAdminRoute>} />

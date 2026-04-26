@@ -54,15 +54,17 @@ async def get_current_user(
                 )
                 if db_response.data and db_response.data.get("role"):
                     role = db_response.data.get("role")
+                else:
+                    logger.warning("No role found in DB for user %s, using metadata role: %s", user_id, role)
             except Exception as e:
-                logger.debug("DB role fetch skipped or failed for %s: %s", user_id, str(e))
+                logger.warning("DB role fetch failed for %s: %s. Using metadata role: %s", user_id, str(e), role)
 
             return {"id": user_id, "role": role}
         except HTTPException:
             raise
         except Exception as e:
-            logger.error("Token verification failed: %s", str(e))
-            raise HTTPException(status_code=401, detail="Token verification failed")
+            logger.error("Token verification failed for user: %s", str(e), exc_info=True)
+            raise HTTPException(status_code=401, detail=f"Token verification failed: {str(e)}")
 
     raise HTTPException(
         status_code=401,

@@ -298,8 +298,8 @@ export const CreateOrderPage: React.FC = () => {
 
     /** 提交后台下单 */
     const handleSubmit = async () => {
-        if (!customerName.trim() || !customerPhone.trim() || !address.trim() || !eventDate.trim() || !eventTime.trim()) {
-            alert('请填写完整客户姓名、电话、地址、活动日期和时间');
+        if (!customerName.trim() || !customerPhone.trim() || !address.trim()) {
+            alert('请填写完整客户姓名、电话、地址');
             return;
         }
         if (cart.length === 0) {
@@ -326,7 +326,9 @@ export const CreateOrderPage: React.FC = () => {
                     note: i.note || undefined,
                 })),
                 status: editingOrderId ? orderStatus : OrderStatus.PENDING,
-                dueTime: new Date(`${eventDate.trim()}T${eventTime.trim()}:00`).toISOString(),
+                dueTime: (eventDate.trim() && eventTime.trim()) 
+                    ? new Date(`${eventDate.trim()}T${eventTime.trim()}:00`).toISOString()
+                    : new Date().toISOString(), // Default to now if not provided
                 amount: totalAmount,
                 type: address.trim() ? 'delivery' : 'takeaway',
                 paymentMethod: PaymentMethod.CASH, // Default to cash
@@ -380,7 +382,7 @@ export const CreateOrderPage: React.FC = () => {
 
     // ─── 订单确认成功界面 —— 全部明细 + 可打印收据─────────────────────
     if (confirmedOrder) {
-        const activeEquip = Object.entries(confirmedOrder.equipments).filter(([, qty]) => qty > 0);
+        const activeEquip = Object.entries(confirmedOrder.equipments).filter(([, qty]) => (qty as number) > 0);
         const paymentLabel = confirmedOrder.payment || '待财务确认';
 
         return (
@@ -578,10 +580,10 @@ export const CreateOrderPage: React.FC = () => {
                             </div>
                         </div>
 
-                        {/* 设备 / 物资 */}
+                        {/* 包含设备及物品 */}
                         {activeEquip.length > 0 && (
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">设备 / 物资</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">包含设备及物品</p>
                                 <div className="flex flex-wrap gap-2">
                                     {activeEquip.map(([name, qty]) => (
                                         <span key={name} className="px-3 py-1.5 bg-blue-50 border border-blue-100 text-blue-700 rounded-xl text-xs font-black">
@@ -774,7 +776,7 @@ export const CreateOrderPage: React.FC = () => {
                         <div className="p-5 border-b border-slate-50">
                             <h3 className="font-black text-slate-700 text-sm flex items-center gap-2">
                                 <span className="material-icons-round text-[18px] text-blue-500">handyman</span>
-                                包含设备 / 物资
+                                包含设备及物品
                             </h3>
                         </div>
                         <div className="p-4 grid grid-cols-2 lg:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto no-scrollbar">
@@ -1095,72 +1097,65 @@ export const CreateOrderPage: React.FC = () => {
                                 <div>
                                     <label className="block text-xs font-black text-slate-400 mb-1.5 flex items-center gap-1">
                                         <span className="material-icons-round text-[13px] text-violet-500">event</span>
-                                        活动日期 *
+                                        活动日期
                                     </label>
                                     <input
                                         type="date"
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700 font-bold"
                                         value={eventDate}
                                         onChange={e => setEventDate(e.target.value)}
-                                        required
                                     />
                                 </div>
                                 <div>
                                     <label className="block text-xs font-black text-slate-400 mb-1.5 flex items-center gap-1">
                                         <span className="material-icons-round text-[13px] text-violet-500">schedule</span>
-                                        活动时间 *
+                                        活动时间
                                     </label>
                                     <input
                                         type="time"
                                         className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/20 font-medium text-slate-700 font-bold"
                                         value={eventTime}
                                         onChange={e => setEventTime(e.target.value)}
-                                        required
                                     />
                                 </div>
                             </div>
 
-                            {/* 计费模块 (Billing Module) - ENLARGED */}
-                            <div className="bg-slate-50/50 p-6 rounded-[2rem] border border-slate-100 space-y-6">
-                                <h4 className="text-xs font-black text-slate-500 uppercase tracking-widest flex items-center gap-2 mb-2">
-                                    <span className="material-icons-round text-base">payments</span>
+                            {/* 计费模块 (Billing Module) - Redesigned to match App Style */}
+                            <div className="bg-slate-50/50 p-5 rounded-[2rem] border border-slate-100 space-y-4">
+                                <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2 mb-1">
+                                    <span className="material-icons-round text-sm">payments</span>
                                     计费详情 (BILLING DETAILS)
                                 </h4>
-                                <div className="grid grid-cols-3 gap-4 items-end">
-                                    <div className="space-y-2">
-                                        <p className="text-[11px] font-black text-slate-400 uppercase ml-1">单位 (UNIT)</p>
-                                        <div className="relative">
-                                            <select
-                                                className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-lg font-black text-slate-800 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm appearance-none pr-10"
-                                                value={billingUnit}
-                                                onChange={(e) => {
-                                                    const unit = e.target.value as 'PAX' | 'SET' | 'PACKET';
-                                                    setBillingUnit(unit);
-                                                    if (unit === 'PAX' && billingQuantity > 0) {
-                                                        const autoQty = billingQuantity * 2;
-                                                        setEquipments(prev => ({
-                                                            ...prev,
-                                                            '盘子': autoQty,
-                                                            '汤匙': autoQty,
-                                                            '叉子': autoQty,
-                                                            '杯子': autoQty
-                                                        }));
-                                                    }
-                                                }}
-                                            >
-                                                <option value="PAX">PAX</option>
-                                                <option value="SET">SET</option>
-                                                <option value="PACKET">PACKET</option>
-                                            </select>
-                                            <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">expand_more</span>
-                                        </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* 第一行：单位 & 数量 */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">计费单位</label>
+                                        <select
+                                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all appearance-none"
+                                            value={billingUnit}
+                                            onChange={(e) => {
+                                                const unit = e.target.value as 'PAX' | 'SET' | 'PACKET';
+                                                setBillingUnit(unit);
+                                                if (unit === 'PAX' && billingQuantity > 0) {
+                                                    const autoQty = billingQuantity * 2;
+                                                    setEquipments(prev => ({
+                                                        ...prev,
+                                                        '盘子': autoQty, '汤匙': autoQty, '叉子': autoQty, '杯子': autoQty
+                                                    }));
+                                                }
+                                            }}
+                                        >
+                                            <option value="PAX">PAX</option>
+                                            <option value="SET">SET</option>
+                                            <option value="PACKET">PACKET</option>
+                                        </select>
                                     </div>
-                                    <div className="space-y-2">
-                                        <p className="text-[11px] font-black text-slate-400 uppercase ml-1">数量 (QTY)</p>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">数量</label>
                                         <input
                                             type="number"
-                                            placeholder="0"
-                                            className="w-full p-4 bg-white border border-slate-200 rounded-2xl text-lg font-black text-indigo-600 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
+                                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all"
                                             value={billingQuantity || ''}
                                             onChange={(e) => {
                                                 const qty = parseFloat(e.target.value) || 0;
@@ -1169,62 +1164,53 @@ export const CreateOrderPage: React.FC = () => {
                                                     const autoQty = qty * 2;
                                                     setEquipments(prev => ({
                                                         ...prev,
-                                                        '盘子': autoQty,
-                                                        '汤匙': autoQty,
-                                                        '叉子': autoQty,
-                                                        '杯子': autoQty
+                                                        '盘子': autoQty, '汤匙': autoQty, '叉子': autoQty, '杯子': autoQty
                                                     }));
                                                 }
                                             }}
                                         />
                                     </div>
-                                    <div className="space-y-2">
-                                        <p className="text-[11px] font-black text-slate-400 uppercase ml-1">单价 (RM)</p>
-                                        <div className="relative">
-                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-sm font-black text-slate-400">RM</span>
-                                            <input
-                                                type="number"
-                                                step="0.01"
-                                                placeholder="0.00"
-                                                className="w-full pl-11 pr-4 py-4 bg-white border border-slate-200 rounded-2xl text-lg font-black text-slate-700 focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all shadow-sm"
-                                                value={billingPricePerUnit || ''}
-                                                onChange={(e) => setBillingPricePerUnit(parseFloat(e.target.value) || 0)}
-                                            />
-                                        </div>
-                                    </div>
-                                    <div className="col-span-3 mt-2">
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1 mb-2">小计 (Subtotal)</p>
-                                        <div className="w-full p-5 bg-slate-100/50 border border-slate-100 rounded-[1.5rem] text-xl font-black text-slate-900 font-mono flex items-center gap-2">
-                                            <span className="text-sm text-slate-400">RM</span>
-                                            {(billingQuantity * billingPricePerUnit).toFixed(2)}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
 
-                            <div>
-                                <label htmlFor="deposit-amount" className="block text-xs font-black text-slate-400 mb-1.5">定金 Deposit (RM)</label>
-                                <div className="relative">
-                                    <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">payments</span>
-                                    <input
-                                        id="deposit-amount"
-                                        name="deposit-amount"
-                                        type="number"
-                                        step="0.01"
-                                        min="0"
-                                        className="w-full pl-9 pr-4 py-2.5 bg-indigo-50/30 border border-indigo-100 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 font-black text-indigo-600"
-                                        placeholder="0.00"
-                                        value={paymentReceived || ''}
-                                        onChange={e => setPaymentReceived(parseFloat(e.target.value) || 0)}
-                                    />
+                                    {/* 第二行：单价 & 总额 */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1">单价 (RM)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-full px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-black text-slate-800 outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all"
+                                            value={billingPricePerUnit || ''}
+                                            onChange={(e) => setBillingPricePerUnit(parseFloat(e.target.value) || 0)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-red-700 uppercase ml-1">总额 (SUB)</label>
+                                        <div className="w-full px-4 py-2.5 bg-indigo-50 border border-indigo-100 rounded-xl text-sm font-black text-red-700">
+                                            RM {(billingQuantity * billingPricePerUnit).toFixed(2)}
+                                        </div>
+                                    </div>
+
+                                    {/* 第三行：定金 & 待收 */}
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-emerald-600 uppercase ml-1">定金 (DEP)</label>
+                                        <input
+                                            type="number"
+                                            step="0.01"
+                                            className="w-full px-4 py-2.5 bg-emerald-50/50 border border-emerald-100 rounded-xl text-sm font-black text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500/10 transition-all"
+                                            value={paymentReceived || ''}
+                                            onChange={e => setPaymentReceived(parseFloat(e.target.value) || 0)}
+                                        />
+                                    </div>
+                                    <div className="space-y-1.5">
+                                        <label className="text-[9px] font-black text-red-500 uppercase ml-1">待收 (DUE)</label>
+                                        <div className={`w-full px-4 py-2.5 border rounded-xl text-sm font-black transition-all ${totalAmount - paymentReceived > 0 ? 'bg-slate-100 border-slate-200 text-slate-400' : 'bg-slate-50 border-slate-100 text-slate-300'}`}>
+                                            RM {(totalAmount - paymentReceived).toFixed(2)}
+                                        </div>
+                                    </div>
                                 </div>
-                                <p className="text-[10px] text-slate-400 mt-1 font-bold italic">* 待收余款 Balance Due: RM {(totalAmount - paymentReceived).toFixed(2)}</p>
                             </div>
 
                         </div>
                     </div>
-
-
 
                     {/* 提交按钮 */}
                     <button

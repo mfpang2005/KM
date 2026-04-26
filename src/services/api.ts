@@ -161,8 +161,14 @@ export const SuperAdminService = {
         return response.data;
     },
 
-    /** 修改用户角色、姓名或状态 */
-    updateUser: async (userId: string, update: { role?: string; name?: string; employee_id?: string; is_disabled?: boolean }) => {
+    /** 修改用户角色、姓名、工号、状态或权限 */
+    updateUser: async (userId: string, update: { 
+        role?: string; 
+        name?: string; 
+        employee_id?: string; 
+        is_disabled?: boolean;
+        permissions?: Record<string, boolean>;
+    }) => {
         const response = await api.patch(`/super-admin/users/${userId}`, update);
         return response.data;
     },
@@ -282,5 +288,31 @@ export const CustomerService = {
     delete: async (id: string): Promise<void> => {
         await api.delete(`/customers/${id}`);
     },
+};
+
+export const InventoryService = {
+    getAll: async (): Promise<InventoryItem[]> => {
+        const response = await api.get('/inventory/items');
+        return response.data;
+    },
+    create: async (item: Partial<InventoryItem>): Promise<InventoryItem> => {
+        const response = await api.post('/inventory/items', item);
+        return response.data;
+    },
+    update: async (id: string, item: Partial<InventoryItem>): Promise<InventoryItem> => {
+        const response = await api.put(`/inventory/items/${id}`, item);
+        return response.data;
+    },
+    delete: async (id: string): Promise<void> => {
+        await api.delete(`/inventory/items/${id}`);
+    },
+    adjustStock: async (adjustment: { item_id: string; type: string; quantity: number; remark?: string }): Promise<any> => {
+        const response = await api.post('/inventory/adjust', adjustment);
+        return response.data;
+    },
+    getLogs: async (itemId?: string): Promise<InventoryLog[]> => {
+        const response = await api.get('/inventory/logs', { params: { item_id: itemId, select: '*,inventory_items(name)' } });
+        return response.data;
+    }
 };
 

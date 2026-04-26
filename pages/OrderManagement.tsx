@@ -110,7 +110,12 @@ const OrderManagement: React.FC = () => {
     const [scanError, setScanError] = useState(false);
 
     // Filter & Pagination state
-    const [dateFilter, setDateFilter] = useState<'all' | 'today'>('all'); 
+    const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'month' | 'custom'>('all'); 
+    const [showCalendar, setShowCalendar] = useState(false);
+    const [customRange, setCustomRange] = useState<{start: string, end: string}>({
+        start: new Date().toISOString().slice(0, 10),
+        end: new Date().toISOString().slice(0, 10)
+    });
     const [currentPage, setCurrentPage] = useState(1);
     const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
     const pageSize = 10;
@@ -144,13 +149,29 @@ const OrderManagement: React.FC = () => {
                 order.id.toLowerCase().includes(searchQuery.toLowerCase());
 
             let matchesDate = true;
+            const orderDateValue = order.dueTime || (order as any).created_at;
+            
             if (dateFilter === 'today') {
                 const today = new Date().toDateString();
-                // 优先检查活动时间 dueTime，其次是创建时间
-                const orderDateValue = order.dueTime || (order as any).created_at;
                 if (orderDateValue) {
                     const orderDate = new Date(orderDateValue).toDateString();
                     matchesDate = today === orderDate;
+                } else {
+                    matchesDate = false;
+                }
+            } else if (dateFilter === 'month') {
+                const now = new Date();
+                const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                if (orderDateValue) {
+                    const orderDate = new Date(orderDateValue);
+                    matchesDate = orderDate >= startOfMonth && orderDate <= now;
+                } else {
+                    matchesDate = false;
+                }
+            } else if (dateFilter === 'custom') {
+                if (orderDateValue) {
+                    const orderDate = new Date(orderDateValue).toISOString().slice(0, 10);
+                    matchesDate = orderDate >= customRange.start && orderDate <= customRange.end;
                 } else {
                     matchesDate = false;
                 }
@@ -631,45 +652,112 @@ const OrderManagement: React.FC = () => {
             )}
 
 
-            {/* Header */}
-            <header className="pt-12 pb-6 px-6 bg-white flex flex-col gap-6 sticky top-0 z-30 no-print shadow-sm">
-                <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <button onClick={() => navigate('/admin')} className="w-10 h-10 flex items-center justify-center bg-slate-50 text-slate-400 rounded-full active:scale-90 transition-transform">
-                            <span className="material-icons-round">arrow_back</span>
-                        </button>
-                        <div>
-                            <h1 className="text-xl font-black text-slate-900 tracking-tight">订单管理</h1>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Order Management Flow</p>
+            {/* Header - Compact & Centered */}
+            <header className="pt-8 pb-4 px-6 bg-white flex flex-col gap-4 sticky top-0 z-30 no-print shadow-sm">
+                <div className="flex flex-col items-center text-center">
+                    <h1 className="text-xl font-black text-slate-900 tracking-tight">订单管理</h1>
+                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">Order Management Flow</p>
+                </div>
+                
+                <div className="flex flex-col gap-4 items-center">
+                    <div className="flex items-center justify-center gap-3">
+                        {/* Range Selector - Premium Style */}
+                        <div className="flex bg-slate-100/80 backdrop-blur-md p-1 rounded-2xl border border-slate-200/50 shadow-sm">
+                            {(['today', 'month', 'all'] as const).map((r) => (
+                                <button
+                                    key={r}
+                                    onClick={() => setDateFilter(r)}
+                                    className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all duration-300 ${dateFilter === r ? 'bg-white text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-600'}`}
+                                >
+                                    {r === 'today' ? '今日' : r === 'month' ? '本月' : '全部'}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Calendar Picker - Centered & Premium */}
+                        <div className="relative">
+                            <div 
+                                onClick={() => setShowCalendar(!showCalendar)}
+                                className={`flex items-center justify-center w-10 h-10 rounded-2xl border transition-all duration-300 shadow-sm cursor-pointer ${dateFilter === 'custom' ? 'bg-primary/5 border-primary text-primary shadow-primary/10' : 'bg-slate-100/80 backdrop-blur-md border-slate-200/50 text-slate-400'}`}
+                            >
+                                <span className="material-icons-round text-lg">calendar_today</span>
+                            </div>
+
+                            {showCalendar && (
+                                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300 no-print">
+                                    <div 
+                                        className="bg-white rounded-[32px] shadow-2xl border border-slate-100 w-full max-w-[320px] p-6 animate-in zoom-in-95 duration-300"
+                                        onClick={(e) => e.stopPropagation()}
+                                    >
+                                        <div className="space-y-5">
+                                            <div className="flex items-center justify-between px-1">
+                                                <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em]">请选择查询日期</h4>
+                                                <button 
+                                                    onClick={() => setShowCalendar(false)}
+                                                    className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 active:scale-90 transition-transform"
+                                                >
+                                                    <span className="material-icons-round text-[18px]">close</span>
+                                                </button>
+                                            </div>
+                                            
+                                            <div className="space-y-4">
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">开始日期</label>
+                                                    <input 
+                                                        type="date" 
+                                                        value={customRange.start}
+                                                        onChange={(e) => {
+                                                            setCustomRange({...customRange, start: e.target.value});
+                                                            setDateFilter('custom');
+                                                        }}
+                                                        className="w-full px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all"
+                                                    />
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">结束日期</label>
+                                                    <input 
+                                                        type="date" 
+                                                        value={customRange.end}
+                                                        onChange={(e) => {
+                                                            setCustomRange({...customRange, end: e.target.value});
+                                                            setDateFilter('custom');
+                                                        }}
+                                                        className="w-full px-4 py-3.5 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold outline-none focus:ring-4 focus:ring-primary/10 transition-all"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                                <button 
+                                                    onClick={() => setShowCalendar(false)}
+                                                    className="py-3.5 bg-slate-100 text-slate-600 rounded-2xl text-[11px] font-black uppercase tracking-widest active:scale-95 transition-all"
+                                                >
+                                                    取消
+                                                </button>
+                                                <button 
+                                                    onClick={() => setShowCalendar(false)}
+                                                    className="py-3.5 bg-primary text-white rounded-2xl text-[11px] font-black uppercase tracking-widest shadow-lg shadow-primary/30 active:scale-95 transition-all"
+                                                >
+                                                    应用
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
-                    
-                    {/* Date Filters (Aligned with Backend logic) */}
-                    <div className="flex bg-slate-100 p-1 rounded-2xl shrink-0">
-                        <button 
-                            onClick={() => setDateFilter('today')}
-                            className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${dateFilter === 'today' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-                        >
-                            今日
-                        </button>
-                        <button 
-                            onClick={() => setDateFilter('all')}
-                            className={`px-4 py-2 rounded-xl text-[11px] font-black transition-all ${dateFilter === 'all' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
-                        >
-                            全部
-                        </button>
-                    </div>
-                </div>
 
-                <div className="relative group">
-                    <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-primary transition-colors">search</span>
-                    <input
-                        type="text"
-                        className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 outline-none transition-all placeholder:text-slate-200"
-                        placeholder="搜索客户姓名、电话或订单编号..."
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                    />
+                    <div className="relative group">
+                        <span className="material-icons-round absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-primary transition-colors">search</span>
+                        <input
+                            type="text"
+                            className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold focus:bg-white focus:ring-2 focus:ring-primary/10 outline-none transition-all placeholder:text-slate-200"
+                            placeholder="搜索客户姓名、电话或订单编号..."
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                        />
+                    </div>
                 </div>
             </header>
 

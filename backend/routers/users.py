@@ -1,8 +1,11 @@
-from fastapi import APIRouter, HTTPException
+import logging
+from fastapi import APIRouter, HTTPException, Depends
 from typing import List
 from database import supabase
 from models import User, UserRole
 from fastapi.concurrency import run_in_threadpool
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/users",
@@ -34,16 +37,25 @@ async def login(email: str, role: UserRole):
     return response.data[0]
 
 
+from middleware.auth import get_current_user
+
 @router.get("/me/profile", response_model=User)
-async def get_current_user_profile(user_id: str):
+async def get_current_user_profile(
+    current_user: dict = Depends(get_current_user)
+):
     """
-    获取当前用户资料 (根据 ID)，模拟真实环境中的 /me
-    前端在拿到 session 里的 uid 后传过来查
+    获取当前用户资料，从 JWT Token 中自动提取用户 ID。
+    后端使用 service_role key 绕过 RLS 限制。
     """
+    user_id = current_user.get("id")
     response = await run_in_threadpool(supabase.table("users").select("*").eq("id", user_id).execute)
     if not response.data:
-        raise HTTPException(status_code=404, detail="User not found")
-    return response.data[0]
+        raise HTTPException(status_code=404, detail="User not found in database")
+    
+    user_data = response.data[0]
+    logger.info(f"[Auth] Profile fetch for {user_id}: Role={user_data.get('role')}, Permissions={user_data.get('permissions')}")
+    
+    return user_data
 
 
 from services.audit import record_audit, AuditActions

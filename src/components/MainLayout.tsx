@@ -25,6 +25,49 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
         return false;
     };
 
+    // --- Walkie Talkie Notification Logic ---
+    const [hasUnreadWalkie, setHasUnreadWalkie] = React.useState(false);
+    const [currentUserId, setCurrentUserId] = React.useState<string | null>(null);
+
+    // Get current user ID for filtering
+    React.useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            if (session?.user) setCurrentUserId(session.user.id);
+        });
+    }, []);
+
+    // Clear badge when entering walkie talkie page
+    React.useEffect(() => {
+        if (location.pathname.includes('walkie')) {
+            setHasUnreadWalkie(false);
+        }
+    }, [location.pathname]);
+
+    // Listen for new messages (Both Text & Audio)
+    React.useEffect(() => {
+        const channel = supabase
+            .channel('global-walkie-notif-v2')
+            .on('postgres_changes', { 
+                event: 'INSERT', 
+                schema: 'public', 
+                table: 'messages' 
+            }, (payload) => {
+                const msg = payload.new;
+                // Show badge if:
+                // 1. Not on walkie page
+                // 2. Not my own message
+                if (!location.pathname.includes('walkie') && msg.sender_id !== currentUserId) {
+                    setHasUnreadWalkie(true);
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [location.pathname, currentUserId]);
+    // -----------------------------------------
+
     return (
         <div className="flex h-screen w-full bg-background-beige overflow-hidden">
             {/* Desktop Sidebar - Visible on lg screens */}
@@ -49,9 +92,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                                 : 'text-primary-light/60 hover:bg-primary/5 hover:text-primary'
                                 }`}
                         >
-                            <span className={`material-icons-round text-xl transition-transform group-hover:scale-110 ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 group-hover:text-primary-light'
-                                }`}>
-                                {item.icon}
+                            <span className={`material-icons-round text-xl transition-transform group-hover:scale-110 relative ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 group-hover:text-primary-light'
+                                 }`}>
+                                 {item.icon}
+                                 {item.path.includes('walkie') && hasUnreadWalkie && (
+                                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 border-2 border-white rounded-full animate-pulse shadow-sm"></span>
+                                 )}
                             </span>
                             <span className="text-sm font-medium">{item.label}</span>
                             {isActive(item.path) && (
@@ -67,10 +113,10 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                             await supabase.auth.signOut();
                             navigate('/login');
                         }}
-                        className="flex items-center gap-3 w-full px-4 py-3 text-primary-light/60 hover:text-primary hover:bg-primary/5 rounded-xl transition-all duration-200"
+                        className="flex items-center justify-center gap-3 w-full px-4 py-3.5 bg-white border border-primary/10 text-primary-light/60 hover:text-red-500 hover:bg-red-50 hover:border-red-100 rounded-2xl transition-all duration-300 shadow-sm active:scale-95"
                     >
-                        <span className="material-icons-round">logout</span>
-                        <span className="text-sm font-bold">退出登录</span>
+                        <span className="material-icons-round text-lg">logout</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">退出登录</span>
                     </button>
                 </div>
             </aside>
@@ -94,9 +140,12 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                             className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 hover:text-primary-light'
                                 }`}
                         >
-                            <span className={`material-icons-round text-2xl transition-transform active:scale-95 ${isActive(item.path) ? '' : 'opacity-70'
-                                }`}>
+                            <span className={`material-icons-round text-2xl transition-transform active:scale-95 relative ${isActive(item.path) ? '' : 'opacity-70'
+                                 }`}>
                                 {item.icon}
+                                {item.path.includes('walkie') && hasUnreadWalkie && (
+                                    <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-bounce shadow-sm"></span>
+                                )}
                             </span>
                             <span className="text-[10px] font-medium">{item.label}</span>
                         </button>
@@ -156,8 +205,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                                         }}
                                         className="flex flex-col items-center gap-3 transition-all active:scale-90 group"
                                     >
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 ${isActive(item.path) ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-primary/5 text-primary-light hover:bg-primary/10'}`}>
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all duration-300 relative ${isActive(item.path) ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-primary/5 text-primary-light hover:bg-primary/10'}`}>
                                             <span className="material-icons-round text-2xl">{item.icon}</span>
+                                            {item.path.includes('walkie') && hasUnreadWalkie && (
+                                                <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 border-[3px] border-white rounded-full animate-pulse shadow-md"></span>
+                                            )}
                                         </div>
                                         <span className={`text-[10px] font-black uppercase tracking-tight text-center leading-tight ${isActive(item.path) ? 'text-primary' : 'text-primary-light/70'}`}>
                                             {item.label.split(' ')[0]}

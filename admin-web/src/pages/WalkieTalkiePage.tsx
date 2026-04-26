@@ -3,7 +3,6 @@ import { supabase } from '../lib/supabase';
 import { useAuth } from '../hooks/useAuth';
 import { useGoEasy } from '../contexts/GoEasyContext';
 import AudioPlayer from '../components/AudioPlayer';
-import { NotificationBell } from '../components/NotificationBell';
 import { api } from '../services/api';
 
 const CHANNEL = 'KIM_LONG_COMUNITY';
@@ -593,51 +592,86 @@ export const WalkieTalkiePage: React.FC = () => {
                             <span className="material-icons-round text-5xl">chat_bubble_outline</span>
                             <p className="text-xs font-bold uppercase tracking-widest">No private messages</p>
                         </div>
-                    ) : messages.map((msg) => {
+                    ) : messages.map((msg, index) => {
                         if (!msg) return null;
+                        
+                        // --- Date Separator Logic ---
+                        const msgDate = new Date(msg.timestamp);
+                        const prevMsg = index > 0 ? messages[index - 1] : null;
+                        const prevDate = prevMsg ? new Date(prevMsg.timestamp) : null;
+                        
+                        const isNewDay = !prevDate || 
+                            msgDate.getFullYear() !== prevDate.getFullYear() ||
+                            msgDate.getMonth() !== prevDate.getMonth() ||
+                            msgDate.getDate() !== prevDate.getDate();
+
+                        const getDateLabel = (date: Date) => {
+                            const now = new Date();
+                            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            const yesterday = new Date(today);
+                            yesterday.setDate(yesterday.getDate() - 1);
+                            
+                            const d = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+                            
+                            if (d.getTime() === today.getTime()) return '今天 TODAY';
+                            if (d.getTime() === yesterday.getTime()) return '昨天 YESTERDAY';
+                            return d.toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' });
+                        };
+                        // ----------------------------
+
                         const cfg = ROLE_CONFIG[msg.senderRole] || ROLE_CONFIG.guest;
                         const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                        
                         return (
-                            <div key={msg.id} className={`flex gap-3 ${msg.isMine ? 'flex-row-reverse' : 'flex-row'}`}>
-                                <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm ${cfg.bubble}`}>
-                                    <span className="material-icons-round text-white text-[16px]">{cfg.icon}</span>
-                                </div>
-                                <div className={`max-w-[75%] ${msg.isMine ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-                                    <div className="flex items-center gap-2">
-                                        {!msg.isMine && <span className="text-[11px] font-black text-slate-600">{msg.senderLabel}</span>}
-                                        <span className="text-[9px] text-slate-300 font-bold">{time}</span>
+                            <React.Fragment key={msg.id}>
+                                {isNewDay && (
+                                    <div className="flex justify-center my-6">
+                                        <span className="px-4 py-1 bg-slate-100/80 backdrop-blur-sm text-[10px] font-black text-slate-400 rounded-full uppercase tracking-widest border border-slate-200/50 shadow-sm">
+                                            {getDateLabel(msgDate)}
+                                        </span>
                                     </div>
-                                    <div className="group relative">
-                                        {msg.isRecalled ? (
-                                            <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-400 rounded-2xl text-[11px] font-bold border border-slate-100 italic">
-                                                <span className="material-icons-round text-sm">remove_circle_outline</span>
-                                                消息已撤回
-                                            </div>
-                                        ) : (msg.type === 'audio' || msg.type === 'voice') ? (
-                                            <AudioPlayer
-                                                audioUrl={msg.content}
-                                                initialDuration={msg.duration}
-                                                autoPlay={audioUnlocked && !msg.isMine && msg.id === latestIncomingId}
-                                            />
-                                        ) : (
-                                            <div className={`px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm transition-all ${msg.isMine ? 'bg-primary text-white rounded-tr-none border border-primary/10' : 'bg-background-beige/40 text-primary rounded-tl-none border border-primary/5'}`}>
-                                                {msg.content}
-                                            </div>
-                                        )}
-                                        
-                                        {/* 撤回按钮：仅限自己发送的消息且未被撤回时显示 */}
-                                        {msg.isMine && !msg.isRecalled && (
-                                            <button
-                                                onClick={() => handleRecall(msg.id)}
-                                                className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white hover:bg-red-50 text-slate-300 hover:text-red-500 p-1.5 rounded-full border border-slate-100 shadow-sm"
-                                                title="撤回消息"
-                                            >
-                                                <span className="material-icons-round text-sm">undo</span>
-                                            </button>
-                                        )}
+                                )}
+                                <div className={`flex gap-3 ${msg.isMine ? 'flex-row-reverse' : 'flex-row'}`}>
+                                    <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 shadow-sm ${cfg.bubble}`}>
+                                        <span className="material-icons-round text-white text-[16px]">{cfg.icon}</span>
+                                    </div>
+                                    <div className={`max-w-[75%] ${msg.isMine ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
+                                        <div className="flex items-center gap-2">
+                                            {!msg.isMine && <span className="text-[11px] font-black text-slate-600">{msg.senderLabel}</span>}
+                                            <span className="text-[9px] text-slate-300 font-bold">{time}</span>
+                                        </div>
+                                        <div className="group relative">
+                                            {msg.isRecalled ? (
+                                                <div className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-400 rounded-2xl text-[11px] font-bold border border-slate-100 italic">
+                                                    <span className="material-icons-round text-sm">remove_circle_outline</span>
+                                                    消息已撤回
+                                                </div>
+                                            ) : (msg.type === 'audio' || msg.type === 'voice') ? (
+                                                <AudioPlayer
+                                                    audioUrl={msg.content}
+                                                    initialDuration={msg.duration}
+                                                    autoPlay={audioUnlocked && !msg.isMine && msg.id === latestIncomingId}
+                                                />
+                                            ) : (
+                                                <div className={`px-4 py-2.5 rounded-2xl text-sm font-bold shadow-sm transition-all ${msg.isMine ? 'bg-primary text-white rounded-tr-none border border-primary/10' : 'bg-background-beige/40 text-primary rounded-tl-none border border-primary/5'}`}>
+                                                    {msg.content}
+                                                </div>
+                                            )}
+                                            
+                                            {/* 撤回按钮：仅限自己发送的消息且未被撤回时显示 */}
+                                            {msg.isMine && !msg.isRecalled && (
+                                                <button
+                                                    onClick={() => handleRecall(msg.id)}
+                                                    className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity bg-white hover:bg-red-50 text-slate-300 hover:text-red-500 p-1.5 rounded-full border border-slate-100 shadow-sm"
+                                                    title="撤回消息"
+                                                >
+                                                    <span className="material-icons-round text-sm">undo</span>
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            </React.Fragment>
                         );
                     })}
                     <div ref={chatBottomRef} />

@@ -106,6 +106,41 @@ const AdminLayout: React.FC = () => {
         return true;
     });
 
+    // --- Walkie Talkie Notification Logic ---
+    const [hasUnreadWalkie, setHasUnreadWalkie] = useState(false);
+
+    // Clear badge when entering walkie talkie page
+    useEffect(() => {
+        if (location.pathname.includes('walkie')) {
+            setHasUnreadWalkie(false);
+        }
+    }, [location.pathname]);
+
+    // Listen for new messages (Both Text & Audio)
+    useEffect(() => {
+        const channel = supabase
+            .channel('central-walkie-notif-v2')
+            .on('postgres_changes', { 
+                event: 'INSERT', 
+                schema: 'public', 
+                table: 'messages' 
+            }, (payload) => {
+                const msg = payload.new;
+                // Only show badge if:
+                // 1. Not on the walkie-talkie page
+                // 2. Message is not sent by current user
+                if (!location.pathname.includes('walkie') && msg.sender_id !== user?.id) {
+                    setHasUnreadWalkie(true);
+                }
+            })
+            .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, [location.pathname, user?.id]);
+    // -----------------------------------------
+
     return (
         <GoEasyProvider>
             <div className="flex h-screen text-slate-800 font-sans bg-[#f8f9fc] bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-100/40 via-white to-purple-100/40 selection:bg-blue-200">
@@ -139,10 +174,13 @@ const AdminLayout: React.FC = () => {
                                     : 'text-slate-400 hover:bg-white/5 hover:text-white font-bold'
                                     }`}
                             >
-                                <div className="w-10 flex-shrink-0 flex justify-center">
+                                <div className="w-10 flex-shrink-0 flex justify-center relative">
                                     <span className={`material-icons-round text-[22px] transition-transform duration-300 ${isActive ? 'text-white scale-110' : 'text-slate-500 group-hover/item:scale-110'}`}>
                                         {item.icon}
                                     </span>
+                                    {item.path === '/walkie-talkie' && hasUnreadWalkie && (
+                                        <span className="absolute top-0 right-1 w-2.5 h-2.5 bg-purple-500 border-2 border-slate-900 rounded-full animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.6)]"></span>
+                                    )}
                                 </div>
                                 <span className={`ml-3 opacity-0 group-hover:opacity-100 sidebar-transition keep-inline ${isActive ? 'text-white' : ''}`}>
                                     {item.label}

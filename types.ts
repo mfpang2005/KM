@@ -14,6 +14,12 @@ export enum OrderStatus {
     COMPLETED = 'completed'
 }
 
+export enum UserStatus {
+    PENDING = 'pending',
+    ACTIVE = 'active',
+    DELETED = 'deleted'
+}
+
 // Added PaymentMethod enum as required by DriverSchedule.tsx and updated for OrderManagement
 export enum PaymentMethod {
     CASH = 'cash',
@@ -115,7 +121,7 @@ export interface User {
     id: string;
     email: string;
     role: UserRole;
-    status?: 'pending' | 'active' | 'deleted';
+    status?: UserStatus;
     name?: string;
     phone?: string;
     avatar_url?: string;
@@ -194,4 +200,29 @@ export interface CollectionStats {
     method: string;
     amount: number;
     count: number;
+}
+
+export interface InventoryItem {
+    id: string;
+    code: string;
+    name: string;
+    category?: string;
+    unit?: string;
+    unit_price: number;
+    stock_quantity: number;
+    min_threshold: number;
+    max_threshold: number;
+    created_at?: string;
+    updated_at?: string;
+}
+
+export interface InventoryLog {
+    id: string;
+    item_id: string;
+    type: 'IN' | 'OUT' | 'ADJUST';
+    quantity: number;
+    user_id: string;
+    remark?: string;
+    created_at: string;
+    item_name?: string; // Optional for UI display
 }

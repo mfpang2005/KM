@@ -108,7 +108,7 @@ export const UsersPage: React.FC = () => {
         loadUsers();
         const channel = supabase
             .channel('users-realtime')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadUsers())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => loadUsers())
             .subscribe((status) => setRtStatus(status));
         return () => { supabase.removeChannel(channel); };
     }, [loadUsers]);

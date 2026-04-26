@@ -94,6 +94,11 @@ async def update_product(
         target=product_id,
         detail=product_update
     )
+    
+    if not response.data:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="商品未找到 (Product not found)")
+        
     return response.data[0]
 
 

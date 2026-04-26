@@ -45,6 +45,7 @@ const OrderCreate: React.FC = () => {
     const [searchQuery, setSearchQuery] = useState('');
     const [cart, setCart] = useState<OrderItem[]>([]);
     const [isCartExpanded, setIsCartExpanded] = useState(false);
+    const [isReceiptExpanded, setIsReceiptExpanded] = useState(false);
     const [isConfirming, setIsConfirming] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [generatedOrderId, setGeneratedOrderId] = useState('');
@@ -75,8 +76,12 @@ const OrderCreate: React.FC = () => {
     const balanceDue = useMemo(() => billingSubtotal - deposit, [billingSubtotal, deposit]);
 
     useEffect(() => {
-        const rand = Math.floor(100000 + Math.random() * 900000);
-        setGeneratedOrderId(`KL-${rand}`);
+        const now = new Date();
+        const yy = String(now.getFullYear()).slice(-2);
+        const mm = String(now.getMonth() + 1).padStart(2, '0');
+        const dd = String(now.getDate()).padStart(2, '0');
+        const rand = Math.floor(100 + Math.random() * 900);
+        setGeneratedOrderId(`KM-${yy}/${mm}/${dd}/${rand}`);
 
         ProductService.getAll()
             .then(data => setApiProducts(data.map(mapApiProduct)))
@@ -212,8 +217,8 @@ const OrderCreate: React.FC = () => {
     };
 
     const handleFinalConfirm = async () => {
-        if (!customerName || !customerPhone || !address || !eventDate || !eventTime || billingQty <= 0 || billingPrice <= 0) {
-            alert('请填写必填项 (*)：姓名、电话、配送地址、日期、时间、计费数量及单价');
+        if (!customerName || !customerPhone || !address || billingQty <= 0 || billingPrice <= 0) {
+            alert('请填写必填项 (*)：姓名、电话、活动地址、计费数量及单价');
             return;
         }
 
@@ -235,7 +240,9 @@ const OrderCreate: React.FC = () => {
                     note: item.note
                 })),
                 status: OrderStatus.PENDING,
-                dueTime: new Date(Date.now() + 60 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                dueTime: (eventDate && eventTime) 
+                    ? new Date(`${eventDate}T${eventTime}:00`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                    : new Date(Date.now() + 60 * 60 * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 eventDate,
                 eventTime,
                 mapsLink,
@@ -474,29 +481,50 @@ const OrderCreate: React.FC = () => {
                                             <span className="text-xl print:text-lg font-black text-red-600 font-mono">RM {balanceDue.toFixed(2)}</span>
                                         </div>
                                     </div>
-
-                                    <div className="text-center mt-6 text-[10px] text-slate-400 space-y-1">
-                                        <p>Thank you for choosing Kim Long.</p>
-                                        <p>This is a computer-generated document. No signature is required.</p>
-                                    </div>
                                 </div>
                             </div>
 
-                            <div className="flex gap-3 no-print-area mt-8">
-                                <button
-                                    onClick={() => window.print()}
-                                    className="flex-1 py-3 bg-indigo-600 text-white rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors shadow-lg shadow-indigo-500/30"
-                                >
-                                    <span className="material-icons-round text-[18px]">print</span>
-                                    Print Customer Bill
-                                </button>
-                                <button 
-                                    onClick={() => navigate('/admin')} 
-                                    className="flex-1 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
-                                >
-                                    Back to Dashboard
-                                </button>
+                            <div className="text-center mt-6 text-[10px] text-slate-400 space-y-1">
+                                <p>Thank you for choosing Kim Long.</p>
+                                <p>This is a computer-generated document. No signature is required.</p>
                             </div>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-4 pt-4 no-print-area p-8 border-t border-slate-50 bg-slate-50/50">
+                            <button
+                                onClick={() => {
+                                    const message = `*KIM LONG SMART CATERING - 订单确认*\n` +
+                                        `--------------------------------\n` +
+                                        `*订单编号:* ${generatedOrderId}\n` +
+                                        `*客户姓名:* ${customerName}\n` +
+                                        `*配送日期:* ${eventDate} ${eventTime}\n\n` +
+                                        `*订单明细:*\n` +
+                                        cart.map(item => `• ${item.name} x ${item.quantity} (RM ${item.price.toFixed(2)})`).join('\n') +
+                                        `\n\n` +
+                                        `*应付总额:* RM ${billingSubtotal.toFixed(2)}\n` +
+                                        `*已付定金:* RM ${deposit.toFixed(2)}\n` +
+                                        `*待收余额:* *RM ${balanceDue.toFixed(2)}*\n` +
+                                        `--------------------------------\n` +
+                                        `感谢您的支持！如有疑问请联系我们。`;
+                                    
+                                    const encodedMessage = encodeURIComponent(message);
+                                    const phoneNumber = customerPhone.replace(/\D/g, '');
+                                    const formattedPhone = phoneNumber.startsWith('6') ? phoneNumber : `6${phoneNumber}`;
+                                    window.open(`https://wa.me/${formattedPhone}?text=${encodedMessage}`, '_blank');
+                                }}
+                                className="flex-1 bg-[#25D366] text-white py-4 rounded-[20px] font-black text-sm uppercase tracking-widest shadow-xl shadow-green-200 hover:shadow-green-300 transition-all active:scale-95 flex items-center justify-center gap-2"
+                            >
+                                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.414 0 .004 5.412.001 12.049a11.82 11.82 0 001.592 5.96L0 24l6.12-1.605a11.777 11.777 0 005.927 1.588h.005c6.637 0 12.05-5.414 12.053-12.05a11.83 11.83 0 00-3.526-8.511z"/>
+                                </svg>
+                                WhatsApp 发送账单
+                            </button>
+                            <button 
+                                onClick={() => navigate('/admin')} 
+                                className="flex-1 py-4 bg-white border border-slate-200 text-slate-700 rounded-[20px] font-black text-sm uppercase tracking-widest hover:bg-slate-50 transition-colors"
+                            >
+                                返回仪表板
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -506,31 +534,157 @@ const OrderCreate: React.FC = () => {
 
     return (
         <div className="flex flex-col min-h-screen bg-[#FDFDFD] relative overflow-hidden">
-            <header className="sticky top-0 z-[100] bg-white/70 backdrop-blur-xl border-b border-slate-100/50 px-6 py-4 lg:py-6">
-                <div className="max-w-[1600px] mx-auto flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <button 
-                            onClick={() => navigate('/admin')} 
-                            className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-primary hover:bg-primary/5 transition-all"
-                        >
-                            <span className="material-icons-round">arrow_back</span>
-                        </button>
-                        <div>
-                            <h1 className="text-xl font-bold text-slate-900">创建新订单</h1>
-                            <p className="text-[10px] font-black text-primary/40 uppercase tracking-[0.2em]">{generatedOrderId}</p>
+            <header className="sticky top-0 z-[100] bg-white/70 backdrop-blur-xl border-b border-slate-100/50 px-6 py-3 lg:py-4">
+                <div className="max-w-[1600px] mx-auto flex items-center justify-between relative">
+                    {/* 左侧：日期 */}
+                    <div className="flex-1 hidden md:flex justify-start">
+                        <div className="flex items-center px-4 py-2 bg-slate-50 rounded-full border border-slate-100 gap-3">
+                            <span className="material-icons-round text-slate-400 text-sm">event</span>
+                            <span className="text-xs font-bold text-slate-600">{new Date().toLocaleDateString()}</span>
                         </div>
                     </div>
-                    <div className="hidden md:flex items-center px-4 py-2 bg-slate-50 rounded-full border border-slate-100 gap-3">
-                        <span className="material-icons-round text-slate-400 text-sm">event</span>
-                        <span className="text-xs font-bold text-slate-600">{new Date().toLocaleDateString()}</span>
+
+                    {/* 中间：标题 (绝对居中方案) */}
+                    <div className="absolute left-1/2 -translate-x-1/2 flex flex-col items-center text-center">
+                        <h1 className="text-xl font-bold text-slate-900 leading-tight">创建新订单</h1>
+                        <p className="text-[9px] font-black text-primary/40 uppercase tracking-[0.2em] leading-none mt-1">Create New Order</p>
+                    </div>
+
+                    {/* 右侧：占位或功能按钮 */}
+                    <div className="flex-1 flex justify-end">
+                        <div className="w-10 h-10"></div> {/* 维持布局平衡的占位符 */}
                     </div>
                 </div>
             </header>
 
-            <main className="flex-1 max-w-[1600px] mx-auto w-full px-4 lg:px-8 py-6 lg:py-10">
+            <main className="flex-1 max-w-[1600px] mx-auto w-full px-4 lg:px-8 pt-2 pb-6 lg:pt-4 lg:pb-10">
                 <div className="flex flex-col lg:grid lg:grid-cols-12 gap-8 lg:gap-12">
                     {/* 左侧：选购区域 (Dishes & Materials) */}
                     <div className="lg:col-span-7 xl:col-span-8 space-y-12">
+                        {/* 客户资料 - Ultra Compact Grid Version */}
+                        <section className="bg-white rounded-[32px] p-6 shadow-sm border border-slate-100">
+                            {/* Card Header with Order ID */}
+                            <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-50">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-1.5 h-4 bg-primary rounded-full"></span>
+                                    <h2 className="text-xs font-black text-slate-800 uppercase tracking-widest">客户资料 Customer Info</h2>
+                                </div>
+                                <div className="px-3 py-1 bg-slate-50 border border-slate-100 rounded-lg flex items-center gap-2">
+                                    <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">Order ID:</span>
+                                    <span className="text-[10px] font-black text-primary font-mono tracking-wider">{generatedOrderId}</span>
+                                </div>
+                            </div>
+                            
+                            <div className="flex flex-col gap-5">
+                                {/* 第一行：基础资料 (更紧凑的 3列布局) */}
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                                    <div className="md:col-span-4 relative">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1 block">客户姓名 *</label>
+                                        <div className="relative">
+                                            <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs">person</span>
+                                            <input className="w-full pl-8 pr-3 py-2 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-[11px] font-bold outline-none" placeholder="Name" value={customerName} onChange={e => setCustomerName(e.target.value)} onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)} />
+                                            {showSuggestions && (
+                                                <div className="absolute z-[110] left-0 right-0 mt-1 bg-white border border-slate-100 rounded-xl shadow-2xl max-h-40 overflow-y-auto py-1">
+                                                    {customerSuggestions.map(c => (
+                                                        <button key={c.id} onClick={() => selectCustomer(c)} className="w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between group">
+                                                            <div><p className="text-[10px] font-black text-slate-800">{c.name}</p><p className="text-[8px] text-slate-400 font-bold">{c.phone}</p></div>
+                                                            <span className="material-icons-round text-primary/30 text-sm">history</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-3">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1 block">联系电话 *</label>
+                                        <div className="relative">
+                                            <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs">phone</span>
+                                            <input className="w-full pl-8 pr-3 py-2 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-[11px] font-bold outline-none font-mono" placeholder="Phone" value={customerPhone} onChange={e => setCustomerPhone(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1 block">活动日期 & 时间</label>
+                                        <div className="flex items-center bg-slate-50/50 border border-slate-100 rounded-xl px-3 py-2 focus-within:border-primary/30 transition-all group">
+                                            <div className="flex items-center flex-1 min-w-0">
+                                                <span className="material-icons-round text-slate-300 text-xs mr-2">calendar_today</span>
+                                                <input 
+                                                    type="date" 
+                                                    className="bg-transparent text-[11px] font-bold outline-none w-full" 
+                                                    value={eventDate} 
+                                                    onChange={e => setEventDate(e.target.value)} 
+                                                />
+                                            </div>
+                                            <div className="w-[1px] h-4 bg-slate-200 mx-2"></div>
+                                            <div className="flex items-center flex-1 min-w-0">
+                                                <input 
+                                                    type="time" 
+                                                    className="bg-transparent text-[11px] font-bold outline-none w-full text-right pr-1" 
+                                                    value={eventTime} 
+                                                    onChange={e => setEventTime(e.target.value)} 
+                                                />
+                                                <span className="material-icons-round text-slate-300 text-xs ml-1">schedule</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 第二行：地址与备注 (复合布局) */}
+                                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                                    <div className="md:col-span-5">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1 block">活动地址 *</label>
+                                        <div className="relative">
+                                            <span className="material-icons-round absolute left-3 top-3 text-slate-300 text-xs">place</span>
+                                            <textarea className="w-full pl-8 pr-3 py-2 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-[11px] font-bold outline-none h-[38px] resize-none" placeholder="Detailed Address..." value={address} onChange={e => setAddress(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-3">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1 block">地图链接 (Optional)</label>
+                                        <div className="relative">
+                                            <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs">map</span>
+                                            <input className="w-full pl-8 pr-3 py-2.5 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-[11px] font-bold outline-none" placeholder="Google Maps Link" value={mapsLink} onChange={e => setMapsLink(e.target.value)} />
+                                        </div>
+                                    </div>
+                                    <div className="md:col-span-4">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase ml-1 mb-1 block">整单备注 (Remarks)</label>
+                                        <div className="relative">
+                                            <span className="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 text-xs">notes</span>
+                                            <input className="w-full pl-8 pr-3 py-2.5 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-[11px] font-bold outline-none" placeholder="Special requirements..." value={remarks} onChange={e => setRemarks(e.target.value)} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* 第三行：账单详情与财务 (核心网格) */}
+                                <div className="bg-slate-50/50 rounded-2xl p-4 grid grid-cols-2 md:grid-cols-6 gap-4">
+                                    <div className="md:col-span-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">计费单位</label>
+                                        <select className="w-full px-2 py-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" value={billingUnit} onChange={e => setBillingUnit(e.target.value)}>
+                                            <option value="PAX">PAX</option><option value="SET">SET</option><option value="TRIP">TRIP</option><option value="ITEM">ITEM</option>
+                                        </select>
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">数量</label>
+                                        <input type="number" className="w-full px-2 py-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" value={billingQty || ''} onChange={e => setBillingQty(parseFloat(e.target.value) || 0)} />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1">单价 (RM)</label>
+                                        <input type="number" step="0.01" className="w-full px-2 py-2 bg-white border border-slate-100 rounded-lg text-[11px] font-black outline-none" value={billingPrice || ''} onChange={e => setBillingPrice(parseFloat(e.target.value) || 0)} />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1 text-primary">总额 (Sub)</label>
+                                        <div className="px-2 py-2 bg-indigo-50 border border-indigo-100 rounded-lg text-[11px] font-black text-primary">RM {billingSubtotal.toFixed(2)}</div>
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1 text-emerald-600">定金 (Dep)</label>
+                                        <input type="number" step="0.01" className="w-full px-2 py-2 bg-emerald-50/50 border border-emerald-100 rounded-lg text-[11px] font-black text-emerald-700 outline-none" value={deposit || ''} onChange={e => setDeposit(parseFloat(e.target.value) || 0)} />
+                                    </div>
+                                    <div className="md:col-span-1">
+                                        <label className="text-[8px] font-black text-slate-400 uppercase block mb-1 text-red-500">待收 (Due)</label>
+                                        <div className={`px-2 py-2 border rounded-lg text-[11px] font-black ${balanceDue > 0 ? 'bg-red-50 border-red-100 text-red-600' : 'bg-slate-100 border-slate-200 text-slate-400'}`}>RM {balanceDue.toFixed(2)}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </section>
+
                         {/* 选择菜色 */}
                         <section className="space-y-6">
                             <div className="flex items-center justify-between">
@@ -571,7 +725,7 @@ const OrderCreate: React.FC = () => {
                                     ))}
                                 </div>
 
-                                <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6">
+                                <div className="grid grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8 gap-3">
                                     {productsLoading ? (
                                         <div className="col-span-full py-24 flex flex-col items-center justify-center text-slate-300 gap-4">
                                             <div className="w-10 h-10 border-4 border-primary/10 border-t-primary rounded-full animate-spin"></div>
@@ -583,23 +737,25 @@ const OrderCreate: React.FC = () => {
                                             <p className="font-bold text-xs uppercase tracking-widest text-slate-400">未能找到相关菜品 (No products found)</p>
                                         </div>
                                     ) : filteredMenu.map(p => (
-                                        <div key={p.id} className="group bg-white rounded-[32px] overflow-hidden border border-slate-100/60 shadow-[0_8px_30px_rgb(0,0,0,0.02)] hover:shadow-[0_24px_50px_rgb(0,0,0,0.08)] transition-all duration-500 hover:-translate-y-1.5 relative">
-                                            <div className="aspect-[4/3] overflow-hidden relative">
-                                                <div className="absolute top-4 left-4 z-10">
-                                                    <span className="px-2.5 py-1 bg-black/70 backdrop-blur-md text-[9px] text-white rounded-lg font-black uppercase tracking-widest border border-white/10">{p.code}</span>
-                                                </div>
-                                                <img src={p.img || 'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=400&h=300&fit=crop'} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-1000" alt={p.name} />
-                                                <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                            </div>
-                                            <div className="p-5 space-y-4">
-                                                <h3 className="text-sm font-black text-slate-800 leading-tight h-10 overflow-hidden line-clamp-2">{p.name}</h3>
-                                                <div className="flex justify-between items-center pt-2">
-                                                    <div className="flex flex-col">
-                                                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Price</span>
-                                                        <span className="text-base font-black text-primary">RM {p.price.toFixed(2)}</span>
+                                        <div key={p.id} className="group bg-white rounded-2xl overflow-hidden border border-slate-100/60 shadow-sm hover:shadow-md transition-all duration-300 active:scale-95 relative flex flex-col">
+                                            {p.img && (
+                                                <div className="aspect-square overflow-hidden relative">
+                                                    <div className="absolute top-2 left-2 z-10">
+                                                        <span className="px-1.5 py-0.5 bg-black/70 backdrop-blur-md text-[7px] text-white rounded-md font-black uppercase tracking-widest border border-white/10">{p.code}</span>
                                                     </div>
-                                                    <button onClick={() => addToCart(p)} className="w-11 h-11 rounded-2xl bg-primary text-white shadow-xl shadow-primary/25 active:scale-90 hover:scale-105 transition-all flex items-center justify-center">
-                                                        <span className="material-icons-round">add_shopping_cart</span>
+                                                    <img src={p.img} className="w-full h-full object-cover" alt={p.name} />
+                                                </div>
+                                            )}
+                                            <div className="p-2.5 flex-1 flex flex-col gap-2">
+                                                {!p.img && <span className="w-fit px-1.5 py-0.5 bg-slate-100 text-[7px] text-slate-400 rounded-md font-black uppercase tracking-widest mb-1">{p.code}</span>}
+                                                <h3 className="text-[10px] font-black text-slate-800 leading-tight h-8 overflow-hidden line-clamp-2">{p.name}</h3>
+                                                <div className="flex justify-between items-center mt-auto">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-[7px] font-bold text-slate-400 uppercase tracking-tighter">Price</span>
+                                                        <span className="text-xs font-black text-primary">RM {p.price.toFixed(2)}</span>
+                                                    </div>
+                                                    <button onClick={() => addToCart(p)} className="w-8 h-8 rounded-xl bg-primary text-white shadow-lg shadow-primary/20 active:scale-90 transition-all flex items-center justify-center">
+                                                        <span className="material-icons-round text-sm">add_shopping_cart</span>
                                                     </button>
                                                 </div>
                                             </div>
@@ -609,42 +765,41 @@ const OrderCreate: React.FC = () => {
                             </div>
                         </section>
 
-                        {/* 包含设备 / 物资 */}
-                        <section className="space-y-6">
-                            <div className="flex items-center gap-3">
+                        {/* 包含设备及物品 */}
+                        <section className="bg-white rounded-[40px] p-8 shadow-[0_8px_40px_rgb(0,0,0,0.03)] border border-slate-100">
+                            <div className="flex items-center gap-3 mb-8">
                                 <span className="w-10 h-10 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-500 shadow-sm">
                                     <span className="material-icons-round text-lg">handyman</span>
                                 </span>
                                 <div>
-                                    <h2 className="text-base font-black uppercase tracking-widest text-slate-800">包含设备 / 物资</h2>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Equipment & Logistics</p>
+                                    <h2 className="text-base font-black uppercase tracking-widest text-slate-800">包含设备及物品</h2>
+                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Equipment & Items</p>
                                 </div>
                             </div>
-                            <div className="bg-white rounded-[40px] p-8 shadow-[0_8px_40px_rgb(0,0,0,0.03)] border border-slate-100">
-                                <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-5">
+                            <div className="grid grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2.5">
                                     {[...EQUIPMENTS_LIST, ...customEquipments].map(eq => {
                                         const isLocked = billingUnit === 'PAX' && billingQty > 0 && ['盘子 OTU Plate', '汤匙 OTU Spoon', '叉子 OTU Fork', '杯子 OTU Cup'].includes(eq);
                                         return (
-                                            <div key={eq} className={`flex flex-col justify-between p-5 rounded-[28px] border-2 transition-all duration-300 ${equipmentQuantities[eq] > 0 ? 'bg-blue-50/40 border-blue-100/50 ring-2 ring-blue-100/20' : 'bg-slate-50/40 border-slate-50 hover:bg-white hover:border-slate-100'}`}>
-                                                <span className="text-xs font-black text-slate-700 mb-4 truncate leading-tight" title={eq}>{eq}</span>
-                                                <div className="flex items-center justify-between">
+                                            <div key={eq} className={`flex flex-col justify-between p-2.5 rounded-2xl border transition-all duration-300 ${equipmentQuantities[eq] > 0 ? 'bg-blue-50/40 border-blue-100/50 ring-2 ring-blue-100/20' : 'bg-slate-50/40 border-slate-50 hover:bg-white hover:border-slate-100'}`}>
+                                                <span className="text-[9px] font-black text-slate-700 mb-2 line-clamp-2 leading-tight" title={eq}>{eq}</span>
+                                                <div className="flex items-center justify-between gap-1">
                                                     <button
                                                         onClick={() => updateEquipmentQty(eq, -1)}
-                                                        className="w-9 h-9 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all disabled:opacity-30 shadow-sm"
+                                                        className="w-7 h-7 rounded-lg bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-red-500 transition-all disabled:opacity-30 shadow-sm"
                                                         disabled={!equipmentQuantities[eq] || isLocked}
                                                     >
-                                                        <span className="material-icons-round text-sm">remove</span>
+                                                        <span className="material-icons-round text-[14px]">remove</span>
                                                     </button>
                                                     <div className="flex flex-col items-center">
-                                                        <span className={`text-sm font-black w-8 text-center ${isLocked ? 'text-blue-600' : 'text-slate-900'}`}>{equipmentQuantities[eq] || 0}</span>
-                                                        {isLocked && <span className="text-[7px] font-bold text-blue-400 italic">PAX x 2</span>}
+                                                        <span className={`text-xs font-black min-w-[12px] text-center ${isLocked ? 'text-blue-600' : 'text-slate-900'}`}>{equipmentQuantities[eq] || 0}</span>
+                                                        {isLocked && <span className="text-[5px] font-bold text-blue-400 italic scale-90 whitespace-nowrap">PAX x 2</span>}
                                                     </div>
                                                     <button
                                                         onClick={() => updateEquipmentQty(eq, 1)}
-                                                        className="w-9 h-9 rounded-xl bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 active:scale-90 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:grayscale"
+                                                        className="w-7 h-7 rounded-lg bg-blue-500 text-white flex items-center justify-center hover:bg-blue-600 active:scale-90 transition-all shadow-lg shadow-blue-500/20 disabled:opacity-30 disabled:grayscale"
                                                         disabled={isLocked}
                                                     >
-                                                        <span className="material-icons-round text-sm">add</span>
+                                                        <span className="material-icons-round text-[14px]">add</span>
                                                     </button>
                                                 </div>
                                             </div>
@@ -652,280 +807,108 @@ const OrderCreate: React.FC = () => {
                                     })}
                                     {/* Add Custom Button */}
                                     {isAddingCustom ? (
-                                        <div className="flex flex-col justify-center p-4 rounded-[28px] border-2 border-dashed border-blue-200 bg-blue-50/20 space-y-3">
+                                        <div className="flex flex-col justify-center p-2.5 rounded-2xl border-2 border-dashed border-blue-200 bg-blue-50/20 space-y-2">
                                             <input 
                                                 autoFocus
                                                 type="text" 
-                                                className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold outline-none focus:ring-2 focus:ring-primary/20"
-                                                placeholder="物资名称..."
+                                                className="w-full bg-white border border-slate-100 rounded-lg px-2 py-1.5 text-[9px] font-bold outline-none focus:ring-2 focus:ring-primary/20"
+                                                placeholder="名称..."
                                                 value={newCustomName}
                                                 onChange={e => setNewCustomName(e.target.value)}
                                                 onKeyDown={e => e.key === 'Enter' && handleAddCustomEquipment()}
                                             />
-                                            <div className="flex gap-2">
-                                                <button onClick={handleAddCustomEquipment} className="flex-1 py-1.5 bg-blue-500 text-white rounded-lg text-[10px] font-black uppercase">确定</button>
-                                                <button onClick={() => setIsAddingCustom(false)} className="px-3 py-1.5 bg-slate-100 text-slate-500 rounded-lg text-[10px] font-black uppercase">取消</button>
+                                            <div className="flex gap-1.5">
+                                                <button onClick={handleAddCustomEquipment} className="flex-1 py-1 bg-blue-500 text-white rounded-md text-[8px] font-black uppercase">确定</button>
+                                                <button onClick={() => setIsAddingCustom(false)} className="px-2 py-1 bg-slate-100 text-slate-500 rounded-md text-[8px] font-black uppercase">取消</button>
                                             </div>
                                         </div>
                                     ) : (
                                         <button 
                                             onClick={() => setIsAddingCustom(true)}
-                                            className="flex flex-col items-center justify-center p-5 rounded-[28px] border-2 border-dashed border-slate-100 text-slate-300 hover:text-blue-500 hover:border-blue-100 hover:bg-blue-50/30 transition-all group"
+                                            className="flex flex-col items-center justify-center p-2.5 rounded-2xl border-2 border-dashed border-slate-100 text-slate-300 hover:text-blue-500 hover:border-blue-100 hover:bg-blue-50/30 transition-all group min-h-[80px]"
                                         >
-                                            <span className="material-icons-round text-2xl mb-1 group-hover:scale-110 transition-transform">add_circle_outline</span>
-                                            <span className="text-[10px] font-black uppercase tracking-widest">添加自定义</span>
+                                            <span className="material-icons-round text-xl mb-1 group-hover:scale-110 transition-transform">add_circle_outline</span>
+                                            <span className="text-[9px] font-black uppercase tracking-tighter">添加自定义</span>
                                         </button>
                                     )}
                                 </div>
-                            </div>
                         </section>
                     </div>
 
                     {/* 右侧：配置区域 (Customer & Receipt) - Sticky */}
-                    <div className="lg:col-span-5 xl:col-span-4 space-y-8">
+                    <div className="lg:col-span-5 xl:col-span-4">
                         <div className="lg:sticky lg:top-32 space-y-8">
-                            {/* 客户资料 - Compact */}
-                            <section className="bg-white rounded-[40px] p-8 shadow-[0_20px_50px_rgb(0,0,0,0.04)] border border-slate-100 space-y-7">
-                                <div className="flex items-center gap-3 mb-2">
-                                    <span className="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-500">
-                                        <span className="material-icons-round text-sm">assignment_ind</span>
-                                    </span>
-                                    <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">客户信息</h3>
-                                </div>
-                                
-                                <div className="space-y-5">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2 gap-4">
-                                        <div className="space-y-1.5 relative">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1">
-                                                <span className="material-icons-round text-[12px]">person</span>姓名 *
-                                            </label>
-                                            <div className="relative">
-                                                <input
-                                                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-xl text-xs font-bold transition-all outline-none"
-                                                    placeholder="客户姓名 *"
-                                                    autoComplete="off"
-                                                    value={customerName}
-                                                    onChange={e => setCustomerName(e.target.value)}
-                                                    onFocus={() => customerSuggestions.length > 0 && setShowSuggestions(true)}
-                                                />
-                                                {isSearchingCustomers && (
-                                                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                                                        <span className="material-icons-round text-primary animate-spin text-xs">autorenew</span>
-                                                    </div>
-                                                )}
-                                                {showSuggestions && (
-                                                    <div className="absolute z-[100] left-0 right-0 mt-2 bg-white border border-slate-100 rounded-2xl shadow-2xl max-h-48 overflow-y-auto no-scrollbar py-2">
-                                                        {customerSuggestions.map(c => (
-                                                            <button key={c.id} onClick={() => selectCustomer(c)} className="w-full text-left px-4 py-3 hover:bg-slate-50 transition-colors flex items-center justify-between group">
-                                                                <div>
-                                                                    <p className="text-xs font-black text-slate-800">{c.name}</p>
-                                                                    <p className="text-[9px] text-slate-400 font-bold">{c.phone}</p>
-                                                                </div>
-                                                                <span className="material-icons-round text-primary/30 group-hover:text-primary transition-colors text-base">history</span>
-                                                            </button>
-                                                        ))}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1">
-                                                <span className="material-icons-round text-[12px]">phone</span>电话 *
-                                            </label>
-                                            <input
-                                                className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 focus:bg-white rounded-xl text-xs font-bold transition-all outline-none font-mono"
-                                                placeholder="+60 12..."
-                                                autoComplete="off"
-                                                value={customerPhone}
-                                                onChange={e => setCustomerPhone(e.target.value)}
-                                            />
-                                        </div>
-                                    </div>
 
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1">
-                                                <span className="material-icons-round text-[12px] text-violet-500">event</span>日期 *
-                                            </label>
-                                            <input type="date" className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-xs font-bold outline-none" value={eventDate} onChange={e => setEventDate(e.target.value)} />
-                                        </div>
-                                        <div className="space-y-1.5">
-                                            <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1">
-                                                <span className="material-icons-round text-[12px] text-violet-500">schedule</span>时间 *
-                                            </label>
-                                            <input type="time" className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-xs font-bold outline-none" value={eventTime} onChange={e => setEventTime(e.target.value)} />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1">
-                                            <span className="material-icons-round text-[12px] text-red-500">place</span>详细地址 *
-                                        </label>
-                                        <div className="space-y-2">
-                                            <textarea className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-xs font-bold outline-none min-h-[60px] resize-none" placeholder="配送地址... *" value={address} onChange={e => setAddress(e.target.value)} />
-                                            <input className="w-full px-4 py-2.5 bg-slate-50/30 border border-slate-100 focus:border-primary/30 rounded-xl text-[10px] font-bold outline-none" placeholder="Google Maps 链接..." value={mapsLink} onChange={e => setMapsLink(e.target.value)} />
-                                        </div>
-                                    </div>
-
-                                    <div className="space-y-1.5">
-                                        <label className="text-[10px] font-black text-slate-400 uppercase ml-1 flex items-center gap-1">
-                                            <span className="material-icons-round text-[12px] text-amber-500">notes</span>整单备注
-                                        </label>
-                                        <input className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-xs font-medium outline-none" placeholder="特殊要求 (Skip spicy, etc)..." value={remarks} onChange={e => setRemarks(e.target.value)} />
-                                    </div>
-                                </div>
-
-                                    {/* 1. 计费详情 (Billing Details) */}
-                                    <div className="pt-4 space-y-5 animate-in slide-in-from-bottom-2 duration-500">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="w-8 h-8 rounded-lg bg-pink-500/10 flex items-center justify-center text-pink-500">
-                                                <span className="material-icons-round text-sm">calculate</span>
-                                            </span>
-                                            <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-800">计费详情 (BILLING DETAILS)</h3>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">单位 (Unit) *</label>
-                                                <select 
-                                                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-xs font-bold outline-none appearance-none"
-                                                    value={billingUnit}
-                                                    onChange={e => setBillingUnit(e.target.value)}
-                                                >
-                                                    <option value="PAX">PAX / 人</option>
-                                                    <option value="SET">SET / PACKET</option>
-                                                    <option value="TRIP">TRIP / 趟</option>
-                                                    <option value="ITEM">ITEM / 件</option>
-                                                </select>
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">数量 (Qty) *</label>
-                                                <input 
-                                                    type="number" 
-                                                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-xs font-bold outline-none"
-                                                    placeholder="0"
-                                                    value={billingQty || ''}
-                                                    onChange={e => setBillingQty(parseFloat(e.target.value) || 0)}
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">单价 (RM) *</label>
-                                                <input 
-                                                    type="number" 
-                                                    step="0.01"
-                                                    className="w-full px-4 py-3 bg-slate-50/50 border border-slate-100 focus:border-primary/30 rounded-xl text-xs font-bold outline-none"
-                                                    placeholder="0.00"
-                                                    value={billingPrice || ''}
-                                                    onChange={e => setBillingPrice(parseFloat(e.target.value) || 0)}
-                                                />
-                                            </div>
-                                            <div className="space-y-1.5 opacity-80">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">小计 (Subtotal)</label>
-                                                <div className="w-full px-4 py-3 bg-indigo-50/50 border border-indigo-100/50 rounded-xl text-xs font-black text-primary">
-                                                    RM {billingSubtotal.toFixed(2)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* 2. 财务字段 (Financials) */}
-                                    <div className="pt-4 space-y-5 animate-in slide-in-from-bottom-3 duration-700">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-500">
-                                                <span className="material-icons-round text-sm">account_balance</span>
-                                            </span>
-                                            <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-800">财务管理 (FINANCIALS)</h3>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">定金 Deposit (RM)</label>
-                                                <input 
-                                                    type="number" 
-                                                    step="0.01"
-                                                    className="w-full px-4 py-3 bg-emerald-50/30 border border-emerald-100/30 focus:border-emerald-500/30 rounded-xl text-xs font-bold outline-none"
-                                                    placeholder="0.00"
-                                                    value={deposit || ''}
-                                                    onChange={e => setDeposit(parseFloat(e.target.value) || 0)}
-                                                />
-                                            </div>
-                                            <div className="space-y-1.5">
-                                                <label className="text-[10px] font-black text-slate-400 uppercase ml-1">待收 Balance Due</label>
-                                                <div className={`w-full px-4 py-3 border rounded-xl text-xs font-black ${balanceDue > 0 ? 'bg-red-50/50 border-red-100/50 text-red-600' : 'bg-slate-50/50 border-slate-100 text-slate-400'}`}>
-                                                    RM {balanceDue.toFixed(2)}
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </section>
-
-                            {/* 订单明细 - Receipt Style */}
-                            <section className="bg-white rounded-[40px] shadow-[0_30px_60px_rgb(0,0,0,0.08)] border border-slate-100 flex flex-col max-h-[calc(100vh-420px)] relative overflow-hidden">
+                            {/* 订单明细 - Receipt Style (Collapsible) */}
+                            <section className="bg-white rounded-[40px] shadow-[0_30px_60px_rgb(0,0,0,0.08)] border border-slate-100 flex flex-col relative overflow-hidden transition-all duration-500">
                                 <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-primary/50 to-primary"></div>
-                                <div className="p-7 border-b border-slate-50 flex items-center justify-between">
+                                
+                                {/* Header - Clickable Toggle */}
+                                <div 
+                                    onClick={() => setIsReceiptExpanded(!isReceiptExpanded)}
+                                    className="p-7 border-b border-slate-50 flex items-center justify-between cursor-pointer hover:bg-slate-50/50 transition-colors"
+                                >
                                     <div className="flex items-center gap-3">
                                         <h3 className="text-sm font-black text-slate-900 border-l-4 border-primary pl-4">订单明细</h3>
                                         <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest leading-none mt-1">Receipt Preview</span>
                                     </div>
-                                    <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">{cart.length} 项</span>
+                                    <div className="flex items-center gap-3">
+                                        <span className="bg-primary/10 text-primary px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-tight">{cart.length} 项</span>
+                                        <span className={`material-icons-round text-slate-300 transition-transform duration-300 ${isReceiptExpanded ? 'rotate-180' : ''}`}>expand_more</span>
+                                    </div>
                                 </div>
                                 
-                                <div className="flex-1 overflow-y-auto no-scrollbar px-6 py-6 space-y-5">
-                                    {cart.length === 0 ? (
-                                        <div className="flex flex-col items-center justify-center py-24 text-slate-200">
-                                            <span className="material-icons-round text-5xl mb-3 opacity-20">shopping_bag</span>
-                                            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">购物车为空</p>
-                                        </div>
-                                    ) : cart.map(item => (
-                                        <div key={item.id} className="group flex flex-col gap-3 pb-5 border-b border-slate-50 last:border-0 last:pb-0">
-                                            <div className="flex gap-4">
-                                                <img src={item.img} className="w-11 h-11 rounded-[14px] object-cover shadow-sm shrink-0 ring-1 ring-slate-100" alt={item.name} />
-                                                <div className="flex-1 flex flex-col justify-between min-w-0">
-                                                    <div className="flex justify-between items-start gap-3">
-                                                        <h4 className="text-[11px] font-black text-slate-800 line-clamp-1 leading-none pt-1">{item.name}</h4>
-                                                        <div className="flex items-center gap-2.5 scale-90 origin-right">
-                                                            <button onClick={() => updateQuantity(item.id, -1)} className="w-6 h-6 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-white active:scale-95 transition-all shadow-sm"><span className="material-icons-round text-[12px]">remove</span></button>
-                                                            <input type="number" className="w-7 bg-transparent border-none text-[11px] font-black text-center outline-none p-0" value={item.quantity} onChange={(e) => setManualQuantity(item.id, e.target.value)} />
-                                                            <button onClick={() => updateQuantity(item.id, 1)} className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center active:scale-95 transition-all shadow-md"><span className="material-icons-round text-[12px]">add</span></button>
-                                                        </div>
-                                                    </div>
-                                                    
-                                                    <div className="flex items-center justify-between gap-4 mt-2">
-                                                        <div className="flex flex-col">
-                                                            <div className="flex items-center gap-1">
-                                                                <span className="text-[10px] font-black text-primary">RM</span>
-                                                                <input type="number" step="0.01" className="w-14 bg-white border-b border-slate-100 text-[11px] font-black text-primary outline-none focus:border-primary" value={item.price || ''} onChange={(e) => updatePrice(item.id, e.target.value)} />
+                                {/* Collapsible Content */}
+                                <div className={`overflow-hidden transition-all duration-500 ease-in-out ${isReceiptExpanded ? 'max-h-[50vh] opacity-100' : 'max-h-0 opacity-0'}`}>
+                                    <div className="overflow-y-auto no-scrollbar px-6 py-6 space-y-5 border-b border-slate-50">
+                                        {cart.length === 0 ? (
+                                            <div className="flex flex-col items-center justify-center py-12 text-slate-200">
+                                                <span className="material-icons-round text-5xl mb-3 opacity-20">shopping_bag</span>
+                                                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-300">购物车为空</p>
+                                            </div>
+                                        ) : cart.map(item => (
+                                            <div key={item.id} className="group flex flex-col gap-3 pb-5 border-b border-slate-50 last:border-0 last:pb-0">
+                                                <div className="flex gap-4">
+                                                    {item.img && <img src={item.img} className="w-11 h-11 rounded-[14px] object-cover shadow-sm shrink-0 ring-1 ring-slate-100" alt={item.name} />}
+                                                    <div className="flex-1 flex flex-col justify-between min-w-0">
+                                                        <div className="flex justify-between items-start gap-3">
+                                                            <h4 className="text-[11px] font-black text-slate-800 line-clamp-1 leading-none pt-1">{item.name}</h4>
+                                                            <div className="flex items-center gap-2.5 scale-90 origin-right">
+                                                                <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, -1); }} className="w-6 h-6 rounded-lg bg-slate-50 border border-slate-100 flex items-center justify-center text-slate-400 hover:bg-white active:scale-95 transition-all shadow-sm"><span className="material-icons-round text-[12px]">remove</span></button>
+                                                                <input type="number" className="w-7 bg-transparent border-none text-[11px] font-black text-center outline-none p-0" value={item.quantity} onChange={(e) => setManualQuantity(item.id, e.target.value)} />
+                                                                <button onClick={(e) => { e.stopPropagation(); updateQuantity(item.id, 1); }} className="w-6 h-6 rounded-lg bg-slate-900 text-white flex items-center justify-center active:scale-95 transition-all shadow-md"><span className="material-icons-round text-[12px]">add</span></button>
                                                             </div>
-                                                            {item.price !== item.originalPrice && <span className="text-[8px] font-bold text-slate-300">Orig: {item.originalPrice.toFixed(2)}</span>}
                                                         </div>
-                                                        <input type="text" placeholder="项备注..." className="flex-1 h-6 bg-slate-50 px-2 rounded-lg text-[9px] font-bold text-slate-500 outline-none border border-transparent focus:border-primary/20 transition-all placeholder:text-slate-200" value={item.note || ''} onChange={(e) => updateItemNote(item.id, e.target.value)} />
+                                                        
+                                                        <div className="flex items-center justify-between gap-4 mt-2">
+                                                            <div className="flex flex-col">
+                                                                <div className="flex items-center gap-1">
+                                                                    <span className="text-[10px] font-black text-primary">RM</span>
+                                                                    <input type="number" step="0.01" className="w-14 bg-white border-b border-slate-100 text-[11px] font-black text-primary outline-none focus:border-primary" value={item.price || ''} onChange={(e) => updatePrice(item.id, e.target.value)} />
+                                                                </div>
+                                                            </div>
+                                                            <input type="text" placeholder="项备注..." className="flex-1 h-6 bg-slate-50 px-2 rounded-lg text-[9px] font-bold text-slate-500 outline-none border border-transparent focus:border-primary/20 transition-all placeholder:text-slate-200" value={item.note || ''} onChange={(e) => updateItemNote(item.id, e.target.value)} />
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        ))}
+                                    </div>
                                 </div>
                                 
-                                <div className="p-8 bg-slate-50/80 backdrop-blur-sm border-t border-slate-100 space-y-6">
-                                    <div className="flex justify-between items-end">
-                                        <div className="flex flex-col">
-                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none mb-2">应付总额 / Total Bill</span>
-                                            <div className="flex items-baseline gap-1.5">
-                                                <span className="text-base font-black text-primary">RM</span>
-                                                <span className="text-4xl font-black text-primary tracking-tighter leading-none">{billingSubtotal.toFixed(2)}</span>
-                                            </div>
-                                        </div>
-                                    </div>
+                                {/* Footer (Always Visible) - Unified Action Button */}
+                                <div className="p-6 bg-slate-50/80 backdrop-blur-sm border-t border-slate-100">
                                     <button
                                         onClick={handleFinalConfirm}
                                         disabled={cart.length === 0 || isSubmitting}
-                                        className={`w-full py-5 rounded-[22px] font-black text-sm uppercase tracking-[0.15em] shadow-2xl transition-all active:scale-[0.97] flex items-center justify-center gap-3 ${cart.length > 0 && !isSubmitting ? 'bg-primary text-white shadow-primary/30 hover:shadow-primary/40' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+                                        className={`w-full py-4.5 rounded-2xl font-black text-[13px] uppercase tracking-[0.1em] shadow-2xl transition-all active:scale-[0.97] flex items-center justify-center gap-3 ${cart.length > 0 && !isSubmitting ? 'bg-primary text-white shadow-primary/30 hover:shadow-primary/40' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
                                     >
-                                        {isSubmitting ? '正在处理...' : `确认下单 - RM ${billingSubtotal.toFixed(2)}`}
-                                        {!isSubmitting && <span className="material-icons-round text-lg">rocket_launch</span>}
+                                        {isSubmitting ? '处理中...' : (
+                                            <>
+                                                确认下单 — RM {billingSubtotal.toFixed(2)}
+                                                <span className="material-icons-round text-lg">rocket_launch</span>
+                                            </>
+                                        )}
                                     </button>
                                 </div>
                             </section>
@@ -934,68 +917,6 @@ const OrderCreate: React.FC = () => {
                 </div>
             </main>
 
-            <div className={`lg:hidden fixed bottom-0 left-0 right-0 bg-white shadow-[0_-10px_40px_rgba(0,0,0,0.1)] z-[150] safe-bottom transition-all duration-500 ease-in-out ${isCartExpanded ? 'rounded-t-[40px] h-[60vh]' : 'rounded-t-3xl h-24'}`}>
-                {isCartExpanded ? (
-                    <div className="flex flex-col h-full py-6">
-                        <div className="px-6 flex justify-between items-center mb-6">
-                            <h3 className="font-bold text-lg text-slate-900">清单 ({cart.length})</h3>
-                            <button onClick={() => setIsCartExpanded(false)} className="w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center"><span className="material-icons-round text-slate-400">expand_more</span></button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto no-scrollbar px-6 space-y-4">
-                            {cart.map(item => (
-                                <div key={item.id} className="flex flex-col gap-2 bg-slate-50 p-3 rounded-2xl mx-6">
-                                    <div className="flex items-center gap-3">
-                                        <img src={item.img} className="w-10 h-10 rounded-xl object-cover shrink-0" />
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="text-[11px] font-bold text-slate-800 truncate">{item.name}</h4>
-                                            <div className="flex items-center gap-2 mt-1">
-                                                <div className="flex items-center bg-white border border-slate-100 rounded-lg px-1.5 py-0.5 shadow-sm w-fit">
-                                                    <span className="text-[9px] font-black text-primary mr-0.5">RM</span>
-                                                    <input 
-                                                        type="number" 
-                                                        step="0.01"
-                                                        className="w-12 bg-transparent border-none text-[10px] font-black text-primary outline-none p-0"
-                                                        value={item.price || ''}
-                                                        onChange={(e) => updatePrice(item.id, e.target.value)}
-                                                    />
-                                                </div>
-                                                <span className="text-[8px] font-bold text-slate-300">Orig: RM {item.originalPrice.toFixed(2)}</span>
-                                            </div>
-                                        </div>
-                                        <div className="flex items-center gap-2.5 scale-90">
-                                            <button onClick={() => updateQuantity(item.id, -1)} className="w-7 h-7 rounded-full bg-white flex items-center justify-center text-slate-400 shadow-sm"><span className="material-icons-round text-xs">remove</span></button>
-                                            <input 
-                                                type="number"
-                                                className="w-8 bg-transparent border-none text-xs font-black text-center outline-none p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                                                value={item.quantity}
-                                                onChange={(e) => setManualQuantity(item.id, e.target.value)}
-                                            />
-                                            <button onClick={() => updateQuantity(item.id, 1)} className="w-7 h-7 rounded-full bg-primary text-white flex items-center justify-center shadow-sm"><span className="material-icons-round text-xs">add</span></button>
-                                        </div>
-                                    </div>
-                                    <input 
-                                        type="text"
-                                        placeholder="项备注..."
-                                        className="w-full h-6 bg-white/50 border border-slate-100 rounded-md px-2 text-[9px] font-medium outline-none"
-                                        value={item.note || ''}
-                                        onChange={(e) => updateItemNote(item.id, e.target.value)}
-                                    />
-                                </div>
-                            ))}
-                        </div>
-                        <div className="p-6 border-t border-slate-50">
-                            <button onClick={handleFinalConfirm} disabled={(billingQty <= 0 || billingPrice <= 0) || isSubmitting} className="w-full py-4 bg-primary text-white rounded-2xl font-black text-sm uppercase tracking-widest">确认下单 RM {billingSubtotal.toFixed(2)}</button>
-                        </div>
-                    </div>
-                ) : (
-                    <div className="flex items-center justify-between px-6 h-full">
-                        <div onClick={() => setIsCartExpanded(true)} className="flex flex-col"><span className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1 flex items-center gap-1">查看详情<span className="material-icons-round text-[10px]">expand_less</span></span><span className="text-2xl font-black text-primary leading-none">RM {billingSubtotal.toFixed(2)}</span></div>
-                        <button onClick={handleFinalConfirm} disabled={(billingQty <= 0 || billingPrice <= 0) || isSubmitting} className={`px-8 py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${billingQty > 0 && !isSubmitting ? 'bg-primary text-white shadow-lg shadow-primary/20' : 'bg-slate-200 text-slate-400'}`}>
-                            {isSubmitting ? '处理中...' : `确认下单 - RM ${billingSubtotal.toFixed(2)}`}
-                        </button>
-                    </div>
-                )}
-            </div>
         </div>
     );
 };

@@ -120,14 +120,12 @@ async def adjust_stock(
 
 @router.get("/logs", response_model=List[dict])
 async def get_inventory_logs(item_id: Optional[str] = None):
-    # Simplify query to avoid relation issues during startup
-    query = supabase.table("inventory_logs").select("*").order("created_at", desc=True)
+    # Join with inventory_items to get the name for the frontend
+    query = supabase.table("inventory_logs").select("*, inventory_items(name)").order("created_at", desc=True)
     if item_id:
         query = query.eq("item_id", item_id)
     
     response = await run_in_threadpool(query.execute)
-    
-    # If we need item names, we can fetch them separately or handle it in frontend
     return response.data
 
 @router.delete("/items/{item_id}")

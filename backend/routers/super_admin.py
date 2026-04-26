@@ -4,7 +4,7 @@ Super Admin 路由模块
 所有路由均受 require_super_admin 权限守卫保护
 """
 import logging
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Depends, Query
 from database import supabase
 from models import (
@@ -15,6 +15,8 @@ from services.audit import record_audit, AuditActions
 from middleware.auth import require_super_admin, require_admin
 from datetime import datetime, timezone, timedelta
 import dateutil.parser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(
     prefix="/super-admin",
@@ -187,6 +189,16 @@ async def update_user(
     elif "password" in update_data:
         # 如果是空字符串，则直接从 update_data 中移除，不更新密码
         update_data.pop("password")
+        
+    # 同步更新 Supabase Auth Metadata，确保 JWT Token 中的角色和权限是最新的
+    user_metadata = {}
+    if "role" in update_data:
+        user_metadata["role"] = update_data["role"]
+    if "permissions" in update_data:
+        user_metadata["permissions"] = update_data["permissions"]
+    
+    if user_metadata:
+        auth_updates["user_metadata"] = user_metadata
 
     from fastapi.concurrency import run_in_threadpool
     
@@ -301,8 +313,13 @@ async def get_all_config(
     读取所有系统配置项
     """
     from fastapi.concurrency import run_in_threadpool
-    response = await run_in_threadpool(supabase.table("system_config").select("*").execute)
-    return response.data or []
+    try:
+        response = await run_in_threadpool(supabase.table("system_config").select("*").execute)
+        return response.data or []
+    except Exception as e:
+        logger.error(f"Failed to fetch system_config: {e}")
+        # 如果表不存在或查询失败，返回空列表而不是崩溃
+        return []
 
 
 @router.put("/config/{key}")
@@ -333,6 +350,31 @@ async def upsert_config(
     if response.data:
         return response.data[0]
     return data
+
+
+@router.get("/auth-status")
+async def get_auth_status():
+    """
+    公开端点：查询 Admin App 当前的全局授权状态。
+    无需认证 —— 任何客户端均可访问，用于前端启动时验证系统是否已解锁。
+    后端使用 service_role key 绕过 Supabase RLS，确保读取无障碍。
+    """
+    from fastapi.concurrency import run_in_threadpool
+    try:
+        response = await run_in_threadpool(
+            supabase.table("system_config")
+            .select("value")
+            .eq("key", "admin_app_auth")
+            .single()
+            .execute
+        )
+        if response.data:
+            return {"authorized": bool(response.data.get("value", {}).get("authorized", False))}
+        return {"authorized": False}
+    except Exception:
+        # 表不存在或查询失败 → 默认未授权
+        return {"authorized": False}
+
 
 
 # ═══════════════════════════════════════════
