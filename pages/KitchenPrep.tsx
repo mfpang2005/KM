@@ -1,11 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { OrderService, api } from '../src/services/api';
 import type { Order } from '../types';
 import { OrderStatus } from '../types';
 import { supabase } from '../src/lib/supabase';
 import * as XLSX from 'xlsx';
 import PullToRefresh from '../src/components/PullToRefresh';
-import GoEasy from 'goeasy';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -68,18 +68,6 @@ const INITIAL_RECIPES: Recipe[] = [
     }
 ];
 
-// ─── Walkie-Talkie Constants ──────────────────────────────────────────────────
-const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
-const GOEASY_HOST = 'singapore.goeasy.io';
-const CHANNEL = 'KIM_LONG_COMUNITY';
-
-const blobToBase64 = (blob: Blob): Promise<string> =>
-    new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-    });
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -269,6 +257,7 @@ const OrderCard: React.FC<{
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 const KitchenPrepPage: React.FC = () => {
+    const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'production' | 'history' | 'recipes'>('production');
     const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>([]);
     const [completedOrders, setCompletedOrders] = useState<Order[]>([]);
@@ -285,17 +274,6 @@ const KitchenPrepPage: React.FC = () => {
     // NOTE: Track orders being fetched to avoid duplicate item loads
     const fetchingItemsRef = useRef<Set<string>>(new Set());
 
-    // ─── PTT / Walkie-Talkie States ───────────────────────────────────────────
-    const [userId, setUserId] = useState<string | null>(null);
-    const [userEmail, setUserEmail] = useState<string>('kitchen');
-    const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'CONNECTED' | 'TALKING' | 'LISTENING'>('IDLE');
-    const [isTransmitting, setIsTransmitting] = useState(false);
-    const [audioUnlocked, setAudioUnlocked] = useState(false);
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-    const silentAudioRef = useRef<HTMLAudioElement | null>(null);
-    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
 
     // ── Data Fetching ─────────────────────────────────────────────────────────
 
@@ -382,223 +360,12 @@ const KitchenPrepPage: React.FC = () => {
             setCurrentTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
         }, 10_000);
 
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            if (session?.user) {
-                setUserId(session.user.id);
-                setUserEmail(session.user.email || 'kitchen');
-            }
-        });
 
         return () => {
             clearInterval(timer);
             supabase.removeChannel(ch);
         };
     }, [fetchOrders]);
-
-    useEffect(() => {
-        // 后厨端自动开启后台监听
-        startPttSession();
-    }, [userId]);
-
-    // ─── PTT Logic ────────────────────────────────────────────────────────────
-
-    /** 用户交互解锁音频权限 */
-    const unlockAudio = useCallback(() => {
-        if (audioUnlocked) return;
-        const SILENT_WAV = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-        const audio = new Audio(`data:audio/wav;base64,${SILENT_WAV}`);
-        audio.volume = 0.01;
-        audio.play()
-            .then(() => {
-                setAudioUnlocked(true);
-                console.log('[Kitchen PTT] Audio context unlocked');
-            })
-            .catch((e) => {
-                console.warn('[Kitchen PTT] Unlock failed:', e);
-                setAudioUnlocked(true);
-            });
-        silentAudioRef.current = audio;
-    }, [audioUnlocked]);
-
-    // --- NEW: 监听全局点击以隐形解锁音频 ---
-    useEffect(() => {
-        if (audioUnlocked) return;
-        const handleFirstClick = () => {
-            unlockAudio();
-            window.removeEventListener('click', handleFirstClick);
-            window.removeEventListener('touchstart', handleFirstClick);
-        };
-        window.addEventListener('click', handleFirstClick);
-        window.addEventListener('touchstart', handleFirstClick);
-        return () => {
-            window.removeEventListener('click', handleFirstClick);
-            window.removeEventListener('touchstart', handleFirstClick);
-        };
-    }, [audioUnlocked, unlockAudio]);
-
-    const playAudio = useCallback(async (content: string) => {
-        if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
-        try {
-            // --- NEW: Handle HTTP URL directly ---
-            if (content.startsWith('http')) {
-                const audio = new Audio(content);
-                audio.onended = () => setPttStatus('CONNECTED');
-                audio.play().catch(e => console.error('[Kitchen PTT] Play error', e));
-                setPttStatus('LISTENING');
-                return;
-            }
-
-            const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
-            const binary = atob(base64);
-            const buf = new ArrayBuffer(binary.length);
-            const view = new Uint8Array(buf);
-            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
-            const src = audioContextRef.current.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(audioContextRef.current.destination);
-            src.onended = () => setPttStatus('CONNECTED');
-            src.start(0);
-            setPttStatus('LISTENING');
-        } catch (err) {
-            console.error('[Kitchen PTT] Audio decode error', err);
-            setPttStatus('CONNECTED');
-        }
-    }, []);
-
-    const startPttSession = async () => {
-        setPttStatus('CONNECTING');
-
-        const doConnect = () => {
-            try {
-                const goEasy = GoEasy.getInstance({ host: GOEASY_HOST, appkey: GOEASY_APPKEY, modules: ['pubsub'] });
-                goEasyRef.current = goEasy;
-
-                const myId = userId || `kitchen-${Math.random().toString(36).slice(2, 9)}`;
-                goEasy.connect({
-                    id: myId,
-                    data: { role: 'kitchen' },
-                    onSuccess: () => {
-                        setPttStatus('CONNECTED');
-                        goEasy.pubsub.subscribe({
-                            channel: CHANNEL,
-                            onMessage: async (message: any) => {
-                                try {
-                                    const payload = JSON.parse(message.content);
-                                    if (payload.senderId === myId) return;
-
-                                    // 处理撤回指令 (New)
-                                    if (payload.type === 'recall') {
-                                        // 停止当前正在播放的一切声音
-                                        if (audioContextRef.current) {
-                                            audioContextRef.current.close().then(() => {
-                                                audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-                                            });
-                                        }
-                                        console.log('[Kitchen PTT] Remote recall signal: Stopping playback');
-                                        return;
-                                    }
-
-                                    if (payload.receiverId !== 'GLOBAL') return;
-                                    const audioContent = payload.content || payload.audio;
-                                    if (payload.type === 'audio' && audioContent) {
-                                        await playAudio(audioContent);
-                                    }
-                                } catch (err) {}
-                            }
-                        });
-                    },
-                    onFailed: () => setPttStatus('IDLE')
-                });
-            } catch (e) {
-                setPttStatus('IDLE');
-            }
-        };
-
-        try {
-            const status = GoEasy.getConnectionStatus();
-            if (status === 'disconnected') doConnect();
-            else GoEasy.disconnect({ onSuccess: doConnect, onFailed: doConnect });
-        } catch { doConnect(); }
-    };
-
-    const handlePttDown = async () => {
-        if (pttStatus !== 'CONNECTED') return;
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mr = new MediaRecorder(stream);
-            audioChunksRef.current = [];
-            mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-            mr.start(100);
-            mediaRecorderRef.current = mr;
-            setIsTransmitting(true);
-            setPttStatus('TALKING');
-        } catch { alert('请允许麦克风权限以使用对讲功能。'); }
-    };
-
-    const handlePttUp = () => {
-        if (!mediaRecorderRef.current || !isTransmitting) return;
-        setIsTransmitting(false);
-        setPttStatus('CONNECTED');
-        const mr = mediaRecorderRef.current;
-        mr.onstop = async () => {
-            if (!goEasyRef.current) return;
-            try {
-                const mimeType = mr.mimeType || 'audio/webm';
-                const blob = new Blob(audioChunksRef.current, { type: mimeType });
-                if (blob.size < 100) return;
-
-                const formData = new FormData();
-                formData.append('file', blob, `voice_kitchen_${userId || 'unknown'}_${Date.now()}.webm`);
-                
-                const { data: uploadResult } = await api.post('/audio/upload', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                
-                const audioUrl = uploadResult.url;
-                if (!audioUrl) throw new Error('Upload failed: No URL returned');
-
-                const myId = userId || 'unknown-kitchen';
-                const myName = userEmail || '厨房端';
-                const ts = Date.now();
-                const msgId = `${myId}-${ts}`;
-
-                goEasyRef.current.pubsub.publish({
-                    channel: CHANNEL,
-                    message: JSON.stringify({
-                        id: msgId,
-                        type: 'audio',
-                        senderId: myId,
-                        senderLabel: myName,
-                        senderRole: 'kitchen',
-                        content: audioUrl,
-                        timestamp: ts,
-                        receiverId: 'GLOBAL',
-                        duration: 0
-                    })
-                });
-
-                supabase.from('messages').insert([{
-                    id: msgId,
-                    sender_id: myId,
-                    sender_label: myName,
-                    sender_role: 'kitchen',
-                    receiver_id: 'GLOBAL',
-                    content: audioUrl,
-                    type: 'audio',
-                    duration: 0
-                }]);
-            } catch (err) {
-                console.error('[Kitchen PTT] Upload or Publish failed', err);
-            }
-            audioChunksRef.current = [];
-        };
-        mr.stop();
-        mr.stream.getTracks().forEach(t => t.stop());
-    };
 
     // ── Event Handlers ────────────────────────────────────────────────────────
 
@@ -785,65 +552,43 @@ const KitchenPrepPage: React.FC = () => {
     // ─── Render ───────────────────────────────────────────────────────────────
 
     return (
-        <div className="flex flex-col h-full bg-slate-50 rounded-[32px] overflow-hidden border border-slate-200 shadow-xl">
-            <header className="pt-8 pb-4 px-8 bg-white border-b border-slate-100 flex flex-col gap-6">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center border border-blue-500/20">
-                            <span className="material-icons-round text-blue-600">precision_manufacturing</span>
-                        </div>
-                        <div>
-                            <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase">Kitchen Production Line</h1>
-                            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{currentTime} • Real-time Monitoring</p>
-                        </div>
-                    </div>
-                    <div className="flex items-center gap-6">
+        <div className="flex flex-col h-full bg-transparent overflow-hidden">
+            {/* Titles Outside the card */}
+            <div className="pt-10 pb-6 px-10 flex justify-between items-end">
+                <div>
+                    <h1 className="text-3xl font-black text-primary uppercase tracking-wider mb-0.5">后厨管理</h1>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em]">Kitchen Production Line</p>
+                </div>
+                <button
+                    onClick={async () => {
+                        await supabase.auth.signOut();
+                        navigate('/login');
+                    }}
+                    className="p-3 text-red-600 hover:text-red-700 transition-all duration-300 active:scale-95 mb-1"
+                >
+                    <span className="material-icons-round text-2xl">logout</span>
+                </button>
+            </div>
 
-                        {/* Walkie-Talkie Button */}
-                        <div className="flex items-center gap-3">
-                            <button
-                                onMouseDown={handlePttDown}
-                                onMouseUp={handlePttUp}
-                                onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }}
-                                onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
-                                onContextMenu={(e) => e.preventDefault()}
-                                disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'}
-                                className={`w-14 h-14 rounded-2xl flex items-center justify-center transition-all shadow-xl active:scale-90 border relative group
-                                    ${isTransmitting 
-                                        ? 'bg-primary text-white animate-pulse border-primary-light shadow-primary/40' 
-                                        : pttStatus === 'CONNECTING' || pttStatus === 'IDLE'
-                                            ? 'bg-slate-100 text-slate-300 border-slate-200'
-                                            : 'bg-white text-primary border-primary/10 hover:bg-primary/5 hover:border-primary/20'
-                                    }`}
-                            >
-                                {isTransmitting && <div className="absolute inset-0 bg-white/20 animate-ping rounded-2xl"></div>}
-                                <span className="material-icons-round text-2xl relative z-10">
-                                    {isTransmitting ? 'mic' : pttStatus === 'LISTENING' ? 'volume_up' : 'mic_none'}
-                                </span>
-                            </button>
-                            <div className="hidden lg:block">
-                                <p className="text-[10px] font-black text-primary uppercase tracking-widest leading-tight">Walkie-Talkie</p>
-                                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tighter">
-                                    {pttStatus === 'TALKING' ? 'Transmitting...' : pttStatus === 'LISTENING' ? 'Incoming Signal' : pttStatus === 'CONNECTED' ? 'Online · Global' : 'Connecting...'}
-                                </p>
-                            </div>
-                        </div>
-
+            <div className="flex-1 flex flex-col bg-slate-50 rounded-[40px] overflow-hidden border border-slate-200 shadow-2xl mx-4 mb-4">
+                <header className="pt-8 pb-4 px-8 bg-white/50 backdrop-blur-md border-b border-slate-100 flex flex-col gap-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-6 ml-auto">
                         {/* Stats badges */}
                         <div className="hidden md:flex items-center gap-3">
-                        <div className="px-4 py-2 bg-amber-50 border border-amber-100 rounded-2xl text-center">
-                            <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Active</p>
-                            <p className="text-xl font-black text-amber-700 leading-none">{activeCount}</p>
-                        </div>
-                        <div className="px-4 py-2 bg-green-50 border border-green-100 rounded-2xl text-center">
-                            <p className="text-[9px] font-black text-green-500 uppercase tracking-widest">Ready</p>
-                            <p className="text-xl font-black text-green-700 leading-none">{preparedCount}</p>
+                            <div className="px-4 py-2 bg-amber-50 border border-amber-100 rounded-2xl text-center">
+                                <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest">Active</p>
+                                <p className="text-xl font-black text-amber-700 leading-none">{activeCount}</p>
+                            </div>
+                            <div className="px-4 py-2 bg-green-50 border border-green-100 rounded-2xl text-center">
+                                <p className="text-[9px] font-black text-green-500 uppercase tracking-widest">Ready</p>
+                                <p className="text-xl font-black text-green-700 leading-none">{preparedCount}</p>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/50">
+                <div className="flex gap-2 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/50">
                     {[
                         { id: 'production', label: 'In Production', icon: 'pending_actions' },
                         { id: 'history', label: 'Completed', icon: 'history' },
@@ -954,7 +699,8 @@ const KitchenPrepPage: React.FC = () => {
                 </div>
             </div>
         </div>
-    );
+    </div>
+);
 };
 
 export default KitchenPrepPage;

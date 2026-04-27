@@ -40,7 +40,17 @@ const ROLE_CONFIG: Record<string, { label: string; color: string; icon: string; 
 
 export const WalkieTalkiePage: React.FC = () => {
     const { user } = useAuth();
-    const { goEasy: contextGoEasy, status: goEasyStatus } = useGoEasy();
+    const { goEasy: contextGoEasy, status: goEasyStatus, connect, disconnect } = useGoEasy();
+
+    // 页面进入时连接，离开时断开，节省 GoEasy 名额
+    useEffect(() => {
+        if (user) {
+            connect();
+        }
+        return () => {
+            disconnect();
+        };
+    }, [user, connect, disconnect]);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const [chatInput, setChatInput] = useState('');
@@ -114,72 +124,101 @@ export const WalkieTalkiePage: React.FC = () => {
         };
     }, [audioUnlocked, unlockAudio]);
 
+    const isSubscribedRef = useRef(false);
+
     // ── GoEasy PubSub Subscriptions ────────────────────────────────────
     useEffect(() => {
-        if (!user || !contextGoEasy || goEasyStatus !== 'CONNECTED') return;
+        if (!user || !contextGoEasy || goEasyStatus !== 'CONNECTED') {
+            isSubscribedRef.current = false;
+            return;
+        }
+
+        // 防止重复订阅
+        if (isSubscribedRef.current) return;
 
         const myId = user.id;
         console.log('[Walkie] Subscribing to channel:', CHANNEL);
 
-        contextGoEasy.pubsub.subscribe({
-            channel: CHANNEL,
-            onMessage: async (message: { content: string }) => {
-                try {
-                    const payload = JSON.parse(message.content);
-                    if (payload.senderId === myId) return;
+        try {
+            contextGoEasy.pubsub.subscribe({
+                channel: CHANNEL,
+                onMessage: async (message: { content: string }) => {
+                    try {
+                        const payload = JSON.parse(message.content);
+                        if (payload.senderId === myId) return;
 
-                    // 处理撤回指令 (New)
-                    if (payload.type === 'recall') {
-                        const targetId = payload.id || payload.msgId;
-                        if (!targetId) return;
-                        console.log('[Walkie] Remote recall signal received:', targetId);
-                        setMessages(prev => prev.map(m => m.id === targetId ? { ...m, isRecalled: true } : m));
-                        return;
+                        // 处理撤回指令 (New)
+                        if (payload.type === 'recall') {
+                            const targetId = payload.id || payload.msgId;
+                            if (!targetId) return;
+                            console.log('[Walkie] Remote recall signal received:', targetId);
+                            setMessages(prev => prev.map(m => m.id === targetId ? { ...m, isRecalled: true } : m));
+                            return;
+                        }
+
+                        // 兼容语音消息的各种类型定义 (audio, voice, ptt)
+                        const isVoicePayload = payload.type === 'audio' || payload.type === 'voice' || payload.audio || payload.audioUrl || payload.url;
+                        const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
+                        const common = {
+                            id: incomingId,
+                            senderId: payload.senderId,
+                            senderLabel: payload.senderLabel || payload.senderId,
+                            senderRole: payload.senderRole || 'driver',
+                            timestamp: payload.timestamp || Date.now(),
+                            isMine: false,
+                            receiverId: 'GLOBAL',
+                            duration: payload.duration
+                        };
+
+                        if (payload.type === 'text') {
+                            addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
+                        } else if (isVoicePayload) {
+                            const audioContent = payload.content || payload.audio || payload.audioUrl || payload.url || payload.voiceUrl;
+                            if (!audioContent) return;
+                            
+                            setLatestIncomingId(incomingId);
+                            addMessage({ 
+                                ...common, 
+                                content: audioContent, 
+                                type: 'audio' // 统一映射为 audio 进行渲染
+                            } as ChatMessage);
+                        }
+                    } catch (err) {
+                        console.error('[Walkie] Failed to handle message', err);
                     }
-
-                    // 兼容语音消息的各种类型定义 (audio, voice, ptt)
-                    const isVoicePayload = payload.type === 'audio' || payload.type === 'voice' || payload.audio || payload.audioUrl || payload.url;
-                    const incomingId = payload.id || `${payload.senderId}-${payload.timestamp}`;
-                    const common = {
-                        id: incomingId,
-                        senderId: payload.senderId,
-                        senderLabel: payload.senderLabel || payload.senderId,
-                        senderRole: payload.senderRole || 'driver',
-                        timestamp: payload.timestamp || Date.now(),
-                        isMine: false,
-                        receiverId: 'GLOBAL',
-                        duration: payload.duration
-                    };
-
-                    if (payload.type === 'text') {
-                        addMessage({ ...common, content: payload.content, type: 'text' } as ChatMessage);
-                    } else if (isVoicePayload) {
-                        const audioContent = payload.content || payload.audio || payload.audioUrl || payload.url || payload.voiceUrl;
-                        if (!audioContent) return;
-                        
-                        setLatestIncomingId(incomingId);
-                        addMessage({ 
-                            ...common, 
-                            content: audioContent, 
-                            type: 'audio' // 统一映射为 audio 进行渲染
-                        } as ChatMessage);
-                    }
-                } catch (err) {
-                    console.error('[Walkie] Failed to handle message', err);
+                },
+                onSuccess: () => {
+                    console.log('[Walkie] Subscribed to', CHANNEL);
+                    isSubscribedRef.current = true;
+                },
+                onFailed: (err: any) => {
+                    console.error('[Walkie] Subscribe failed', err);
+                    isSubscribedRef.current = false;
                 }
-            },
-            onSuccess: () => console.log('[Walkie] Subscribed to', CHANNEL),
-            onFailed: (err: any) => console.error('[Walkie] Subscribe failed', err)
-        });
+            });
+        } catch (err) {
+            console.error('[Walkie] Subscribe synchronous error', err);
+        }
 
         return () => {
-            if (contextGoEasy && goEasyStatus === 'CONNECTED') {
-                console.log('[Walkie] Unsubscribing from', CHANNEL);
-                contextGoEasy.pubsub.unsubscribe({
-                    channel: CHANNEL,
-                    onSuccess: () => console.log('[Walkie] Unsubscribe success'),
-                    onFailed: (err: any) => console.error('[Walkie] Unsubscribe failed', err)
-                });
+            if (contextGoEasy && goEasyStatus === 'CONNECTED' && isSubscribedRef.current) {
+                console.log('[Walkie] Cleaning up subscription for', CHANNEL);
+                try {
+                    contextGoEasy.pubsub.unsubscribe({
+                        channel: CHANNEL,
+                        onSuccess: () => {
+                            console.log('[Walkie] Unsubscribe success');
+                            isSubscribedRef.current = false;
+                        },
+                        onFailed: (err: any) => {
+                            console.warn('[Walkie] Unsubscribe failed (silent)', err);
+                            isSubscribedRef.current = false;
+                        }
+                    });
+                } catch (e) {
+                    console.warn('[Walkie] Unsubscribe exception', e);
+                    isSubscribedRef.current = false;
+                }
             }
         };
     }, [user?.id, contextGoEasy, goEasyStatus, addMessage]);

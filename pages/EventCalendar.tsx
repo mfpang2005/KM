@@ -9,6 +9,8 @@ const EventCalendar: React.FC = () => {
     const [loading, setLoading] = useState(true);
     const [selectedDate, setSelectedDate] = useState<string>(new Date().toISOString().split('T')[0]);
     const [viewMonth, setViewMonth] = useState(new Date());
+    const [userRole, setUserRole] = useState<string | null>(null);
+    const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
 
     // Fetch orders from Supabase (Real-time linkage)
     const loadOrders = async () => {
@@ -29,6 +31,20 @@ const EventCalendar: React.FC = () => {
 
     useEffect(() => {
         loadOrders();
+
+        // Fetch current user role
+        const fetchRole = async () => {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('users')
+                    .select('role')
+                    .eq('id', user.id)
+                    .single();
+                if (profile) setUserRole(profile.role);
+            }
+        };
+        fetchRole();
 
         // Realtime subscription
         const channel = supabase.channel('mobile-calendar-sync')
@@ -69,7 +85,8 @@ const EventCalendar: React.FC = () => {
     const selectedDayOrders = groupedOrders[selectedDate] || [];
 
     return (
-        <div className="min-h-full bg-background-beige pb-20 animate-in fade-in duration-500">
+        <>
+            <div className="min-h-full bg-background-beige pb-20 animate-in fade-in duration-500">
             {/* Header */}
             <div className="p-6 pb-2">
                 <div className="flex items-center justify-between mb-6">
@@ -159,48 +176,140 @@ const EventCalendar: React.FC = () => {
                     </div>
                 ) : selectedDayOrders.length > 0 ? (
                     selectedDayOrders.map((order, idx) => (
-                        <div 
-                            key={idx}
-                            onClick={() => navigate(`/orders/${order.id}`)}
-                            className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between active:scale-[0.98] transition-all"
-                        >
-                            <div className="flex items-center gap-4 min-w-0">
-                                <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 ${
-                                    order.status === OrderStatus.COMPLETED ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
-                                }`}>
-                                    <span className="text-xs font-black leading-none">
-                                        {new Date(order.dueTime).getHours().toString().padStart(2, '0')}
-                                    </span>
-                                    <span className="text-[8px] font-black uppercase opacity-60">
-                                        {new Date(order.dueTime).getMinutes().toString().padStart(2, '0')}
-                                    </span>
-                                </div>
-                                <div className="min-w-0">
-                                    <h3 className="text-sm font-black text-slate-900 truncate uppercase tracking-tight">{order.customerName}</h3>
-                                    <div className="flex items-center gap-2 mt-1">
-                                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
-                                            order.status === OrderStatus.PENDING ? 'bg-amber-100 text-amber-600' :
-                                            order.status === OrderStatus.PREPARING ? 'bg-blue-100 text-blue-600' :
-                                            'bg-slate-100 text-slate-500'
+                                <div 
+                                    key={idx}
+                                    onClick={() => {
+                                        if (userRole === 'KITCHEN') {
+                                            setSelectedOrder(order);
+                                        } else {
+                                            navigate(`/orders/${order.id}`);
+                                        }
+                                    }}
+                                    className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between active:scale-[0.98] transition-all"
+                                >
+                                    <div className="flex items-center gap-4 min-w-0">
+                                        <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center shrink-0 ${
+                                            order.status === OrderStatus.COMPLETED ? 'bg-emerald-50 text-emerald-600' : 'bg-blue-50 text-blue-600'
                                         }`}>
-                                            {order.status}
-                                        </span>
-                                        <span className="text-[10px] font-bold text-slate-400 truncate">{order.address.split(',')[0]}</span>
+                                            <span className="text-xs font-black leading-none">
+                                                {new Date(order.dueTime).getHours().toString().padStart(2, '0')}
+                                            </span>
+                                            <span className="text-[8px] font-black uppercase opacity-60">
+                                                {new Date(order.dueTime).getMinutes().toString().padStart(2, '0')}
+                                            </span>
+                                        </div>
+                                        <div className="min-w-0">
+                                            <h3 className="text-sm font-black text-slate-900 truncate uppercase tracking-tight">{order.customerName}</h3>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <span className={`text-[8px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider ${
+                                                    order.status === OrderStatus.PENDING ? 'bg-amber-100 text-amber-600' :
+                                                    order.status === OrderStatus.PREPARING ? 'bg-blue-100 text-blue-600' :
+                                                    'bg-slate-100 text-slate-500'
+                                                }`}>
+                                                    {order.status}
+                                                </span>
+                                                <span className="text-[10px] font-bold text-slate-400 truncate">{order.address.split(',')[0]}</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <span className="material-icons-round text-slate-200">chevron_right</span>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="py-20 bg-white/40 rounded-[32px] border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300">
+                                <span className="material-icons-round text-4xl mb-2">event_busy</span>
+                                <p className="text-[10px] font-black uppercase tracking-widest">今日暂无安排</p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Order Detail Popup for Kitchen */}
+                {selectedOrder && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                        <div 
+                            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" 
+                            onClick={() => setSelectedOrder(null)}
+                        />
+                        <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
+                            {/* Popup Header */}
+                            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                                        <span className="material-icons-round">receipt_long</span>
+                                    </div>
+                                    <div>
+                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">订单详情</h4>
+                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">#{selectedOrder.id.slice(0, 8)}</p>
                                     </div>
                                 </div>
+                                <button 
+                                    onClick={() => setSelectedOrder(null)}
+                                    className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-400"
+                                >
+                                    <span className="material-icons-round text-lg">close</span>
+                                </button>
                             </div>
-                            <span className="material-icons-round text-slate-200">chevron_right</span>
+
+                            {/* Popup Content */}
+                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                                {/* Customer Info */}
+                                <div className="flex items-center justify-between">
+                                    <div>
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">顾客姓名</span>
+                                        <p className="text-base font-black text-slate-800 uppercase italic">{selectedOrder.customerName}</p>
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">配送时间</span>
+                                        <p className="text-sm font-black text-blue-600 uppercase italic">
+                                            {new Date(selectedOrder.dueTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        </p>
+                                    </div>
+                                </div>
+
+                                {/* Items List */}
+                                <div className="space-y-3">
+                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">菜品清单 / ITEMS</h5>
+                                    <div className="space-y-2">
+                                        {selectedOrder.items && selectedOrder.items.length > 0 ? (
+                                            selectedOrder.items.map((item, i) => (
+                                                <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                                                    <span className="text-sm font-black text-slate-700 uppercase italic">{item.product_name || item.name}</span>
+                                                    <span className="bg-white px-3 py-1 rounded-xl border border-slate-200 text-xs font-black text-slate-800 italic shadow-sm">x{item.quantity}</span>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <p className="text-center py-4 text-[10px] font-black text-slate-300 uppercase italic">未找到菜品明细</p>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Remarks */}
+                                {(selectedOrder as any).remarks && (
+                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <span className="material-icons-round text-amber-500 text-sm">sticky_note_2</span>
+                                            <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">备注</span>
+                                        </div>
+                                        <p className="text-xs font-bold text-amber-800 italic">{(selectedOrder as any).remarks}</p>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Popup Footer */}
+                            <div className="p-6 bg-slate-50 border-t border-slate-100">
+                                <button 
+                                    onClick={() => setSelectedOrder(null)}
+                                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all"
+                                >
+                                    我知道了
+                                </button>
+                            </div>
                         </div>
-                    ))
-                ) : (
-                    <div className="py-20 bg-white/40 rounded-[32px] border border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300">
-                        <span className="material-icons-round text-4xl mb-2">event_busy</span>
-                        <p className="text-[10px] font-black uppercase tracking-widest">今日暂无安排</p>
                     </div>
                 )}
-            </div>
-        </div>
-    );
-};
+            </>
+        );
+    };
 
 export default EventCalendar;

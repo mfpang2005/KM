@@ -128,43 +128,57 @@ const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
                 </div>
 
                 {/* Mobile Bottom Navigation - Visible on small screens */}
-                <nav className="lg:hidden absolute bottom-0 left-0 right-0 bg-white border-t border-primary/5 px-6 py-2 safe-bottom z-50 flex justify-between items-center shadow-[0_-10px_40px_rgba(128,0,0,0.08)]">
+                <nav className="lg:hidden absolute bottom-0 left-0 right-0 bg-white border-t border-primary/5 px-4 py-2 safe-bottom z-50 flex justify-around items-center shadow-[0_-10px_40px_rgba(128,0,0,0.08)]">
                     {/* We show max 5 items for mobile bottom nav to avoid clutter. 
                         If more, detailed menu should be handled via a "More" button or similar. 
                         For now, we slice the first 4 + Profile or just mapping important ones.*/}
 
-                    {navItems.slice(0, 4).map((item) => (
-                        <button
-                            key={item.path}
-                            onClick={() => navigate(item.path)}
-                            className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 hover:text-primary-light'
-                                }`}
-                        >
-                            <span className={`material-icons-round text-2xl transition-transform active:scale-95 relative ${isActive(item.path) ? '' : 'opacity-70'
-                                 }`}>
-                                {item.icon}
-                                {item.path.includes('walkie') && hasUnreadWalkie && (
-                                    <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-bounce shadow-sm"></span>
-                                )}
-                            </span>
-                            <span className="text-[10px] font-medium">{item.label}</span>
-                        </button>
-                    ))}
-
-                    {/* Always show Profile/Logout or key action as last item if list is long? 
-                        Current list for Admin has 9 items. Bottom nav fits ~4-5 optimally.
-                        Let's verify what the design requirement implies. Use a specific set for mobile?
-                        Or just first 4. Let's stick to first 4 for now to keep it clean.
-                        Ideally, we would have a 'Menu' tab for others. 
-                        Let's just show top 4 for now and assume users use dashboard for others.
-                    */}
-                    <button
-                        onClick={() => setIsMoreMenuOpen(true)}
-                        className={`flex flex-col items-center gap-1 p-2 rounded-xl text-primary-light/40 hover:text-primary-light transition-all active:scale-95`}
-                    >
-                        <span className="material-icons-round text-2xl opacity-70">apps</span>
-                        <span className="text-[10px] font-medium">更多</span>
-                    </button>
+                    {navItems.length <= 5 ? (
+                        navItems.map((item) => (
+                            <button
+                                key={item.path}
+                                onClick={() => navigate(item.path)}
+                                className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 hover:text-primary-light'
+                                    }`}
+                            >
+                                <span className={`material-icons-round text-2xl transition-transform active:scale-95 relative ${isActive(item.path) ? '' : 'opacity-70'
+                                     }`}>
+                                    {item.icon}
+                                    {item.path.includes('walkie') && hasUnreadWalkie && (
+                                        <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-bounce shadow-sm"></span>
+                                    )}
+                                </span>
+                                <span className="text-[10px] font-medium">{item.label.split(' ')[0]}</span>
+                            </button>
+                        ))
+                    ) : (
+                        <>
+                            {navItems.slice(0, 4).map((item) => (
+                                <button
+                                    key={item.path}
+                                    onClick={() => navigate(item.path)}
+                                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all duration-200 ${isActive(item.path) ? 'text-primary' : 'text-primary-light/40 hover:text-primary-light'
+                                        }`}
+                                >
+                                    <span className={`material-icons-round text-2xl transition-transform active:scale-95 relative ${isActive(item.path) ? '' : 'opacity-70'
+                                         }`}>
+                                        {item.icon}
+                                        {item.path.includes('walkie') && hasUnreadWalkie && (
+                                            <span className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-red-500 border-2 border-white rounded-full animate-bounce shadow-sm"></span>
+                                        )}
+                                    </span>
+                                    <span className="text-[10px] font-medium">{item.label.split(' ')[0]}</span>
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => setIsMoreMenuOpen(true)}
+                                className={`flex flex-col items-center gap-1 p-2 rounded-xl text-primary-light/40 hover:text-primary-light transition-all active:scale-95`}
+                            >
+                                <span className="material-icons-round text-2xl opacity-70">apps</span>
+                                <span className="text-[10px] font-medium">更多</span>
+                            </button>
+                        </>
+                    )}
                 </nav>
 
                 {/* More Menu Drawer - Premium Overlay */}

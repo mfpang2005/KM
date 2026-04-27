@@ -22,11 +22,18 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
     useEffect(() => {
         if (!audioUrl) return;
 
+        // Reset states for new source
+        setReady(false);
+        setIsPlaying(false);
+        setCurrentTime(0);
+
         const audio = new Audio();
         audioRef.current = audio;
         audio.volume = 1.0;
+        audio.preload = 'auto'; // 强制预加载
         
         const onMeta = () => {
+            console.log('[AudioPlayer] Metadata loaded, duration:', audio.duration);
             if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
                 setDuration(audio.duration);
             }
@@ -36,7 +43,11 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
         const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
         const onPlay  = () => setIsPlaying(true);
         const onPause = () => setIsPlaying(false);
-        const onError = () => { setReady(false); setIsPlaying(false); };
+        const onError = () => { 
+            console.error('[AudioPlayer] Error loading audio source:', audioUrl, audio.error);
+            setReady(false); 
+            setIsPlaying(false); 
+        };
 
         audio.addEventListener('loadedmetadata', onMeta);
         audio.addEventListener('timeupdate', onTime);
@@ -44,6 +55,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
         audio.addEventListener('play', onPlay);
         audio.addEventListener('pause', onPause);
         audio.addEventListener('error', onError);
+        audio.crossOrigin = 'anonymous'; // 启用 CORS
+        audio.crossOrigin = 'anonymous'; // 尝试启用 CORS
 
         const setupSource = async () => {
             try {

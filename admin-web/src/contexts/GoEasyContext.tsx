@@ -26,55 +26,73 @@ export const GoEasyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const connect = useCallback(() => {
         if (!user || !GOEASY_APPKEY) return;
         
-        // 如果已经连接或是正在连接，且没有被手动断开，则不重复连接
-        if (goEasyRef.current && (status === 'CONNECTED' || status === 'CONNECTING')) return;
+        // 尝试从全局获取实例，防止 HMR 冲突
+        if (!goEasyRef.current) {
+            if ((window as any).__goeasy_admin_instance) {
+                goEasyRef.current = (window as any).__goeasy_admin_instance;
+            } else {
+                try {
+                    console.log(`[GoEasyContext] Initializing new instance. Host: ${GOEASY_HOST}`);
+                    // 兼容不同环境下的 GoEasy 导入结构
+                    const GoEasyLib = (GoEasy as any).default || GoEasy;
+                    const instance = (GoEasyLib as any).getInstance({
+                        host: GOEASY_HOST,
+                        appkey: GOEASY_APPKEY,
+                        modules: ['pubsub'],
+                    });
+                    goEasyRef.current = instance;
+                    (window as any).__goeasy_admin_instance = instance;
+                } catch (e) {
+                    console.error('[GoEasyContext] Init failed:', e);
+                    return;
+                }
+            }
+        }
+
+        const goEasy = goEasyRef.current;
+        if (!goEasy) return;
+
+        const currentStatus = goEasy.getConnectionStatus ? goEasy.getConnectionStatus() : 'disconnected';
+        if (currentStatus === 'connected' || currentStatus === 'connecting') {
+            if (currentStatus === 'connected') setStatus('CONNECTED');
+            return;
+        }
 
         isManualDisconnectRef.current = false;
+        setStatus('CONNECTING');
         
         try {
-            if (!goEasyRef.current) {
-                goEasyRef.current = (GoEasy as any).getInstance({
-                    host: GOEASY_HOST,
-                    appkey: GOEASY_APPKEY,
-                    modules: ['pubsub'],
-                });
-            }
-
-            const goEasy = goEasyRef.current;
-            const currentStatus = goEasy.getConnectionStatus ? goEasy.getConnectionStatus() : 'disconnected';
-            
-            goEasyRef.current.connect({
+            const connectOptions = {
                 id: user.id,
                 data: { email: user.email, role: user.role },
                 onSuccess: () => {
                     console.log('[GoEasyContext] Connected successfully as', user.email);
                     setStatus('CONNECTED');
-                    if (reconnectTimerRef.current) {
-                        clearTimeout(reconnectTimerRef.current);
-                        reconnectTimerRef.current = null;
-                    }
                 },
                 onFailed: (err: any) => {
                     console.error('[GoEasyContext] Connection failed:', err);
+                    const errorMsg = err.content || String(err);
+                    if (err.code === 408 && (errorMsg.includes('already connected') || errorMsg.includes('Already connected'))) {
+                        setStatus('CONNECTED');
+                        return;
+                    }
                     setStatus('DISCONNECTED');
                     scheduleReconnect();
                 },
                 onDisconnected: () => {
-                    console.warn('[GoEasyContext] Disconnected.');
                     setStatus('DISCONNECTED');
-                    if (!isManualDisconnectRef.current) {
-                        scheduleReconnect();
-                    }
-                },
-                onProgress: (status: string) => {
-                    console.log('[GoEasyContext] Progress:', status);
+                    if (!isManualDisconnectRef.current) scheduleReconnect();
                 }
-            });
+            };
+
+            console.log('[GoEasyContext] Calling connect with options for', user.email);
+            goEasy.connect(connectOptions);
         } catch (err) {
-            console.error('[GoEasyContext] Init error:', err);
+            console.error('[GoEasyContext] Synchronous connect error:', err);
             setStatus('DISCONNECTED');
+            scheduleReconnect();
         }
-    }, [user, status]);
+    }, [user]);
 
     const disconnect = useCallback(() => {
         if (goEasyRef.current) {
@@ -83,9 +101,11 @@ export const GoEasyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 clearTimeout(reconnectTimerRef.current);
                 reconnectTimerRef.current = null;
             }
-            if (typeof goEasyRef.current.disconnect === 'function') {
-                goEasyRef.current.disconnect();
-            }
+            try {
+                if (typeof goEasyRef.current.disconnect === 'function') {
+                    goEasyRef.current.disconnect();
+                }
+            } catch (e) {}
             setStatus('DISCONNECTED');
         }
     }, []);
@@ -100,14 +120,13 @@ export const GoEasyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         }, 5000);
     }, [connect]);
 
-    // 用户登录状态改变时自动连接/断开
+    // 用户状态改变时，我们只在没有用户时断开连接。
+    // 连接由各个页面按需发起，不再自动连接，以节省名额。
     useEffect(() => {
-        if (user) {
-            connect();
-        } else {
+        if (!user) {
             disconnect();
         }
-    }, [user, connect, disconnect]);
+    }, [user, disconnect]);
 
     // 清理逻辑
     useEffect(() => {
@@ -118,8 +137,15 @@ export const GoEasyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
     }, []);
 
+    const contextValue = React.useMemo(() => ({
+        goEasy: goEasyRef.current,
+        status,
+        connect,
+        disconnect
+    }), [status, connect, disconnect]);
+
     return (
-        <GoEasyContext.Provider value={{ goEasy: goEasyRef.current, status, connect, disconnect }}>
+        <GoEasyContext.Provider value={contextValue}>
             {children}
         </GoEasyContext.Provider>
     );

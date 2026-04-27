@@ -243,9 +243,9 @@ const App: React.FC = () => {
                         <Route path="/admin/kitchen-summary" element={isAdminOrSuper ? <PermissionRoute id="kitchen"><KitchenSummary /></PermissionRoute> : <Navigate to="/login" />} />
                         <Route path="/admin/notifications" element={isAdminOrSuper ? <NotificationCenter /> : <Navigate to="/login" />} />
                         <Route path="/admin/profile" element={isAdminOrSuper ? <Profile onLogout={() => setUserProfile(null)} /> : <Navigate to="/login" />} />
-                        <Route path="/admin/walkie-talkie" element={isAdminOrSuper ? <PermissionRoute id="walkie_talkie"><WalkieTalkie /></PermissionRoute> : <Navigate to="/login" />} />
-                        <Route path="/admin/calendar" element={isAdminOrSuper ? <PermissionRoute id="event_calendar"><EventCalendar /></PermissionRoute> : <Navigate to="/login" />} />
-                        <Route path="/admin/inventory" element={isAdminOrSuper ? <PermissionRoute id="inventory"><InventoryManagement /></PermissionRoute> : <Navigate to="/login" />} />
+                        <Route path="/admin/walkie-talkie" element={isAdminOrSuper || role === UserRole.KITCHEN || role === UserRole.DRIVER ? <WalkieTalkie /> : <Navigate to="/login" />} />
+                        <Route path="/admin/calendar" element={isAdminOrSuper || role === UserRole.KITCHEN ? <EventCalendar /> : <Navigate to="/login" />} />
+                        <Route path="/admin/inventory" element={isAdminOrSuper || role === UserRole.KITCHEN ? <InventoryManagement /> : <Navigate to="/login" />} />
                         <Route path="/orders/:id" element={isAdminOrSuper || role === UserRole.DRIVER ? <OrderDetail /> : <Navigate to="/login" />} />
 
                         {/* Super Admin Routes — 仅 super_admin 可访问，完全不受锁定影响 */}

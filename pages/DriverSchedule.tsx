@@ -2,29 +2,8 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom';
 import { OrderService, UserService, VehicleService, api } from '../src/services/api';
 import { Order, OrderStatus, User, Vehicle } from '../types';
-import GoEasy from 'goeasy';
 import { supabase } from '../src/lib/supabase';
 import { getGoogleMapsUrl } from '../src/utils/maps';
-import AudioPlayer from '../src/components/AudioPlayer';
-
-// NOTE: GoEasy 配置 — 对应控制台 [IM即时通讯] KIM_LONG_COMUNITY 应用
-const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
-const GOEASY_HOST = 'singapore.goeasy.io';
-const CHANNEL = 'KIM_LONG_COMUNITY';
-
-/** 司机端聊天消息数据结构 */
-interface DriverChatMsg {
-    id: string;
-    senderId: string;
-    senderLabel: string;
-    senderRole: string;
-    content: string;
-    timestamp: number;
-    isMine: boolean;
-    type?: 'text' | 'audio' | 'recall'; // 增加 recall 类型
-    duration?: number;
-    isRecalled?: boolean; // 增加已撤回标志位
-}
 
 const DriverSchedule: React.FC = () => {
     const navigate = useNavigate();
@@ -47,110 +26,7 @@ const DriverSchedule: React.FC = () => {
     const [isVehicleDeclaring, setIsVehicleDeclaring] = useState(false);
     const [declaredTime, setDeclaredTime] = useState<string | null>(null);
 
-    // PTT / GoEasy States
-    const [isPttOpen, setIsPttOpen] = useState(false);
-    const [isTransmitting, setIsTransmitting] = useState(false);
-    const [pttStatus, setPttStatus] = useState<'IDLE' | 'CONNECTING' | 'CONNECTED' | 'TALKING' | 'LISTENING'>('IDLE');
-    // NOTE: 聊天消息状态
-    const [driverChatMessages, setDriverChatMessages] = useState<DriverChatMsg[]>([]);
-    const [driverChatInput, setDriverChatInput] = useState('');
-    // NOTE: 追踪最新收到的语音消息 ID，用于触发 AudioPlayer autoPlay
-    const [latestIncomingId, setLatestIncomingId] = useState<string | null>(null);
-
     const [audioUnlocked, setAudioUnlocked] = useState(false);
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-    const audioChunksRef = useRef<Blob[]>([]);
-    const silentAudioRef = useRef<HTMLAudioElement | null>(null);
-    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
-    const presenceChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-    const chatBottomRef = useRef<HTMLDivElement | null>(null);
-    const messageIdsRef = useRef<Set<string>>(new Set());
-    const recordStartTimeRef = useRef<number | null>(null);
-
-    const addMessage = useCallback((msg: DriverChatMsg) => {
-        // 1. 根据 ID 去重
-        if (messageIdsRef.current.has(msg.id)) return;
-
-        // 2. 根据内容指纹去重（针对同一发送者在极短时间内发送的相同内容）
-        const fingerprint = `${msg.senderId}:${msg.type}:${msg.content.slice(0, 50)}:${Math.floor(msg.timestamp / 1000)}`;
-        if (messageIdsRef.current.has(fingerprint)) return;
-
-        messageIdsRef.current.add(msg.id);
-        messageIdsRef.current.add(fingerprint);
-        setDriverChatMessages(prev => [...prev, msg]);
-        setTimeout(() => chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50);
-    }, []);
-
-    /** 用户交互解锁音频权限 */
-    const unlockAudio = useCallback(() => {
-        if (audioUnlocked) return;
-        const SILENT_WAV = 'UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
-        const audio = new Audio(`data:audio/wav;base64,${SILENT_WAV}`);
-        audio.volume = 0.01;
-        audio.play()
-            .then(() => {
-                setAudioUnlocked(true);
-                console.log('[Driver PTT] Audio context unlocked');
-            })
-            .catch((e) => {
-                console.warn('[Driver PTT] Unlock failed:', e);
-                setAudioUnlocked(true);
-            });
-        silentAudioRef.current = audio;
-    }, [audioUnlocked]);
-
-    // --- NEW: 监听全局点击以隐形解锁音频 ---
-    useEffect(() => {
-        if (audioUnlocked) return;
-        const handleFirstClick = () => {
-            unlockAudio();
-            window.removeEventListener('click', handleFirstClick);
-            window.removeEventListener('touchstart', handleFirstClick);
-        };
-        window.addEventListener('click', handleFirstClick);
-        window.addEventListener('touchstart', handleFirstClick);
-        return () => {
-            window.removeEventListener('click', handleFirstClick);
-            window.removeEventListener('touchstart', handleFirstClick);
-        };
-    }, [audioUnlocked, unlockAudio]);
-
-    const playAudio = useCallback(async (content: string) => {
-        if (!audioContextRef.current) {
-            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        if (audioContextRef.current.state === 'suspended') await audioContextRef.current.resume();
-        try {
-            // --- NEW: Handle HTTP URL directly ---
-            if (content.startsWith('http')) {
-                const audio = new Audio(content);
-                audio.onended = () => setPttStatus('CONNECTED');
-                audio.play().catch(e => console.error('[GoEasy PTT] Play error', e));
-                setPttStatus('LISTENING');
-                return;
-            }
-
-            // Handle potential data URI prefix or raw base64
-            const base64 = content.startsWith('data:') ? content.split(',')[1] : content;
-            
-            const binary = atob(base64);
-            const buf = new ArrayBuffer(binary.length);
-            const view = new Uint8Array(buf);
-            for (let i = 0; i < binary.length; i++) view[i] = binary.charCodeAt(i);
-            const audioBuf = await audioContextRef.current.decodeAudioData(buf);
-            const src = audioContextRef.current.createBufferSource();
-            src.buffer = audioBuf;
-            src.connect(audioContextRef.current.destination);
-            src.onended = () => setPttStatus('CONNECTED');
-            src.start(0);
-            setPttStatus('LISTENING');
-        } catch (err) {
-            console.error('[GoEasy PTT] Audio decode error', err);
-            setPttStatus('CONNECTED');
-        }
-    }, []);
-
     const fetchOrders = async () => {
         try {
             const allOrders = await OrderService.getAll();
@@ -188,7 +64,6 @@ const DriverSchedule: React.FC = () => {
                     plate_no: v.plate_no || v.plate
                 }));
                 setVehicles(mappedVehicles);
-                // Try to find if user is assigned to any vehicle in the fetched fleet
                 if (userId) {
                     const assigned = mappedVehicles.find(v => v.driver_id === userId);
                     if (assigned) {
@@ -202,7 +77,6 @@ const DriverSchedule: React.FC = () => {
         }
     };
 
-    // ── Supabase Presence & Orders Sync ──
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
             if (session?.user) {
@@ -222,7 +96,6 @@ const DriverSchedule: React.FC = () => {
             .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchOrders())
             .subscribe();
 
-        // Broadcast presence so Admin can see the driver
         let presenceChannel: any = null;
         if (userId) {
             presenceChannel = supabase.channel('walkie-talkie-room', {
@@ -232,7 +105,7 @@ const DriverSchedule: React.FC = () => {
                 if (status === 'SUBSCRIBED') {
                     await presenceChannel.track({
                         userId: userId,
-                        email: driverPhone || 'Driver', // Use phone or 'Driver'
+                        email: driverPhone || 'Driver',
                         role: 'driver',
                         joinedAt: new Date().toISOString()
                     });
@@ -250,80 +123,6 @@ const DriverSchedule: React.FC = () => {
         };
     }, [userId, driverPhone]);
 
-    useEffect(() => {
-        if (!isPttOpen || !userId) return;
-        const fetchHistory = async () => {
-            try {
-                const { data, error } = await supabase.from('messages')
-                    .select('*')
-                    .eq('receiver_id', 'GLOBAL')
-                    .order('created_at', { ascending: false })
-                    .limit(50);
-
-                if (error) throw error;
-                if (data) {
-                    const history = data.reverse().map(msg => {
-                        messageIdsRef.current.add(msg.id);
-                        return {
-                            id: msg.id,
-                            senderId: msg.sender_id,
-                            senderLabel: msg.sender_label || 'Unknown',
-                            senderRole: msg.sender_role || 'guest',
-                            type: (msg.type as any) || 'text',
-                            content: msg.content,
-                            timestamp: new Date(msg.created_at).getTime(),
-                            isMine: msg.sender_id === userId,
-                            duration: msg.duration,
-                            isRecalled: msg.is_recalled
-                        };
-                    });
-                    setDriverChatMessages(history);
-                }
-            } catch (err) {
-                console.error('Failed to fetch driver chat history', err);
-            }
-        };
-        fetchHistory();
-
-        // ── Supabase Realtime Listener ──
-        const channel = supabase.channel('public:messages')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
-                const msg = payload.new;
-                if (!msg || msg.sender_id === userId) return; // ignore own messages or null
-                
-                // 仅同步全局消息或发送给本人的
-                const isTargeted = !msg.receiver_id || msg.receiver_id === 'GLOBAL' || msg.receiver_id === userId;
-                if (!isTargeted) return;
-
-                addMessage({
-                    id: msg.id,
-                    senderId: msg.sender_id,
-                    senderLabel: msg.sender_label || 'Unknown',
-                    senderRole: msg.sender_role || 'guest',
-                    content: msg.content,
-                    timestamp: msg.created_at ? new Date(msg.created_at).getTime() : Date.now(),
-                    isMine: false,
-                    type: (msg.type as any) || 'text',
-                    duration: msg.duration,
-                    isRecalled: msg.is_recalled
-                });
-
-                if (msg.type === 'audio' && msg.content) {
-                    await playAudio(msg.content);
-                }
-            })
-            .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, (payload) => {
-                const msg = payload.new;
-                if (msg && msg.is_recalled) {
-                    console.log('[PTT] Syncing recall state from DB UPDATE:', msg.id);
-                    setDriverChatMessages(prev => prev.map(m => m.id === msg.id ? { ...m, isRecalled: true } : m));
-                }
-            })
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, [isPttOpen, userId, addMessage, playAudio]);
-
     const taskOrders = useMemo(() => orders.filter(o =>
         o.status === OrderStatus.READY || o.status === OrderStatus.DELIVERING
     ), [orders]);
@@ -337,12 +136,10 @@ const DriverSchedule: React.FC = () => {
         try {
             await OrderService.updateStatus(orderId, status);
             fetchOrders();
-            
-            // If starting delivery, trigger WhatsApp departure message
             if (status === OrderStatus.DELIVERING) {
                 const order = orders.find(o => o.id === orderId);
                 if (order) {
-                    handleWhatsApp(order, 'arrival'); // 'arrival' type uses the departure template
+                    handleWhatsApp(order, 'arrival');
                 }
             }
         } catch (e: any) {
@@ -403,345 +200,6 @@ const DriverSchedule: React.FC = () => {
         }
     };
 
-
-
-    const startPttSession = async () => {
-        setIsPttOpen(true);
-        setPttStatus('CONNECTING');
-
-        const doConnect = () => {
-            try {
-                const goEasy = GoEasy.getInstance({
-                    host: GOEASY_HOST,
-                    appkey: GOEASY_APPKEY,
-                    modules: ['pubsub'],
-                });
-                goEasyRef.current = goEasy;
-
-                const myId = userId || `driver-${Math.random().toString(36).slice(2, 9)}`;
-                goEasy.connect({
-                    id: myId,
-                    data: { role: 'driver' },
-                    onSuccess: () => {
-                        setPttStatus('CONNECTED');
-
-                        // NOTE: 统一的消息处理函数，全局和私人频道共用，避免重复逻辑
-                        const handleIncoming = async (message: any) => {
-                            try {
-                                const payload = JSON.parse(message.content);
-                                if (payload.senderId === myId) return;
-                                
-                                // 处理撤回指令 (New)
-                                if (payload.type === 'recall') {
-                                    const targetId = payload.id || payload.msgId;
-                                    if (!targetId) return;
-                                    console.log('[GoEasy PTT] Remote recall signal received:', targetId);
-                                    setDriverChatMessages(prev => prev.map(m => m.id === targetId ? { ...m, isRecalled: true } : m));
-                                    return;
-                                }
-
-                                // 仅处理发送到 GLOBAL 全局广播频道的消息
-                                if (payload.receiverId !== 'GLOBAL') return;
-
-                                const msgId = payload.id || `${payload.senderId}-${payload.timestamp}`;
-                                // NOTE: 兼容 content 和 audio 两种字段格式
-                                const audioContent = payload.content || payload.audio;
-
-                                if (payload.type === 'text') {
-                                    addMessage({
-                                        id: msgId,
-                                        senderId: payload.senderId,
-                                        senderLabel: payload.senderLabel ?? '管理员',
-                                        senderRole: payload.senderRole ?? 'admin',
-                                        content: payload.content,
-                                        timestamp: payload.timestamp || Date.now(),
-                                        isMine: false,
-                                        type: 'text',
-                                        duration: payload.duration
-                                    });
-                                } else if (payload.type === 'audio' && audioContent) {
-                                    addMessage({
-                                        id: msgId,
-                                        senderId: payload.senderId,
-                                        senderLabel: payload.senderLabel ?? '管理员',
-                                        senderRole: payload.senderRole ?? 'admin',
-                                        content: audioContent,
-                                        timestamp: payload.timestamp || Date.now(),
-                                        isMine: false,
-                                        type: 'audio',
-                                        duration: payload.duration
-                                    });
-                                    // NOTE: 通知最新收到的音频 ID，让 AudioPlayer 自动播放
-                                    setLatestIncomingId(msgId);
-                                }
-                            } catch (err) {
-                                console.error('[GoEasy PTT] Failed to handle message', err);
-                            }
-                        };
-
-                        // 订阅全局广播频道
-                        goEasy.pubsub.subscribe({
-                            channel: CHANNEL,
-                            onMessage: handleIncoming,
-                            onSuccess: () => console.log('[GoEasy] Subscribed to GLOBAL dispatch'),
-                            onFailed: (err: any) => console.error('[GoEasy] Subscribe GLOBAL failed', err),
-                        });
-                    },
-                    onFailed: () => setPttStatus('IDLE'),
-                    onDisconnected: () => setPttStatus('IDLE')
-                });
-            } catch (e) {
-                console.error('[GoEasy] Init error', e);
-                setPttStatus('IDLE');
-            }
-        };
-
-        try {
-            const status = GoEasy.getConnectionStatus();
-            if (status === 'disconnected') {
-                doConnect();
-            } else {
-                GoEasy.disconnect({
-                    onSuccess: () => doConnect(),
-                    onFailed: () => doConnect(),
-                });
-            }
-        } catch {
-            doConnect();
-        }
-
-        try {
-            const myId = userId || `driver-${Math.random().toString(36).slice(2, 9)}`;
-            const ch = supabase.channel('walkie-talkie-room', {
-                config: { presence: { key: myId } },
-            });
-            ch.subscribe(async (status) => {
-                if (status === 'SUBSCRIBED') {
-                    await ch.track({
-                        userId: myId,
-                        email: driverName || '司机端',
-                        role: 'driver',
-                        joinedAt: new Date().toISOString(),
-                    });
-                }
-            });
-            presenceChannelRef.current = ch;
-        } catch (e) {
-            console.error('[Presence] Failed to join walkie-talkie-room', e);
-        }
-    };
-
-    // ── 撤回消息逻辑 ──────────────────────────────────────────────────
-    const handleRecall = async (msgId: string) => {
-        if (!window.confirm('确定要撤回这条消息吗？撤回后所有人都将无法查看。')) return;
-
-        try {
-            // 1. 调用后端接口更新 DB
-            await api.patch(`/audio/recall/${msgId}`);
-
-            // 2. 本地 UI 立即反馈
-            setDriverChatMessages(prev => prev.map(m => m.id === msgId ? { ...m, isRecalled: true } : m));
-
-            // 3. 通过 GoEasy 广播撤回信令
-            if (goEasyRef.current) {
-                goEasyRef.current.pubsub.publish({
-                    channel: CHANNEL,
-                    message: JSON.stringify({ type: 'recall', id: msgId }),
-                    onSuccess: () => console.log('[GoEasy] Recall broadcasted:', msgId),
-                });
-            }
-        } catch (err) {
-            console.error('Recall failed:', err);
-            alert('撤回失败，请稍后重试');
-        }
-    };
-
-    const handlePttDown = async () => {
-        if (pttStatus !== 'CONNECTED') return;
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mr = new MediaRecorder(stream);
-            audioChunksRef.current = [];
-            mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-            mr.start(100);
-            mediaRecorderRef.current = mr;
-            recordStartTimeRef.current = Date.now();
-            setIsTransmitting(true);
-            setPttStatus('TALKING');
-        } catch {
-            alert('请允许麦克风权限以使用对讲功能。');
-        }
-    };
-
-    const handlePttUp = () => {
-        if (!mediaRecorderRef.current || !isTransmitting) return;
-        setIsTransmitting(false);
-        setPttStatus('CONNECTED');
-        const mr = mediaRecorderRef.current;
-        mr.onstop = async () => {
-            if (!goEasyRef.current) return;
-            try {
-                const mimeType = mr.mimeType || 'audio/webm';
-                const blob = new Blob(audioChunksRef.current, { type: mimeType });
-                console.log(`[Driver PTT] Blob size: ${blob.size} bytes`);
-                if (blob.size < 100) {
-                    console.warn('[Driver PTT] Blob too small, ignoring.');
-                    return;
-                }
-
-                // --- NEW: Upload to Backend Storage ---
-                const formData = new FormData();
-                formData.append('file', blob, `voice_driver_${userId || 'unknown'}_${Date.now()}.webm`);
-                
-                const { data: uploadResult } = await api.post('/audio/upload', formData, {
-                    headers: { 'Content-Type': 'multipart/form-data' }
-                });
-                
-                const audioUrl = uploadResult.url;
-                if (!audioUrl) throw new Error('Upload failed: No URL returned');
-
-                const myId = userId || 'unknown-driver';
-                const myName = driverName || '司机端';
-                const ts = Date.now();
-                const dur = recordStartTimeRef.current ? (ts - recordStartTimeRef.current) / 1000 : 0;
-                const msgId = self.crypto.randomUUID();
-
-                console.log(`[Driver PTT] Sending audio URL ${msgId}, dur=${dur.toFixed(1)}s`);
-
-                // NOTE: 本地立即显示气泡
-                addMessage({
-                    id: msgId,
-                    senderId: myId,
-                    senderLabel: myName,
-                    senderRole: 'driver',
-                    content: audioUrl, // Store URL
-                    timestamp: ts,
-                    isMine: true,
-                    type: 'audio',
-                    duration: dur
-                });
-
-                // NOTE: 广播到全局频道
-                goEasyRef.current.pubsub.publish({
-                    channel: CHANNEL,
-                    message: JSON.stringify({
-                        id: msgId,
-                        type: 'audio',
-                        senderId: myId,
-                        senderLabel: myName,
-                        senderRole: 'driver',
-                        content: audioUrl,
-                        timestamp: ts,
-                        receiverId: 'GLOBAL',
-                        duration: dur
-                    }),
-                    onSuccess: () => console.log('[Driver PTT] GoEasy URL broadcast success'),
-                    onFailed: (e: any) => console.error('[Driver PTT] GoEasy URL broadcast failed', e)
-                });
-
-                // NOTE: 同步保存到 Supabase
-                const { error } = await supabase.from('messages').insert([{
-                    id: msgId,
-                    sender_id: myId,
-                    sender_label: myName,
-                    sender_role: 'driver',
-                    receiver_id: 'GLOBAL',
-                    content: audioUrl,
-                    type: 'audio',
-                    duration: dur
-                }]);
-
-                if (error) {
-                    console.error('[Driver PTT] DB Insert failed:', error);
-                    alert(`数据库存入失败 (Error ${error.code}): ${error.message}\n请联系管理员确认消息表结构（duration 字段可能丢失）。`);
-                } else {
-                    console.log('[Driver PTT] DB Insert success');
-                }
-            } catch (err) {
-                console.error('[Driver PTT] Catch Error:', err);
-                alert(`发送失败: ${(err as Error).message}`);
-            }
-            audioChunksRef.current = [];
-        };
-        mr.stop();
-        mr.stream.getTracks().forEach(t => t.stop());
-    };
-
-    const stopPttSession = () => {
-        if (goEasyRef.current) {
-            try {
-                goEasyRef.current.pubsub.unsubscribe({ channel: CHANNEL, onSuccess: () => {}, onFailed: () => {} });
-            } catch {}
-        }
-        mediaRecorderRef.current?.stop();
-        try {
-            GoEasy.disconnect({ onSuccess: () => {}, onFailed: () => {} });
-        } catch {}
-        if (presenceChannelRef.current) {
-            supabase.removeChannel(presenceChannelRef.current);
-            presenceChannelRef.current = null;
-        }
-        setIsPttOpen(false);
-        setPttStatus('IDLE');
-        goEasyRef.current = null;
-    };
-
-    const sendDriverTextMessage = () => {
-        const text = driverChatInput.trim();
-        if (!text || !goEasyRef.current || pttStatus === 'IDLE' || pttStatus === 'CONNECTING') return;
-
-        const myId = userId || 'unknown-driver';
-        const ts = Date.now();
-        const msgId = self.crypto.randomUUID();
-        const myName = driverName || '司机端';
-
-        // 乐观 UI
-        addMessage({
-            id: msgId,
-            senderId: myId,
-            senderLabel: myName,
-            senderRole: 'driver',
-            content: text,
-            timestamp: ts,
-            isMine: true,
-            type: 'text'
-        });
-        setDriverChatInput('');
-
-        const payload = {
-            id: msgId,
-            type: 'text',
-            senderId: myId,
-            senderLabel: myName,
-            senderRole: 'driver',
-            content: text,
-            timestamp: ts,
-            receiverId: 'GLOBAL'
-        };
-
-        goEasyRef.current.pubsub.publish({
-            channel: CHANNEL,
-            message: JSON.stringify(payload),
-        });
-
-        const insertMsg = async () => {
-            try {
-                await supabase.from('messages').insert([{
-                    id: msgId,
-                    sender_id: myId,
-                    sender_label: myName,
-                    sender_role: 'driver',
-                    receiver_id: 'GLOBAL',
-                    content: text,
-                    type: 'text'
-                }]);
-            } catch (err) {
-                console.error('Failed to insert message', err);
-            }
-        };
-        insertMsg();
-    };
-
     const handleWhatsApp = (order: Order, type: 'general' | 'arrival' | 'departure' = 'general') => {
         if (!order || !order.customerPhone) return;
         const cleanPhone = order.customerPhone.replace(/\D/g, '');
@@ -759,12 +217,10 @@ const DriverSchedule: React.FC = () => {
     const handleDeclareVehicle = async (vehicle: Vehicle) => {
         if (!userId) return;
         try {
-            // Check if vehicle is already taken by someone else (Front-end safeguard)
             if (vehicle.driver_id && vehicle.driver_id !== userId) {
                 alert(`该车辆已被司机 ${vehicle.driver_name || '其他同事'} 占用`);
                 return;
             }
-
             await VehicleService.assignToDriver(userId, vehicle.id);
             setSelectedVehicle(vehicle);
             setDeclaredTime(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
@@ -778,7 +234,7 @@ const DriverSchedule: React.FC = () => {
     };
 
     return (
-        <div className="flex flex-col h-full bg-[#0F172A] relative text-white selection:bg-sky-500/30 overflow-hidden">
+        <div className="flex flex-col h-full bg-[#0F172A] relative text-white overflow-hidden">
             {/* 顶栏 (Premium Glass) */}
             <header className="pt-14 pb-8 px-8 bg-slate-900/60 backdrop-blur-3xl sticky top-0 z-[60] border-b border-white/5 flex items-center justify-between no-print shadow-[0_10px_40px_rgba(0,0,0,0.5)]">
                 <div className="flex items-center gap-5">
@@ -790,7 +246,7 @@ const DriverSchedule: React.FC = () => {
                         <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-900 rounded-full z-20 shadow-lg"></div>
                     </div>
                     <div>
-                        <h1 className="text-22px font-black text-white tracking-tight leading-none mb-1.5">{driverName}</h1>
+                        <h1 className="text-[22px] font-black text-white tracking-tight leading-none mb-1.5">{driverName}</h1>
                         <div className="flex items-center gap-2">
                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
                              <p className="text-[10px] text-slate-400 font-black uppercase tracking-[0.25em]">
@@ -799,21 +255,9 @@ const DriverSchedule: React.FC = () => {
                         </div>
                     </div>
                 </div>
-                {currentView === 'tasks' && (
-                    <div className="flex gap-3">
-                        <button 
-                            onClick={() => { if (!isPttOpen) startPttSession(); }} 
-                            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all shadow-2xl active:scale-90 border overflow-hidden relative group ${isPttOpen ? 'bg-sky-600 border-sky-400 shadow-sky-600/30' : 'bg-white/5 text-slate-400 border-white/10 hover:bg-white/10'}`}
-                        >
-                            {isPttOpen && <div className="absolute inset-0 bg-white/20 animate-pulse"></div>}
-                            <span className={`material-icons-round text-xl relative z-10 ${isPttOpen ? 'text-white translate-y-[-1px]' : 'text-slate-500'}`}>cell_tower</span>
-                        </button>
-                    </div>
-                )}
             </header>
 
             <main className="flex-1 overflow-y-auto px-6 space-y-8 no-scrollbar pb-36 no-print relative z-10 pt-6">
-                {/* 装饰性背景 */}
                 <div className="fixed top-1/4 -right-20 w-64 h-64 bg-sky-600/10 rounded-full blur-[100px] pointer-events-none"></div>
                 <div className="fixed bottom-1/4 -left-20 w-80 h-80 bg-blue-600/5 rounded-full blur-[120px] pointer-events-none"></div>
 
@@ -829,9 +273,7 @@ const DriverSchedule: React.FC = () => {
                                     </div>
                                 </div>
                                 <div className="relative rounded-[48px] overflow-hidden group active:scale-[0.98] transition-all duration-300 shadow-2xl border border-white/10 bg-gradient-to-br from-slate-900/80 to-slate-900/40 backdrop-blur-3xl p-1">
-                                    {/* 炫光边框效果 */}
                                     <div className="absolute inset-0 bg-gradient-to-br from-sky-500/20 via-transparent to-emerald-500/20 opacity-40"></div>
-                                    
                                     <div className="relative bg-slate-900/90 rounded-[46px] overflow-hidden">
                                         <div className="h-1.5 w-full bg-white/5">
                                             <div className="h-full bg-gradient-to-r from-sky-500 via-emerald-500 to-sky-500 bg-[length:200%_auto] animate-gradient-x transition-all duration-1000 shadow-[0_0_15px_rgba(56,189,248,0.5)]"
@@ -878,7 +320,7 @@ const DriverSchedule: React.FC = () => {
                                                             <span className="material-icons-round text-[16px] mb-1">near_me</span><span className="text-[8px] font-black uppercase tracking-[0.15em]">通知出发</span>
                                                         </button>
                                                         <button onClick={() => navigate('/driver/confirm', { state: { orderId: activeOrder.id } })} className="flex-1 h-16 bg-white text-slate-950 rounded-[28px] font-black text-xs uppercase tracking-[0.3em] shadow-[0_15px_30px_rgba(255,255,255,0.15)] active:scale-[0.97] transition-all flex items-center justify-center gap-3">
-                                                            <span className="material-icons-round text-xl">camera_alt</span>订单送达
+                                                            <span className="material-icons-round text-xl">camera_alt</span>订单送達
                                                         </button>
                                                     </div>
                                                 )}
@@ -915,6 +357,7 @@ const DriverSchedule: React.FC = () => {
                         )}
                     </>
                 )}
+
                 {currentView === 'history' && (
                     <section className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
                         <h2 className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em] px-3">历史交付 / RECORDS</h2>
@@ -937,6 +380,7 @@ const DriverSchedule: React.FC = () => {
                         </div>
                     </section>
                 )}
+
                 {currentView === 'profile' && (
                     <section className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
                         <div className="bg-gradient-to-br from-slate-900 via-slate-900/60 to-slate-950 rounded-[56px] p-12 text-white relative overflow-hidden border border-white/5 shadow-2xl">
@@ -1048,7 +492,7 @@ const DriverSchedule: React.FC = () => {
                     <div className="absolute inset-0" onClick={() => setIsVehicleDeclaring(false)}></div>
                     <div className="bg-slate-900 w-full max-w-lg mx-auto rounded-t-[56px] p-12 shadow-[0_-20px_100px_rgba(0,0,0,0.8)] border-t border-white/10 animate-in slide-in-from-bottom-[50%] duration-700 max-h-[85vh] flex flex-col relative z-10">
                         <div className="w-12 h-1.5 bg-white/10 rounded-full mx-auto mb-8 shrink-0"></div>
-                        <header className="flex justify-between items-start mb-10 flex-shrink-0">
+                        <header className="flex justify-between items-start mb-10 shrink-0">
                             <div>
                                 <h2 className="text-4xl font-black text-white tracking-tighter">Deploy Vehicle</h2>
                                 <p className="text-[10px] text-sky-400 font-black uppercase tracking-[0.4em] mt-3 underline decoration-sky-500/30 underline-offset-4">Fleet Asset Activation</p>
@@ -1116,143 +560,6 @@ const DriverSchedule: React.FC = () => {
                 </div>
             )}
 
-            {isPttOpen && (
-                <div className="fixed inset-0 bg-[#0F172A]/98 backdrop-blur-3xl z-[200] flex flex-col animate-in fade-in duration-300">
-                    <div className="px-8 pt-16 pb-6 flex justify-between items-center border-b border-white/5 shrink-0 bg-slate-900/40">
-                        <div className="flex items-center gap-4 text-white">
-                            <div className="w-12 h-12 bg-sky-500/20 rounded-2xl flex items-center justify-center text-sky-400 border border-sky-500/20 shadow-lg ring-4 ring-sky-500/5 anim-glow">
-                                <span className="material-icons-round text-2xl">cell_tower</span>
-                            </div>
-                            <div>
-                                <h2 className="font-black text-sm uppercase tracking-[0.3em]">Fleet Dispatch</h2>
-                                <p className="text-[10px] font-black uppercase tracking-widest mt-1 flex items-center gap-1.5" style={{ color: pttStatus === 'CONNECTED' || pttStatus === 'TALKING' || pttStatus === 'LISTENING' ? '#4ade80' : '#64748b' }}>
-                                    <span className={`w-1.5 h-1.5 rounded-full ${pttStatus === 'CONNECTED' || pttStatus === 'TALKING' || pttStatus === 'LISTENING' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`}></span>
-                                    {pttStatus === 'CONNECTING' ? 'Initializing...' : pttStatus === 'CONNECTED' ? 'Live Channel: Community' : pttStatus === 'TALKING' ? 'Transmitting Voice...' : pttStatus === 'LISTENING' ? 'Incoming Signal...' : 'System Offline'}
-                                </p>
-                            </div>
-                        </div>
-                        <button onClick={stopPttSession} className="w-14 h-14 bg-white/[0.03] border border-white/10 rounded-full flex items-center justify-center text-slate-400 active:scale-90 transition-all hover:bg-white/10 shadow-2xl">
-                            <span className="material-icons-round">close</span>
-                        </button>
-                    </div>
-                    
-                    <div className="flex-1 overflow-y-auto px-6 py-6 space-y-4 no-scrollbar relative">
-                        {/* 装饰水印 */}
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-[0.02]">
-                             <span className="text-[120px] font-black uppercase rotate-[-20deg] select-none tracking-tighter">DISPATCH</span>
-                        </div>
-
-                        {driverChatMessages.length === 0 ? (
-                            <div className="h-full flex flex-col items-center justify-center text-slate-700 gap-4">
-                                <div className="w-20 h-20 rounded-full bg-white/[0.02] border border-white/5 flex items-center justify-center">
-                                    <span className="material-icons-round text-4xl opacity-20">forum</span>
-                                </div>
-                                <p className="text-[10px] font-black uppercase tracking-[0.4em]">Establish Communication</p>
-                            </div>
-                        ) : driverChatMessages.map((msg) => {
-                            if (!msg || !msg.id) return null;
-                            const time = new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                            return (
-                                <div key={msg.id} className={`flex gap-3.5 animate-in slide-in-from-bottom-2 duration-300 ${msg.isMine ? 'flex-row-reverse' : 'flex-row'}`}>
-                                    <div className={`w-9 h-9 rounded-2xl flex items-center justify-center shrink-0 shadow-lg border border-white/5 ${msg.senderRole === 'driver' ? 'bg-sky-600' : 'bg-blue-600'}`}>
-                                        <span className="material-icons-round text-white text-lg">person</span>
-                                    </div>
-                                    <div className={`max-w-[75%] flex flex-col gap-1.5 ${msg.isMine ? 'items-end' : 'items-start'}`}>
-                                        <div className="flex items-center gap-2 px-1">
-                                            {!msg.isMine && <span className="text-[9px] font-black text-sky-400 uppercase tracking-widest">{msg.senderLabel}</span>}
-                                            <span className="text-[8px] text-slate-500 font-mono font-bold">{time}</span>
-                                        </div>
-                                        <div className="relative group">
-                                            {msg.isRecalled ? (
-                                                <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-900/50 text-slate-500 rounded-[22px] text-[10px] font-black border border-white/5 italic backdrop-blur-xl">
-                                                    <span className="material-icons-round text-xs">remove_circle_outline</span>
-                                                    MESSAGE RECALLED
-                                                </div>
-                                            ) : msg.type === 'audio'
-                                                ? <AudioPlayer
-                                                    audioUrl={msg.content}
-                                                    initialDuration={msg.duration}
-                                                    autoPlay={!msg.isMine && msg.id === latestIncomingId}
-                                                  />
-                                                : (
-                                                <div className={`px-5 py-3 rounded-[24px] text-[14px] font-bold leading-relaxed shadow-2xl backdrop-blur-2xl ${msg.isMine ? 'bg-sky-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 rounded-tl-none border border-white/5 shadow-sky-900/10'}`}>
-                                                    {msg.content}
-                                                </div>
-                                            )}
-
-                                            {msg.isMine && !msg.isRecalled && (
-                                                <button
-                                                    onClick={() => handleRecall(msg.id)}
-                                                    className="absolute -left-10 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-all bg-slate-900/80 text-slate-500 hover:text-rose-500 p-2 rounded-xl border border-white/10 shadow-2xl scale-75 group-hover:scale-100"
-                                                >
-                                                    <span className="material-icons-round text-lg">undo</span>
-                                                </button>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-                            );
-                        })}
-                        <div ref={chatBottomRef} />
-                    </div>
-                    
-                    <div className="shrink-0 border-t border-white/5 py-10 flex flex-col items-center gap-6 bg-slate-900/20 backdrop-blur-xl relative">
-                        <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 px-4 py-1.5 bg-sky-600 text-[8px] font-black uppercase tracking-[0.4em] rounded-full shadow-lg shadow-sky-600/20 border border-white/10">
-                            Push to Talk Mode
-                        </div>
-                        
-                        <div className="relative group">
-                            {isTransmitting && (
-                                <div className="absolute inset-0 rounded-full bg-sky-500/40 animate-ping scale-150 opacity-20"></div>
-                            )}
-                            <button 
-                                onMouseDown={handlePttDown} 
-                                onMouseUp={handlePttUp} 
-                                onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }} 
-                                onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }} 
-                                onContextMenu={(e) => e.preventDefault()}
-                                disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'} 
-                                className={`w-28 h-28 rounded-full border-2 transition-all flex items-center justify-center shadow-[0_20px_50px_rgba(0,0,0,0.5)] relative active:scale-95 z-10 ${isTransmitting ? 'bg-sky-500 border-white/40 scale-110 shadow-sky-500/40' : 'bg-slate-800 border-white/10 hover:bg-slate-700'}`}
-                            >
-                                <span className={`material-icons-round text-4xl text-white ${isTransmitting ? 'animate-pulse' : ''}`}>{isTransmitting ? 'mic' : 'mic_none'}</span>
-                            </button>
-                        </div>
-                        <p className="text-[9px] font-black uppercase tracking-[0.5em] text-slate-500 animate-pulse italic">Holding to Transmit Signal</p>
-                    </div>
-
-                    <div className="shrink-0 px-4 pb-8 pt-3 border-t border-white/5 flex items-center gap-3">
-                        <button 
-                            onMouseDown={handlePttDown} 
-                            onMouseUp={handlePttUp} 
-                            onTouchStart={(e) => { e.preventDefault(); handlePttDown(); }} 
-                            onTouchEnd={(e) => { e.preventDefault(); handlePttUp(); }}
-                            onContextMenu={(e) => e.preventDefault()}
-                            disabled={pttStatus === 'CONNECTING' || pttStatus === 'IDLE'}
-                            className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-200 shrink-0 shadow-xl active:scale-90 ${isTransmitting 
-                                ? 'bg-sky-600 text-white animate-pulse ring-4 ring-sky-600/20' 
-                                : 'bg-slate-800 text-slate-400 border border-white/10 hover:bg-slate-700'
-                            }`}
-                        >
-                            <span className="material-icons-round text-xl">{isTransmitting ? 'mic' : 'mic_none'}</span>
-                        </button>
-                        <div className={`flex-1 flex items-center rounded-2xl px-6 py-3 border transition-all duration-300 gap-3 ${isTransmitting ? 'bg-sky-600/20 border-sky-600/40' : 'bg-slate-800 border-white/10'}`}>
-                            <input 
-                                type="text" 
-                                value={driverChatInput} 
-                                onChange={(e) => setDriverChatInput(e.target.value)} 
-                                onKeyDown={(e) => { if (e.key === 'Enter') sendDriverTextMessage(); }} 
-                                placeholder={isTransmitting ? '正在发射 / TRANSMITTING...' : "输入文字消息..."} 
-                                disabled={isTransmitting}
-                                className={`flex-1 bg-transparent text-sm outline-none font-medium ${isTransmitting ? 'text-sky-400' : 'text-white'}`} 
-                            />
-                        </div>
-                        <button onClick={sendDriverTextMessage} disabled={isTransmitting || !driverChatInput.trim()} className="w-12 h-12 bg-sky-600 disabled:bg-slate-700 rounded-2xl text-white flex items-center justify-center transition-all active:scale-90 shadow-lg shadow-sky-600/20">
-                            <span className="material-icons-round">send</span>
-                        </button>
-                    </div>
-                </div>
-            )}
-
             {selectedOrder && (
                 <div className="fixed inset-0 bg-[#0F172A]/80 backdrop-blur-3xl z-[150] flex flex-col justify-end animate-in fade-in duration-500 no-print">
                     <div className="absolute inset-0" onClick={() => setSelectedOrder(null)}></div>
@@ -1312,7 +619,7 @@ const DriverSchedule: React.FC = () => {
                         </div>
                         <div className="pt-4 flex gap-4 shrink-0">
                             <button onClick={() => { handleUpdateStatus(selectedOrder.id, selectedOrder.status === OrderStatus.READY ? OrderStatus.DELIVERING : OrderStatus.COMPLETED); setSelectedOrder(null); }} className="flex-1 h-16 bg-sky-600 text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-lg transition-all active:scale-95">
-                                {selectedOrder.status === OrderStatus.READY ? '确认接收工作' : '订单送达'}
+                                {selectedOrder.status === OrderStatus.READY ? '确认接收工作' : '订单送達'}
                             </button>
                         </div>
                     </div>
@@ -1353,4 +660,5 @@ const DriverSchedule: React.FC = () => {
         </div>
     );
 };
+
 export default DriverSchedule;

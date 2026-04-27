@@ -2,13 +2,12 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../src/lib/supabase';
 import { UserRole } from '../types';
+import { getGoEasy, connectGoEasy, GE_CHANNELS } from '../src/lib/goeasy';
 import GoEasy from 'goeasy';
 import { api } from '../src/services/api';
 import AudioPlayer from '../src/components/AudioPlayer';
 
-const GOEASY_APPKEY = import.meta.env.VITE_GOEASY_APPKEY || '';
-const GOEASY_HOST = 'singapore.goeasy.io';
-const CHANNEL = 'KIM_LONG_COMUNITY';
+const CHANNEL = GE_CHANNELS.COMMUNITY;
 
 interface ChatMessage {
     id: string;
@@ -34,7 +33,7 @@ const WalkieTalkie: React.FC = () => {
     const [latestIncomingId, setLatestIncomingId] = useState<string | null>(null);
     const [initError, setInitError] = useState<string | null>(null);
 
-    const goEasyRef = useRef<InstanceType<typeof GoEasy> | null>(null);
+    const goEasyRef = useRef<any>(null);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const audioChunksRef = useRef<Blob[]>([]);
     const recordStartTimeRef = useRef<number | null>(null);
@@ -90,83 +89,73 @@ const WalkieTalkie: React.FC = () => {
         }
     }, []);
 
-    // 3. Sync Logic from Driver App (Supabase Realtime + GoEasy Hybrid)
+    // 3. Sync Logic (Supabase Realtime + GoEasy Hybrid)
     const startPttSession = useCallback(async () => {
-        if (!user || pttStatus === 'CONNECTING') return;
+        if (!user) return;
+        
+        // 使用 Ref 或内部检查防止死循环
+        if (goEasyRef.current && goEasyRef.current.getConnectionStatus() === 'connected') {
+            setPttStatus('CONNECTED');
+            return;
+        }
+
         setInitError(null);
         setPttStatus('CONNECTING');
 
-        // --- GoEasy Logic ---
-        const doConnect = () => {
-            try {
-                const goEasy = GoEasy.getInstance({ host: GOEASY_HOST, appkey: GOEASY_APPKEY, modules: ['pubsub'] });
-                goEasyRef.current = goEasy;
-
-                goEasy.connect({
-                    id: user.id,
-                    data: { role: user.role, name: user.name },
-                    onSuccess: () => {
-                        setPttStatus('CONNECTED');
-                        goEasy.pubsub.subscribe({
-                            channel: CHANNEL,
-                            onMessage: (message: any) => {
-                                try {
-                                    const payload = JSON.parse(message.content);
-                                    if (payload.senderId === user.id) return;
-
-                                    if (payload.type === 'recall') {
-                                        const targetId = payload.id || payload.msgId;
-                                        setMessages(prev => prev.map(m => m.id === targetId ? { ...m, isRecalled: true } : m));
-                                        return;
-                                    }
-
-                                    if (payload.receiverId !== 'GLOBAL') return;
-                                    const msgId = payload.id || `${payload.senderId}-${payload.timestamp}`;
-                                    const audioContent = payload.content || payload.audio;
-
-                                    const msg: ChatMessage = {
-                                        id: msgId,
-                                        senderId: payload.senderId,
-                                        senderLabel: payload.senderLabel || 'Unknown',
-                                        senderRole: payload.senderRole || 'guest',
-                                        content: payload.type === 'text' ? payload.content : audioContent,
-                                        timestamp: payload.timestamp || Date.now(),
-                                        isMine: false,
-                                        type: payload.type,
-                                        duration: payload.duration
-                                    };
-                                    addMessage(msg);
-
-                                    if (payload.type === 'audio' && audioContent) {
-                                        setLatestIncomingId(msgId);
-                                        if (audioUnlocked) playAudio(audioContent);
-                                    }
-                                } catch (err) {}
-                            }
-                        });
-                    },
-                    onFailed: (error: any) => {
-                        setInitError(error.content || '连接失败');
-                        setPttStatus('IDLE');
-                    }
-                });
-            } catch (err: any) {
-                setInitError(err.message || '初始化失败');
-                setPttStatus('IDLE');
-            }
-        };
-
-        // Disconnect if exists
         try {
-            const status = GoEasy.getConnectionStatus();
-            if (status !== 'disconnected') {
-                GoEasy.disconnect({ onSuccess: doConnect, onFailed: doConnect });
-            } else {
-                doConnect();
-            }
-        } catch { doConnect(); }
+            const goEasy = await connectGoEasy({ id: user.id, role: user.role, name: user.name });
+            goEasyRef.current = goEasy;
+            
+            setPttStatus('CONNECTED');
+            (goEasy as any).pubsub.subscribe({
+                channel: CHANNEL,
+                onMessage: (message: any) => {
+                    try {
+                        const payload = JSON.parse(message.content);
+                        if (payload.senderId === user.id) return;
 
-        // --- Supabase History & Realtime (Mirroring Driver App) ---
+                        if (payload.type === 'recall') {
+                            const targetId = payload.id || payload.msgId;
+                            setMessages(prev => prev.map(m => m.id === targetId ? { ...m, isRecalled: true } : m));
+                            return;
+                        }
+
+                        if (payload.receiverId !== 'GLOBAL') return;
+                        const msgId = payload.id || `${payload.senderId}-${payload.timestamp}`;
+                        const audioContent = payload.content || payload.audio;
+
+                        const msg: ChatMessage = {
+                            id: msgId,
+                            senderId: payload.senderId,
+                            senderLabel: payload.senderLabel || 'Unknown',
+                            senderRole: payload.senderRole || 'guest',
+                            content: payload.type === 'text' ? payload.content : audioContent,
+                            timestamp: payload.timestamp || Date.now(),
+                            isMine: false,
+                            type: payload.type as any,
+                            duration: payload.duration
+                        };
+                        addMessage(msg);
+
+                        if (payload.type === 'audio' && audioContent) {
+                            setLatestIncomingId(msgId);
+                            if (audioUnlocked) playAudio(audioContent);
+                        }
+                    } catch (err) {}
+                }
+            });
+        } catch (err) {
+            console.error('[Walkie] Session start failed:', err);
+            setPttStatus('IDLE');
+        }
+    }, [user, addMessage, playAudio, audioUnlocked]);
+
+    useEffect(() => {
+        if (!user) return;
+        
+        startPttSession();
+
+        // --- Supabase History & Realtime ---
         const fetchHistory = async () => {
             const { data } = await supabase.from('messages')
                 .select('*').eq('receiver_id', 'GLOBAL').order('created_at', { ascending: false }).limit(50);
@@ -217,15 +206,13 @@ const WalkieTalkie: React.FC = () => {
             })
             .subscribe();
 
-        return () => { supabase.removeChannel(channel); };
-    }, [user, addMessage, playAudio, audioUnlocked, pttStatus]);
-
-    useEffect(() => {
-        if (user) startPttSession();
         return () => {
-            if (goEasyRef.current) goEasyRef.current.disconnect({ onSuccess: () => {}, onFailed: () => {} });
+            supabase.removeChannel(channel);
+            if (goEasyRef.current) {
+                goEasyRef.current.disconnect({ onSuccess: () => {}, onFailed: () => {} });
+            }
         };
-    }, [user]);
+    }, [user, startPttSession, addMessage]);
 
     const unlockAudio = () => {
         if (audioUnlocked) return;
@@ -373,6 +360,7 @@ const WalkieTalkie: React.FC = () => {
                         <p className="text-[9px] font-black uppercase tracking-widest mt-0.5 flex items-center gap-1.5" style={{ color: pttStatus === 'CONNECTED' || pttStatus === 'TALKING' || pttStatus === 'LISTENING' ? '#10b981' : '#94a3b8' }}>
                             <span className={`w-1 h-1 rounded-full ${pttStatus === 'CONNECTED' || pttStatus === 'TALKING' || pttStatus === 'LISTENING' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
                             {pttStatus === 'CONNECTING' ? 'Init...' : pttStatus === 'CONNECTED' ? 'Live' : pttStatus === 'TALKING' ? 'Talk...' : pttStatus === 'LISTENING' ? 'Listen...' : 'Offline'}
+                            <span className="opacity-30 text-[7px] ml-1">[{import.meta.env.VITE_GOEASY_APPKEY ? 'Key OK' : 'No Key'}]</span>
                         </p>
                     </div>
                 </div>
