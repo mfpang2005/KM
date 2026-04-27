@@ -52,6 +52,39 @@ async def upload_audio(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 
+@router.post("/message")
+async def save_message(data: dict):
+    """
+    通过后端保存消息到数据库，繞過 RLS 限制。
+    """
+    try:
+        # 转换字段名以匹配数据库
+        payload = {
+            "id": data.get("id"),
+            "sender_id": data.get("senderId") or data.get("sender_id"),
+            "sender_label": data.get("senderLabel") or data.get("sender_label"),
+            "sender_role": data.get("senderRole") or data.get("sender_role"),
+            "receiver_id": data.get("receiverId") or data.get("receiver_id") or "GLOBAL",
+            "content": data.get("content"),
+            "type": data.get("type", "audio"),
+            "duration": data.get("duration", 0)
+            # 移除 timestamp，由数据库 created_at 自动处理
+        }
+        
+        res = await run_in_threadpool(
+            supabase.table("messages").insert([payload]).execute
+        )
+        
+        if not res.data:
+            raise HTTPException(status_code=500, detail="Failed to save message to DB")
+            
+        logger.info(f"Message {payload['id']} saved to DB successfully.")
+        return {"status": "success", "data": res.data[0]}
+    except Exception as e:
+        logger.error(f"Failed to save message: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.patch("/recall/{msg_id}")
 async def recall_message(msg_id: str):
     """
@@ -67,8 +100,14 @@ async def recall_message(msg_id: str):
         )
         
         if not res.data:
-            logger.warning(f"Recall failed: Message ID [{msg_id}] NOT FOUND in DB.")
-            raise HTTPException(status_code=404, detail=f"Message ID {msg_id} not found.")
+            # 诊断：查询最近的消息 ID (改用 created_at 排序)
+            recent = await run_in_threadpool(
+                supabase.table("messages").select("id").order("created_at", desc=True).limit(5).execute
+            )
+            existing_ids = [r['id'] for r in recent.data] if recent.data else []
+            error_detail = f"ID {msg_id} not found. Recent IDs in DB: {existing_ids}"
+            logger.warning(f"Recall failed: {error_detail}")
+            raise HTTPException(status_code=404, detail=error_detail)
             
         # 2. 只有数据库更新成功后，才尝试发送 GoEasy 实时撤回信令
         try:

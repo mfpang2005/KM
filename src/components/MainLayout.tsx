@@ -1,21 +1,35 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { UserRole } from '../../types';
+import { UserRole, User } from '../../types';
 import { NAV_CONFIG } from '../config/navigation';
 
 interface MainLayoutProps {
     user: UserRole | null;
+    userProfile: User | null;
 }
 
-const MainLayout: React.FC<MainLayoutProps> = ({ user }) => {
+const MainLayout: React.FC<MainLayoutProps> = ({ user, userProfile }) => {
     const navigate = useNavigate();
     const location = useLocation();
     const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
-    // Determine active menu items based on user role
-    // Default to empty list if user is null (though protected route should handle this)
-    const navItems = user ? NAV_CONFIG[user] : [];
+    // Determine active menu items based on user role AND permissions
+    const navItems = React.useMemo(() => {
+        if (!user) return [];
+        const config = NAV_CONFIG[user] || [];
+        
+        // Super Admin has absolute access to everything
+        if (user === UserRole.SUPER_ADMIN) return config;
+        
+        // Filter based on permissions for other roles
+        return config.filter(item => {
+            // If no permissionId is required, show it
+            if (!item.permissionId) return true;
+            // Otherwise, check if user has the permission
+            return userProfile?.permissions?.[item.permissionId] === true;
+        });
+    }, [user, userProfile]);
 
     // Helper to check if path is active
     const isActive = (path: string) => {

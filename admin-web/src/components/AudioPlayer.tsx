@@ -22,6 +22,8 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
     useEffect(() => {
         if (!audioUrl) return;
 
+        let isCancelled = false;
+
         // Reset states for new source
         setReady(false);
         setIsPlaying(false);
@@ -30,20 +32,22 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
         const audio = new Audio();
         audioRef.current = audio;
         audio.volume = 1.0;
-        audio.preload = 'auto'; // 强制预加载
+        audio.preload = 'auto';
         
         const onMeta = () => {
+            if (isCancelled) return;
             console.log('[AudioPlayer] Metadata loaded, duration:', audio.duration);
             if (audio.duration && !isNaN(audio.duration) && audio.duration !== Infinity) {
                 setDuration(audio.duration);
             }
             setReady(true);
         };
-        const onTime  = () => setCurrentTime(audio.currentTime);
-        const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
-        const onPlay  = () => setIsPlaying(true);
-        const onPause = () => setIsPlaying(false);
+        const onTime  = () => { if (!isCancelled) setCurrentTime(audio.currentTime); };
+        const onEnded = () => { if (!isCancelled) { setIsPlaying(false); setCurrentTime(0); } };
+        const onPlay  = () => { if (!isCancelled) setIsPlaying(true); };
+        const onPause = () => { if (!isCancelled) setIsPlaying(false); };
         const onError = () => { 
+            if (isCancelled) return;
             console.error('[AudioPlayer] Error loading audio source:', audioUrl, audio.error);
             setReady(false); 
             setIsPlaying(false); 
@@ -55,42 +59,66 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
         audio.addEventListener('play', onPlay);
         audio.addEventListener('pause', onPause);
         audio.addEventListener('error', onError);
-        audio.crossOrigin = 'anonymous'; // 启用 CORS
-        audio.crossOrigin = 'anonymous'; // 尝试启用 CORS
+        audio.crossOrigin = 'anonymous';
 
         const setupSource = async () => {
             try {
                 if (audioUrl.startsWith('http') || audioUrl.startsWith('/') || audioUrl.includes('://')) {
-                    audio.src = audioUrl;
+                    console.log('[AudioPlayer] Fetching audio as blob:', audioUrl);
+                    const response = await fetch(audioUrl);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    
+                    const blob = await response.blob();
+                    if (isCancelled) return;
+                    
+                    if (blob.size < 100) throw new Error('Fetched blob is too small');
+                    
+                    const url = URL.createObjectURL(blob);
+                    objectUrlRef.current = url;
+                    audio.src = url;
+                    audio.load();
                 } else if (audioUrl.startsWith('data:')) {
                     audio.src = audioUrl;
+                    audio.load();
                 } else {
-                    // 仅当看起来像 Base64 时才尝试解码
                     try {
-                        const cleanBase64 = audioUrl.replace(/\s/g, ''); // 移除空格和换行
+                        const cleanBase64 = audioUrl.replace(/\s/g, ''); 
                         const bin = atob(cleanBase64);
                         const bytes = new Uint8Array(bin.length);
                         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
                         const blob = new Blob([bytes], { type: 'audio/webm' });
+                        if (isCancelled) return;
                         const url = URL.createObjectURL(blob);
                         objectUrlRef.current = url;
                         audio.src = url;
+                        audio.load();
                     } catch (e) {
-                        console.error('[AudioPlayer] Data format unrecognized, trying as direct source:', e);
+                        if (isCancelled) return;
+                        console.error('[AudioPlayer] Data format unrecognized:', e);
                         audio.src = audioUrl;
+                        audio.load();
                     }
                 }
-                audio.load();
             } catch (err) {
+                if (isCancelled) return;
                 console.error('[AudioPlayer] Setup failed:', err);
+                setReady(false);
+                setIsPlaying(false);
             }
         };
 
         setupSource();
 
         return () => {
+            isCancelled = true;
             audio.pause();
             audio.src = '';
+            audio.removeEventListener('loadedmetadata', onMeta);
+            audio.removeEventListener('timeupdate', onTime);
+            audio.removeEventListener('ended', onEnded);
+            audio.removeEventListener('play', onPlay);
+            audio.removeEventListener('pause', onPause);
+            audio.removeEventListener('error', onError);
             if (objectUrlRef.current) {
                 URL.revokeObjectURL(objectUrlRef.current);
                 objectUrlRef.current = '';
@@ -102,7 +130,6 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
     useEffect(() => {
         if (autoPlay && ready && audioRef.current && !isPlaying) {
             audioRef.current.play()
-                .then(() => console.log('[AudioPlayer] Auto-played msg'))
                 .catch(e => console.warn('[AudioPlayer] Auto-play block:', e.message));
         }
     }, [autoPlay, ready]);

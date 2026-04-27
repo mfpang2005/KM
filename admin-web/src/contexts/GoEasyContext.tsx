@@ -66,18 +66,17 @@ export const GoEasyProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 id: user.id,
                 data: { email: user.email, role: user.role },
                 onSuccess: () => {
-                    console.log('[GoEasyContext] Connected successfully as', user.email);
                     setStatus('CONNECTED');
                 },
                 onFailed: (err: any) => {
-                    console.error('[GoEasyContext] Connection failed:', err);
                     const errorMsg = err.content || String(err);
                     if (err.code === 408 && (errorMsg.includes('already connected') || errorMsg.includes('Already connected'))) {
                         setStatus('CONNECTED');
-                        return;
+                    } else {
+                        console.error('[GoEasyContext] Connection failed:', err);
+                        setStatus('DISCONNECTED');
+                        scheduleReconnect();
                     }
-                    setStatus('DISCONNECTED');
-                    scheduleReconnect();
                 },
                 onDisconnected: () => {
                     setStatus('DISCONNECTED');

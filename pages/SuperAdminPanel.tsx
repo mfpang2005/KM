@@ -579,6 +579,7 @@ const UsersSection: React.FC = () => {
                                     { id: 'kitchen', icon: 'restaurant', label: '后厨' },
                                     { id: 'walkie_talkie', icon: 'settings_input_antenna', label: '对讲' },
                                     { id: 'event_calendar', icon: 'event', label: '日历' },
+                                    { id: 'inventory', icon: 'inventory', label: '库存' },
                                 ].map(perm => {
                                     const hasPerm = user.permissions?.[perm.id] === true;
                                     return (

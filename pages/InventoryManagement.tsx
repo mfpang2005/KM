@@ -364,32 +364,35 @@ const InventoryManagement: React.FC = () => {
 
             {/* ITEM MODAL */}
             {showItemModal && (
-                <div className="fixed inset-0 z-[100] flex items-end">
-                    <div className="absolute inset-0 bg-primary/20 backdrop-blur-sm" onClick={() => setShowItemModal(false)} />
-                    <div className="relative w-full bg-white rounded-t-[40px] p-8 max-h-[90vh] overflow-y-auto shadow-2xl animate-in slide-in-from-bottom duration-500">
-                        <div className="w-12 h-1.5 bg-primary/5 rounded-full mx-auto mb-6" />
-                        <div className="flex justify-between items-center mb-8">
-                            <h2 className="text-xl font-black text-primary tracking-tight uppercase italic">{selectedItem ? 'Edit Item' : 'New Inventory Item'}</h2>
-                            <button onClick={() => setShowItemModal(false)} className="w-10 h-10 rounded-full bg-primary/5 text-primary/40 flex items-center justify-center">
-                                <span className="material-icons-round">close</span>
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+                    <div className="absolute inset-0 bg-primary/40 backdrop-blur-md" onClick={() => setShowItemModal(false)} />
+                    <div className="relative w-full max-w-md bg-amber-50 rounded-[40px] p-8 max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-500 border-2 border-white">
+                        <div className="flex justify-between items-start mb-8">
+                            <div>
+                                <h2 className="text-xl font-black text-red-900 tracking-tighter uppercase italic leading-none">New Inventory Item</h2>
+                                <p className="text-[8px] font-black text-amber-600/40 uppercase tracking-[0.4em] mt-2">Resource Management</p>
+                            </div>
+                            <button onClick={() => setShowItemModal(false)} className="w-10 h-10 rounded-full bg-white border border-amber-100 text-amber-900/30 flex items-center justify-center shadow-sm active:scale-90 transition-all">
+                                <span className="material-icons-round text-lg">close</span>
                             </button>
                         </div>
 
                         <div className="space-y-6">
+                            {/* Row 1: Code & Category */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-primary/40 uppercase tracking-widest ml-1">Code</label>
+                                    <label className="text-[9px] font-black text-amber-600/60 uppercase tracking-widest pl-1">Code / 编号</label>
                                     <input 
-                                        className="w-full px-4 py-3 bg-background-beige/50 rounded-2xl text-xs font-bold text-primary focus:ring-1 focus:ring-primary/20 uppercase"
+                                        className="w-full px-4 py-3.5 bg-white rounded-2xl text-xs font-black text-red-900 border border-amber-100 focus:border-amber-400 focus:ring-0 uppercase shadow-sm"
                                         value={formData.code}
                                         onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})}
-                                        placeholder="RICE-01"
+                                        placeholder="E.G. RICE-01"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-primary/40 uppercase tracking-widest ml-1">Category</label>
+                                    <label className="text-[9px] font-black text-amber-600/60 uppercase tracking-widest pl-1">Category / 类别</label>
                                     <input 
-                                        className="w-full px-4 py-3 bg-background-beige/50 rounded-2xl text-xs font-bold text-primary focus:ring-1 focus:ring-primary/20"
+                                        className="w-full px-4 py-3.5 bg-white rounded-2xl text-xs font-black text-red-900 border border-amber-100 focus:border-amber-400 focus:ring-0 shadow-sm"
                                         value={formData.category}
                                         onChange={e => setFormData({...formData, category: e.target.value})}
                                         placeholder="Mains"
@@ -397,64 +400,69 @@ const InventoryManagement: React.FC = () => {
                                 </div>
                             </div>
 
+                            {/* Row 2: Item Name */}
                             <div className="space-y-1.5">
-                                <label className="text-[9px] font-black text-primary/40 uppercase tracking-widest ml-1">Item Name</label>
+                                <label className="text-[9px] font-black text-amber-600/60 uppercase tracking-widest pl-1">Item Name / 名称</label>
                                 <input 
-                                    className="w-full px-4 py-4 bg-background-beige/50 rounded-2xl text-sm font-black text-primary focus:ring-1 focus:ring-primary/20"
+                                    className="w-full px-5 py-4 bg-white rounded-2xl text-sm font-black text-red-900 border border-amber-100 focus:border-amber-400 focus:ring-0 shadow-sm"
                                     value={formData.name}
                                     onChange={e => setFormData({...formData, name: e.target.value})}
-                                    placeholder="Full product name..."
+                                    placeholder="Enter product name..."
                                 />
                             </div>
 
+                            {/* Row 3: Unit & Price */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-primary/40 uppercase tracking-widest ml-1">Unit</label>
+                                    <label className="text-[9px] font-black text-amber-600/60 uppercase tracking-widest pl-1">Unit / 单位</label>
                                     <input 
-                                        className="w-full px-4 py-3 bg-background-beige/50 rounded-2xl text-xs font-bold text-primary focus:ring-1 focus:ring-primary/20"
+                                        className="w-full px-4 py-3.5 bg-white rounded-2xl text-xs font-black text-red-900 border border-amber-100 focus:border-amber-400 focus:ring-0 shadow-sm"
                                         value={formData.unit}
                                         onChange={e => setFormData({...formData, unit: e.target.value})}
                                         placeholder="kg / pcs"
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-primary/40 uppercase tracking-widest ml-1">Unit Price (RM)</label>
+                                    <label className="text-[9px] font-black text-amber-600/60 uppercase tracking-widest pl-1">Unit Price (RM)</label>
                                     <input 
                                         type="number"
-                                        className="w-full px-4 py-3 bg-background-beige/50 rounded-2xl text-xs font-bold text-primary focus:ring-1 focus:ring-primary/20"
+                                        className="w-full px-4 py-3.5 bg-white rounded-2xl text-xs font-black text-red-900 border border-amber-100 focus:border-amber-400 focus:ring-0 shadow-sm"
                                         value={formData.unit_price}
                                         onChange={e => setFormData({...formData, unit_price: parseFloat(e.target.value) || 0})}
                                     />
                                 </div>
                             </div>
 
+                            {/* Row 4: Thresholds */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-primary/40 uppercase tracking-widest ml-1">Min Threshold</label>
+                                    <label className="text-[9px] font-black text-red-400/80 uppercase tracking-widest pl-1">Min Threshold</label>
                                     <input 
                                         type="number"
-                                        className="w-full px-4 py-3 bg-red-50/30 rounded-2xl text-xs font-bold text-red-600 focus:ring-1 focus:ring-red-500/20"
+                                        className="w-full px-4 py-3.5 bg-red-50/30 rounded-2xl text-xs font-black text-red-600 border border-red-100/50 focus:border-red-400 focus:ring-0"
                                         value={formData.min_threshold}
                                         onChange={e => setFormData({...formData, min_threshold: parseFloat(e.target.value) || 0})}
                                     />
                                 </div>
                                 <div className="space-y-1.5">
-                                    <label className="text-[9px] font-black text-primary/40 uppercase tracking-widest ml-1">Max Threshold</label>
+                                    <label className="text-[9px] font-black text-amber-400 uppercase tracking-widest pl-1">Max Threshold</label>
                                     <input 
                                         type="number"
-                                        className="w-full px-4 py-3 bg-amber-50/30 rounded-2xl text-xs font-bold text-amber-600 focus:ring-1 focus:ring-amber-500/20"
+                                        className="w-full px-4 py-3.5 bg-amber-100/20 rounded-2xl text-xs font-black text-amber-600 border border-amber-200/50 focus:border-amber-400 focus:ring-0"
                                         value={formData.max_threshold}
                                         onChange={e => setFormData({...formData, max_threshold: parseFloat(e.target.value) || 0})}
                                     />
                                 </div>
                             </div>
 
-                            <button 
-                                onClick={handleSaveItem}
-                                className="w-full py-5 bg-primary text-white rounded-[24px] font-black text-base uppercase tracking-widest shadow-xl shadow-primary/20 active:scale-95 transition-all mt-4"
-                            >
-                                Save Inventory Info
-                            </button>
+                            <div className="pt-4">
+                                <button 
+                                    onClick={handleSaveItem}
+                                    className="w-full py-5 bg-red-900 text-white rounded-[24px] font-black text-sm uppercase tracking-[0.3em] shadow-xl shadow-red-900/20 active:scale-95 transition-all italic"
+                                >
+                                    Save Inventory Info
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

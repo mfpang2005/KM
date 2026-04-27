@@ -60,13 +60,12 @@ export const connectGoEasy = (userData: { id: string; [key: string]: any }) => {
                     resolve(goEasy);
                 },
                 onFailed: (error: any) => {
-                    console.error('[GoEasy] Connection Failed:', error);
-                    // 仅当明确是 "已经连接" 时才视作成功
                     const errorMsg = error.content || String(error);
                     if (error.code === 408 && (errorMsg.includes('already connected') || errorMsg.includes('Already connected'))) {
                         console.log('[GoEasy] Handled as success (already connected)');
                         resolve(goEasy);
                     } else {
+                        console.error('[GoEasy] Connection Failed:', error);
                         reject(error);
                     }
                 }

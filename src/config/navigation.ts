@@ -4,30 +4,31 @@ export interface NavItem {
     label: string;
     path: string;
     icon: string;
+    permissionId?: string; // Optional: if missing, item is always visible
 }
 
 export const NAV_CONFIG: Record<UserRole, NavItem[]> = {
     [UserRole.ADMIN]: [
-        { label: '控制台 (Dashboard)', path: '/admin', icon: 'dashboard' },
-        { label: '订单追踪 (Orders)', path: '/admin/orders', icon: 'list_alt' },
-        { label: 'Stock Inventory', path: '/admin/inventory', icon: 'inventory' },
-        { label: '对讲机 (Walkie)', path: '/admin/walkie-talkie', icon: 'settings_voice' },
-        { label: '查看账目 (Account)', path: '/admin/finance', icon: 'account_balance_wallet' },
-        { label: '司机调度 (Drivers)', path: '/admin/drivers', icon: 'local_shipping' },
-        { label: '商品菜单 (Menu)', path: '/admin/products', icon: 'inventory_2' },
-        { label: '人工建单 (Create)', path: '/admin/create-order', icon: 'add_shopping_cart' },
-        { label: '活动日历 (Events)', path: '/admin/calendar', icon: 'event' },
+        { label: '控制台 (Dashboard)', path: '/admin', icon: 'dashboard', permissionId: 'overview' },
+        { label: '订单追踪 (Orders)', path: '/admin/orders', icon: 'list_alt', permissionId: 'order' },
+        { label: 'Stock Inventory', path: '/admin/inventory', icon: 'inventory', permissionId: 'inventory' },
+        { label: '对讲机 (Walkie)', path: '/admin/walkie-talkie', icon: 'settings_voice', permissionId: 'walkie_talkie' },
+        { label: '查看账目 (Account)', path: '/admin/finance', icon: 'account_balance_wallet', permissionId: 'financial' },
+        { label: '司机调度 (Drivers)', path: '/admin/drivers', icon: 'local_shipping', permissionId: 'fleet' },
+        { label: '商品菜单 (Menu)', path: '/admin/products', icon: 'inventory_2', permissionId: 'product' },
+        { label: '人工建单 (Create)', path: '/admin/create-order', icon: 'add_shopping_cart', permissionId: 'create_order' },
+        { label: '活动日历 (Events)', path: '/admin/calendar', icon: 'event', permissionId: 'event_calendar' },
         { label: '个人中心 (Profile)', path: '/admin/profile', icon: 'person' },
     ],
     [UserRole.KITCHEN]: [
         { label: '后厨备餐', path: '/kitchen', icon: 'kitchen' },
-        { label: '活动日历 (Calendar)', path: '/admin/calendar', icon: 'event' },
-        { label: 'Stock Inventory', path: '/admin/inventory', icon: 'inventory' },
-        { label: '对讲机 (Walkie)', path: '/admin/walkie-talkie', icon: 'settings_voice' },
+        { label: '活动日历 (Calendar)', path: '/admin/calendar', icon: 'event', permissionId: 'event_calendar' },
+        { label: 'Stock Inventory', path: '/admin/inventory', icon: 'inventory', permissionId: 'inventory' },
+        { label: '对讲机 (Walkie)', path: '/admin/walkie-talkie', icon: 'settings_voice', permissionId: 'walkie_talkie' },
     ],
     [UserRole.DRIVER]: [
         { label: '配送排程', path: '/driver', icon: 'local_shipping' },
-        { label: '对讲机 (Walkie)', path: '/admin/walkie-talkie', icon: 'settings_voice' },
+        { label: '对讲机 (Walkie)', path: '/admin/walkie-talkie', icon: 'settings_voice', permissionId: 'walkie_talkie' },
         { label: '拍照确认', path: '/driver/confirm', icon: 'camera_alt' },
     ],
     [UserRole.SUPER_ADMIN]: [
@@ -40,8 +41,8 @@ export const NAV_CONFIG: Record<UserRole, NavItem[]> = {
         { label: '活动日历', path: '/admin/calendar', icon: 'event' },
         { label: '订单管理', path: '/admin/orders', icon: 'list_alt' },
         { label: '商品菜单 (Menu)', path: '/admin/products', icon: 'inventory_2' },
-        { label: 'Kitchen', path: '/admin/kitchen-summary', icon: 'kitchen' },
-        { label: 'Fleet', path: '/admin/drivers', icon: 'local_shipping' },
-        { label: 'Account Viewer', path: '/admin/finance', icon: 'account_balance_wallet' },
+        { label: 'Kitchen', path: '/admin/kitchen-summary', icon: 'kitchen', permissionId: 'kitchen' },
+        { label: 'Fleet', path: '/admin/drivers', icon: 'local_shipping', permissionId: 'fleet' },
+        { label: 'Account Viewer', path: '/admin/finance', icon: 'account_balance_wallet', permissionId: 'financial' },
     ],
 };

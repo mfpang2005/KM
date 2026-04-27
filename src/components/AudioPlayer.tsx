@@ -58,8 +58,13 @@ const AudioPlayer: React.FC<AudioPlayerProps> = ({ audioUrl, initialDuration, au
             try {
                 let blobUrl: string;
                 if (audioUrl.startsWith('http')) {
-                    // Direct URL from Supabase Storage
-                    blobUrl = audioUrl;
+                    // Fetch as blob to fix demuxer/range issues
+                    const res = await fetch(audioUrl);
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                    const blob = await res.blob();
+                    if (cancelled) return;
+                    blobUrl = URL.createObjectURL(blob);
+                    objectUrlRef.current = blobUrl;
                 } else if (audioUrl.startsWith('data:')) {
                     // Data URI
                     const res = await fetch(audioUrl);

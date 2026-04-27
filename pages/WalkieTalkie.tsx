@@ -223,6 +223,7 @@ const WalkieTalkie: React.FC = () => {
     const handleRecall = async (msgId: string) => {
         if (!window.confirm('确定要撤回这条消息吗？')) return;
         try {
+            console.log('[Walkie] Attempting recall:', msgId);
             await api.patch(`/audio/recall/${msgId}`);
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, isRecalled: true } : m));
             if (goEasyRef.current) {
@@ -231,23 +232,38 @@ const WalkieTalkie: React.FC = () => {
                     message: JSON.stringify({ type: 'recall', id: msgId })
                 });
             }
-        } catch (err) { alert('撤回失败'); }
+        } catch (err: any) { 
+            console.error('[Walkie] Recall failed:', err);
+            const detail = err.response?.data?.detail || err.message;
+            alert(`撤回失败: ${detail}`); 
+        }
     };
 
     const handlePttDown = async () => {
         if (pttStatus !== 'CONNECTED') return;
         unlockAudio();
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') 
+            ? 'audio/webm;codecs=opus' 
+            : 'audio/webm';
+            
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mr = new MediaRecorder(stream);
+            const mr = new MediaRecorder(stream, { mimeType });
             audioChunksRef.current = [];
-            mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
-            mr.start(100);
+            mr.ondataavailable = (e) => { 
+                if (e.data.size > 0) {
+                    audioChunksRef.current.push(e.data);
+                }
+            };
+            mr.start(100); // 100ms chunks to keep it active
             mediaRecorderRef.current = mr;
             recordStartTimeRef.current = Date.now();
             setIsTransmitting(true);
             setPttStatus('TALKING');
-        } catch (err) { alert('请开启麦克风权限'); }
+        } catch (err) { 
+            console.error('[Walkie] Record start failed:', err);
+            alert('请开启麦克风权限'); 
+        }
     };
 
     const handlePttUp = () => {
@@ -258,8 +274,14 @@ const WalkieTalkie: React.FC = () => {
         mr.onstop = async () => {
             if (!goEasyRef.current || !user) return;
             try {
-                const blob = new Blob(audioChunksRef.current, { type: mr.mimeType || 'audio/webm' });
-                if (blob.size < 100) return;
+                const finalMime = mr.mimeType || 'audio/webm';
+                const blob = new Blob(audioChunksRef.current, { type: finalMime });
+                console.log('[Walkie] Recording finished. Size:', blob.size, 'Mime:', finalMime);
+                
+                if (blob.size < 200) {
+                    console.warn('[Walkie] Recording too short, skipping.');
+                    return;
+                }
 
                 const formData = new FormData();
                 formData.append('file', blob, `voice_${user.role}_${user.id}_${Date.now()}.webm`);
@@ -284,11 +306,12 @@ const WalkieTalkie: React.FC = () => {
 
                 addMessage({ ...payload, isMine: true } as ChatMessage);
                 goEasyRef.current.pubsub.publish({ channel: CHANNEL, message: JSON.stringify(payload) });
-                await supabase.from('messages').insert([{
-                    id: msgId, sender_id: user.id, sender_label: user.name, sender_role: user.role,
-                    receiver_id: 'GLOBAL', content: audioUrl, type: 'audio', duration: dur
-                }]);
-            } catch (err) { console.error('Send failed', err); }
+                // 3. 通过后端保存到数据库 (绕过前端 RLS 限制)
+                await api.post('/audio/message', payload);
+                console.log('[Walkie] Message saved to DB via backend');
+            } catch (err) { 
+                console.error('Send failed', err); 
+            }
             audioChunksRef.current = [];
         };
         mr.stop();
@@ -307,10 +330,15 @@ const WalkieTalkie: React.FC = () => {
         addMessage({ ...payload, isMine: true } as ChatMessage);
         setChatInput('');
         goEasyRef.current.pubsub.publish({ channel: CHANNEL, message: JSON.stringify(payload) });
-        supabase.from('messages').insert([{
-            id: msgId, sender_id: user.id, sender_label: user.name, sender_role: user.role,
-            receiver_id: 'GLOBAL', content: payload.content, type: 'text'
-        }]);
+        const saveMsg = async () => {
+            try {
+                await api.post('/audio/message', payload);
+                console.log('[Walkie] Text message saved to DB via backend');
+            } catch (err) {
+                console.error('[Walkie] Failed to save text message:', err);
+            }
+        };
+        saveMsg();
     };
 
     // ── Supabase Presence (NEW: Track Online Status) ────────────────
@@ -360,7 +388,6 @@ const WalkieTalkie: React.FC = () => {
                         <p className="text-[9px] font-black uppercase tracking-widest mt-0.5 flex items-center gap-1.5" style={{ color: pttStatus === 'CONNECTED' || pttStatus === 'TALKING' || pttStatus === 'LISTENING' ? '#10b981' : '#94a3b8' }}>
                             <span className={`w-1 h-1 rounded-full ${pttStatus === 'CONNECTED' || pttStatus === 'TALKING' || pttStatus === 'LISTENING' ? 'bg-emerald-500 animate-pulse' : 'bg-slate-300'}`}></span>
                             {pttStatus === 'CONNECTING' ? 'Init...' : pttStatus === 'CONNECTED' ? 'Live' : pttStatus === 'TALKING' ? 'Talk...' : pttStatus === 'LISTENING' ? 'Listen...' : 'Offline'}
-                            <span className="opacity-30 text-[7px] ml-1">[{import.meta.env.VITE_GOEASY_APPKEY ? 'Key OK' : 'No Key'}]</span>
                         </p>
                     </div>
                 </div>

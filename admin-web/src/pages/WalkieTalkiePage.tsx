@@ -43,14 +43,23 @@ export const WalkieTalkiePage: React.FC = () => {
     const { goEasy: contextGoEasy, status: goEasyStatus, connect, disconnect } = useGoEasy();
 
     // 页面进入时连接，离开时断开，节省 GoEasy 名额
+    // 页面进入时连接，离开时断开，节省 GoEasy 名额
     useEffect(() => {
-        if (user) {
-            connect();
+        if (user && (goEasyStatus === 'DISCONNECTED' || !goEasyStatus)) {
+            const timer = setTimeout(() => {
+                console.log('[Walkie] On-demand connect initiated');
+                connect();
+            }, 500); // 延迟 500ms 避开 Auth 抖动
+            return () => clearTimeout(timer);
         }
+    }, [user, goEasyStatus, connect]);
+
+    useEffect(() => {
         return () => {
+            console.log('[Walkie] On-demand disconnect initiated');
             disconnect();
         };
-    }, [user, connect, disconnect]);
+    }, [disconnect]);
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [onlineUsers, setOnlineUsers] = useState<OnlineUser[]>([]);
     const [chatInput, setChatInput] = useState('');
@@ -188,16 +197,14 @@ export const WalkieTalkiePage: React.FC = () => {
                     }
                 },
                 onSuccess: () => {
-                    console.log('[Walkie] Subscribed to', CHANNEL);
                     isSubscribedRef.current = true;
                 },
-                onFailed: (err: any) => {
-                    console.error('[Walkie] Subscribe failed', err);
+                onFailed: () => {
                     isSubscribedRef.current = false;
                 }
             });
-        } catch (err) {
-            console.error('[Walkie] Subscribe synchronous error', err);
+        } catch {
+            // silent fail
         }
 
         return () => {
@@ -207,16 +214,13 @@ export const WalkieTalkiePage: React.FC = () => {
                     contextGoEasy.pubsub.unsubscribe({
                         channel: CHANNEL,
                         onSuccess: () => {
-                            console.log('[Walkie] Unsubscribe success');
                             isSubscribedRef.current = false;
                         },
-                        onFailed: (err: any) => {
-                            console.warn('[Walkie] Unsubscribe failed (silent)', err);
+                        onFailed: () => {
                             isSubscribedRef.current = false;
                         }
                     });
-                } catch (e) {
-                    console.warn('[Walkie] Unsubscribe exception', e);
+                } catch {
                     isSubscribedRef.current = false;
                 }
             }
@@ -434,23 +438,16 @@ export const WalkieTalkiePage: React.FC = () => {
                     onFailed: (err: any) => console.error('[Walkie] Publish failed', err),
                 });
 
-                const insertAudio = async () => {
-                    const { error } = await supabase.from('messages').insert([{
-                        id: msgId,
-                        sender_id: payload.senderId,
-                        sender_label: payload.senderLabel,
-                        sender_role: payload.senderRole,
-                        receiver_id: 'GLOBAL',
-                        content: audioUrl,
-                        type: 'audio',
-                        duration: dur
-                    }]);
-                    if (error) {
-                        console.error('[Admin] Database Audio Insert Error:', error);
-                        alert(`管理员端语音保存失败 (Error ${error.code}): ${error.message}`);
+                const saveAudio = async () => {
+                    try {
+                        await api.post('/audio/message', payload);
+                        console.log('[Admin] Audio message saved to DB via backend');
+                    } catch (err) {
+                        console.error('[Admin] Database Audio Save Error:', err);
+                        alert('管理员端语音保存失败，请检查网络');
                     }
                 };
-                await insertAudio();
+                await saveAudio();
 
             } catch (err) { console.error('[GoEasy] Audio upload/publish failed', err); }
             audioChunksRef.current = [];
@@ -496,22 +493,25 @@ export const WalkieTalkiePage: React.FC = () => {
             onFailed: (err: any) => console.error('[Walkie] Text publish failed', err),
         });
 
-        const insertText = async () => {
-            const { error } = await supabase.from('messages').insert([{
-                id: msgId,
-                sender_id: myId,
-                sender_label: myLabel,
-                sender_role: myRole,
-                receiver_id: 'GLOBAL',
-                content: text,
-                type: 'text'
-            }]);
-            if (error) {
-                console.error('[Admin] Database Text Insert Error:', error);
-                alert(`管理员端文字保存失败 (Error ${error.code}): ${error.message}`);
+        const saveText = async () => {
+            try {
+                await api.post('/audio/message', {
+                    id: msgId,
+                    senderId: myId,
+                    senderLabel: myLabel,
+                    senderRole: myRole,
+                    receiverId: 'GLOBAL',
+                    content: text,
+                    type: 'text',
+                    timestamp: ts
+                });
+                console.log('[Admin] Text message saved to DB via backend');
+            } catch (err) {
+                console.error('[Admin] Database Text Save Error:', err);
+                alert('管理员端文字保存失败，请检查网络');
             }
         };
-        await insertText();
+        await saveText();
     };
 
     // ── 撤回消息逻辑 ──────────────────────────────────────────────────
@@ -528,6 +528,7 @@ export const WalkieTalkiePage: React.FC = () => {
         if (!window.confirm('确定要撤回这条消息吗？撤回后所有人都将无法查看。')) return;
 
         try {
+            console.log('[Walkie] Attempting to recall message ID:', msgId);
             await api.patch(`/audio/recall/${msgId}`);
             setMessages(prev => prev.map(m => m.id === msgId ? { ...m, isRecalled: true } : m));
             if (contextGoEasy && goEasyStatus === 'CONNECTED') {
@@ -537,9 +538,10 @@ export const WalkieTalkiePage: React.FC = () => {
                     onSuccess: () => console.log('[Walkie] Recall broadcasted:', msgId),
                 });
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Recall failed:', err);
-            alert('撤回失败，请稍后重试');
+            const detail = err.response?.data?.detail || err.message;
+            alert(`撤回失败: ${detail}`);
         }
     };
 

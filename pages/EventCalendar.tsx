@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../src/lib/supabase';
 import { Order, OrderStatus } from '../types';
+import { OrderService } from '../src/services/api';
 
 const EventCalendar: React.FC = () => {
     const navigate = useNavigate();
@@ -178,11 +179,13 @@ const EventCalendar: React.FC = () => {
                     selectedDayOrders.map((order, idx) => (
                                 <div 
                                     key={idx}
-                                    onClick={() => {
-                                        if (userRole === 'KITCHEN') {
-                                            setSelectedOrder(order);
-                                        } else {
-                                            navigate(`/orders/${order.id}`);
+                                    onClick={async () => {
+                                        try {
+                                            const fullOrder = await OrderService.getById(order.id);
+                                            setSelectedOrder(fullOrder);
+                                        } catch (err) {
+                                            console.error("Failed to fetch full order:", err);
+                                            setSelectedOrder(order); // Fallback
                                         }
                                     }}
                                     className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex items-center justify-between active:scale-[0.98] transition-all"
@@ -208,7 +211,9 @@ const EventCalendar: React.FC = () => {
                                                 }`}>
                                                     {order.status}
                                                 </span>
-                                                <span className="text-[10px] font-bold text-slate-400 truncate">{order.address.split(',')[0]}</span>
+                                                {userRole?.toUpperCase() !== 'KITCHEN' && (
+                                                    <span className="text-[10px] font-bold text-slate-400 truncate">{order.address?.split(',')[0]}</span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
@@ -224,85 +229,156 @@ const EventCalendar: React.FC = () => {
                     </div>
                 </div>
 
-                {/* Order Detail Popup for Kitchen */}
+                {/* Order Detail Popup (FULL ORDER VIEW) */}
                 {selectedOrder && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
                         <div 
-                            className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" 
+                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" 
                             onClick={() => setSelectedOrder(null)}
                         />
-                        <div className="relative bg-white w-full max-w-md rounded-[32px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[80vh]">
+                        <div className="relative bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh] border border-white/20">
                             {/* Popup Header */}
-                            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600">
+                            <div className="p-6 border-b border-slate-100 flex items-center justify-between bg-slate-50/80 sticky top-0 z-10 backdrop-blur-md">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-blue-600 flex items-center justify-center text-white shadow-lg shadow-blue-200">
                                         <span className="material-icons-round">receipt_long</span>
                                     </div>
                                     <div>
-                                        <h4 className="text-sm font-black text-slate-900 uppercase tracking-tight">订单详情</h4>
-                                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">#{selectedOrder.id.slice(0, 8)}</p>
+                                        <h4 className="text-base font-black text-slate-900 uppercase tracking-tighter italic">完整订单详情</h4>
+                                        <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em]">#{selectedOrder.order_number || selectedOrder.id.slice(0, 8)}</p>
                                     </div>
                                 </div>
                                 <button 
                                     onClick={() => setSelectedOrder(null)}
-                                    className="w-8 h-8 flex items-center justify-center bg-slate-100 rounded-full text-slate-400"
+                                    className="w-10 h-10 flex items-center justify-center bg-white border border-slate-200 rounded-full text-slate-400 shadow-sm active:scale-90 transition-all"
                                 >
-                                    <span className="material-icons-round text-lg">close</span>
+                                    <span className="material-icons-round text-xl">close</span>
                                 </button>
                             </div>
 
                             {/* Popup Content */}
-                            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                                {/* Customer Info */}
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">顾客姓名</span>
-                                        <p className="text-base font-black text-slate-800 uppercase italic">{selectedOrder.customerName}</p>
+                            <div className="flex-1 overflow-y-auto p-6 space-y-8">
+                                {/* Status Badge */}
+                                <div className="flex justify-center">
+                                    <span className={`px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.3em] border shadow-sm ${
+                                        selectedOrder.status === OrderStatus.COMPLETED ? 'bg-emerald-50 text-emerald-600 border-emerald-100' : 
+                                        selectedOrder.status === OrderStatus.PENDING ? 'bg-amber-50 text-amber-600 border-amber-100' :
+                                        'bg-blue-50 text-blue-600 border-blue-100'
+                                    }`}>
+                                        {selectedOrder.status}
+                                    </span>
+                                </div>
+
+                                {/* Customer Info Grid (Extremely Compact) */}
+                                <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100 space-y-2">
+                                    <div className="flex justify-between items-center">
+                                        <div className="min-w-0 flex-1">
+                                            <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">顾客 / NAME</span>
+                                            <p className="text-sm font-black text-slate-900 uppercase italic truncate leading-tight">{selectedOrder.customerName}</p>
+                                        </div>
+                                        <div className="text-right pl-4">
+                                            <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">时间 / TIME</span>
+                                            <p className="text-sm font-black text-blue-600 italic leading-tight">
+                                                {new Date(selectedOrder.dueTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                                            </p>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <span className="text-[8px] font-black text-slate-400 uppercase tracking-[0.2em]">配送时间</span>
-                                        <p className="text-sm font-black text-blue-600 uppercase italic">
-                                            {new Date(selectedOrder.dueTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </p>
-                                    </div>
+                                    
+                                    {userRole?.toUpperCase() !== 'KITCHEN' && (
+                                        <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-200/50">
+                                            <div className="min-w-0">
+                                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">电话 / PHONE</span>
+                                                <p className="text-xs font-black text-slate-600 font-mono italic truncate">{selectedOrder.customerPhone}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-[7px] font-black text-slate-400 uppercase tracking-widest">地址 / ADDRESS</span>
+                                                <p className="text-[10px] font-bold text-slate-600 truncate italic">{selectedOrder.address}</p>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Items List */}
-                                <div className="space-y-3">
-                                    <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2">菜品清单 / ITEMS</h5>
-                                    <div className="space-y-2">
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">菜品清单 / ITEMS</h5>
+                                        <span className="text-[9px] font-black text-slate-300 uppercase">{selectedOrder.items?.length || 0} ITEMS</span>
+                                    </div>
+                                    <div className="space-y-2.5">
                                         {selectedOrder.items && selectedOrder.items.length > 0 ? (
                                             selectedOrder.items.map((item, i) => (
-                                                <div key={i} className="flex justify-between items-center p-3 bg-slate-50 rounded-2xl border border-slate-100">
-                                                    <span className="text-sm font-black text-slate-700 uppercase italic">{item.product_name || item.name}</span>
-                                                    <span className="bg-white px-3 py-1 rounded-xl border border-slate-200 text-xs font-black text-slate-800 italic shadow-sm">x{item.quantity}</span>
+                                                <div key={i} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-slate-100 shadow-sm group hover:border-blue-200 transition-colors">
+                                                    <div className="flex flex-col">
+                                                        <span className="text-sm font-black text-slate-800 uppercase italic">{item.product_name || item.name}</span>
+                                                        <span className="text-[8px] font-black text-slate-300 uppercase tracking-widest mt-0.5">#{item.id?.slice(0,6) || 'N/A'}</span>
+                                                    </div>
+                                                    <div className="bg-blue-50 px-4 py-2 rounded-xl border border-blue-100 text-sm font-black text-blue-600 italic">
+                                                        x{item.quantity}
+                                                    </div>
                                                 </div>
                                             ))
                                         ) : (
-                                            <p className="text-center py-4 text-[10px] font-black text-slate-300 uppercase italic">未找到菜品明细</p>
+                                            <div className="py-12 text-center bg-slate-50 rounded-[32px] border border-dashed border-slate-200">
+                                                <span className="material-icons-round text-slate-200 text-3xl mb-2">inventory_2</span>
+                                                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">未找到菜品明细</p>
+                                            </div>
                                         )}
                                     </div>
                                 </div>
 
-                                {/* Remarks */}
-                                {(selectedOrder as any).remarks && (
-                                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100">
-                                        <div className="flex items-center gap-2 mb-2">
-                                            <span className="material-icons-round text-amber-500 text-sm">sticky_note_2</span>
-                                            <span className="text-[10px] font-black text-amber-600 uppercase tracking-widest">备注</span>
+                                {/* Financials (Hidden for KITCHEN) */}
+                                {userRole?.toUpperCase() !== 'KITCHEN' && (
+                                    <div className="bg-slate-900 text-white p-8 rounded-[40px] shadow-xl relative overflow-hidden group">
+                                        <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/20 rounded-full blur-3xl -mr-16 -mt-16"></div>
+                                        <div className="relative z-10 space-y-6">
+                                            <div className="flex justify-between items-center opacity-60">
+                                                <span className="text-[9px] font-black uppercase tracking-[0.4em]">财务汇总 / FINANCIALS</span>
+                                                <span className="material-icons-round text-sm">payments</span>
+                                            </div>
+                                            <div className="flex justify-between items-end border-b border-white/10 pb-4">
+                                                <div>
+                                                    <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mb-1">订单总额</p>
+                                                    <p className="text-xl font-black font-mono tracking-tighter">RM {selectedOrder.amount?.toFixed(2)}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-[8px] font-black text-sky-400 uppercase tracking-widest mb-1">已付定金</p>
+                                                    <p className="text-sm font-black font-mono text-sky-400">-RM {((selectedOrder as any).deposit || 0).toFixed(2)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex justify-between items-center pt-2">
+                                                <p className="text-[10px] font-black text-white uppercase tracking-[0.2em] italic">应收余款 / BALANCE</p>
+                                                <p className="text-3xl font-black font-mono tracking-tighter text-blue-400 shadow-blue-500/20 drop-shadow-xl italic">
+                                                    RM {((selectedOrder as any).balance ?? (selectedOrder.amount - ((selectedOrder as any).deposit || 0))).toFixed(2)}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <p className="text-xs font-bold text-amber-800 italic">{(selectedOrder as any).remarks}</p>
+                                    </div>
+                                )}
+
+                                {/* Remarks */}
+                                {(selectedOrder.remarks || (selectedOrder as any).remark) && (
+                                    <div className="p-6 bg-amber-50 rounded-[32px] border border-amber-100 relative overflow-hidden">
+                                        <div className="absolute left-0 top-0 w-1.5 h-full bg-amber-400"></div>
+                                        <div className="flex items-center gap-3 mb-3">
+                                            <div className="w-8 h-8 rounded-full bg-amber-400/20 flex items-center justify-center text-amber-600">
+                                                <span className="material-icons-round text-lg">sticky_note_2</span>
+                                            </div>
+                                            <span className="text-[10px] font-black text-amber-600 uppercase tracking-[0.2em]">订单备注 / REMARKS</span>
+                                        </div>
+                                        <p className="text-sm font-bold text-amber-900 italic leading-relaxed pl-2">
+                                            "{selectedOrder.remarks || (selectedOrder as any).remark}"
+                                        </p>
                                     </div>
                                 )}
                             </div>
 
                             {/* Popup Footer */}
-                            <div className="p-6 bg-slate-50 border-t border-slate-100">
+                            <div className="p-6 bg-slate-50/50 border-t border-slate-100 sticky bottom-0 z-10 backdrop-blur-md flex justify-center">
                                 <button 
                                     onClick={() => setSelectedOrder(null)}
-                                    className="w-full py-4 bg-slate-900 text-white rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] shadow-xl active:scale-95 transition-all"
+                                    className="px-12 py-3 bg-slate-900 text-white rounded-full text-[10px] font-black uppercase tracking-[0.2em] shadow-lg active:scale-95 transition-all hover:bg-slate-800"
                                 >
-                                    我知道了
+                                    确认并关闭
                                 </button>
                             </div>
                         </div>

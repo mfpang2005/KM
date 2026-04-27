@@ -232,7 +232,7 @@ const App: React.FC = () => {
                         - isLocked = true  → 所有子路由整体重定向至 /locked
                         - isLocked = false → 正常显示 MainLayout 及其子页面
                     */}
-                    <Route element={isLocked ? <Navigate to="/locked" replace /> : <MainLayout user={role} />}>
+                    <Route element={isLocked ? <Navigate to="/locked" replace /> : <MainLayout user={role} userProfile={userProfile} />}>
                         {/* Admin Routes — super_admin 也可访问，受细分权限控制 */}
                         <Route path="/admin" element={isAdminOrSuper ? <PermissionRoute id="overview"><AdminDashboard /></PermissionRoute> : <Navigate to="/login" />} />
                         <Route path="/admin/finance" element={isAdminOrSuper ? <PermissionRoute id="financial"><FinancialSummary /></PermissionRoute> : <Navigate to="/login" />} />
@@ -243,9 +243,9 @@ const App: React.FC = () => {
                         <Route path="/admin/kitchen-summary" element={isAdminOrSuper ? <PermissionRoute id="kitchen"><KitchenSummary /></PermissionRoute> : <Navigate to="/login" />} />
                         <Route path="/admin/notifications" element={isAdminOrSuper ? <NotificationCenter /> : <Navigate to="/login" />} />
                         <Route path="/admin/profile" element={isAdminOrSuper ? <Profile onLogout={() => setUserProfile(null)} /> : <Navigate to="/login" />} />
-                        <Route path="/admin/walkie-talkie" element={isAdminOrSuper || role === UserRole.KITCHEN || role === UserRole.DRIVER ? <WalkieTalkie /> : <Navigate to="/login" />} />
-                        <Route path="/admin/calendar" element={isAdminOrSuper || role === UserRole.KITCHEN ? <EventCalendar /> : <Navigate to="/login" />} />
-                        <Route path="/admin/inventory" element={isAdminOrSuper || role === UserRole.KITCHEN ? <InventoryManagement /> : <Navigate to="/login" />} />
+                        <Route path="/admin/walkie-talkie" element={<PermissionRoute id="walkie_talkie"><WalkieTalkie /></PermissionRoute>} />
+                        <Route path="/admin/calendar" element={<PermissionRoute id="event_calendar"><EventCalendar /></PermissionRoute>} />
+                        <Route path="/admin/inventory" element={<PermissionRoute id="inventory"><InventoryManagement /></PermissionRoute>} />
                         <Route path="/orders/:id" element={isAdminOrSuper || role === UserRole.DRIVER ? <OrderDetail /> : <Navigate to="/login" />} />
 
                         {/* Super Admin Routes — 仅 super_admin 可访问，完全不受锁定影响 */}
